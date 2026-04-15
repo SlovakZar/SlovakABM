@@ -1,0 +1,902 @@
+origin_district,destination_district,Not found out,flow_school,flow_work,total_flow,travel_time_min
+District of Banská Bystrica,Abroad,0.0,4,744,748,
+District of Banská Bystrica,District of Banská Bystrica,1.0,12246,32410,44656,0.0
+District of Banská Bystrica,District of Bratislava I,0.0,274,249,523,204.8320253205724
+District of Banská Bystrica,District of Bratislava II,1.0,26,239,265,197.84164518142757
+District of Banská Bystrica,District of Bratislava III,0.0,80,160,240,198.60719611954434
+District of Banská Bystrica,District of Bratislava V,0.0,93,84,177,208.25899602258306
+District of Banská Bystrica,District of Brezno,0.0,74,374,448,37.701153216474296
+District of Banská Bystrica,District of Nitra,0.0,133,91,224,118.71766889977708
+District of Banská Bystrica,District of Zvolen,0.0,365,1760,2125,37.91752285383494
+District of Banská Bystrica,District of Žiar nad Hronom,0.0,15,147,162,39.93074608408516
+District of Banská Bystrica,District of Žilina,0.0,155,88,243,67.79465755535807
+District of Banská Bystrica,Not found out,96.0,49,2837,2886,
+District of Banská Bystrica,Without work address,15.0,0,5100,5100,
+District of Banská Štiavnica,District of Banská Bystrica,0.0,150,167,317,50.61287068428999
+District of Banská Štiavnica,District of Banská Štiavnica,0.0,1587,2929,4516,0.0
+District of Banská Štiavnica,District of Zvolen,0.0,87,275,362,18.26250219818856
+District of Banská Štiavnica,District of Žiar nad Hronom,0.0,38,207,245,26.61194776145319
+District of Banská Štiavnica,Not found out,25.0,12,429,441,
+District of Banská Štiavnica,Without work address,11.0,0,844,844,
+District of Bardejov,Abroad,0.0,3,2447,2450,
+District of Bardejov,District of Bardejov,0.0,9148,12970,22118,0.0
+District of Bardejov,District of Bratislava I,0.0,153,61,214,393.59589367289044
+District of Bardejov,District of Košice I,0.0,463,184,647,69.02324748429758
+District of Bardejov,District of Košice II,0.0,104,76,180,84.85308259760703
+District of Bardejov,District of Košice IV,0.0,70,83,153,80.54179703826283
+District of Bardejov,District of Prešov,0.0,802,1286,2088,39.21475065897369
+District of Bardejov,District of Svidník,0.0,134,290,424,28.76453976419658
+District of Bardejov,Not found out,98.0,78,1581,1659,
+District of Bardejov,Without work address,12.0,0,3467,3467,
+District of Bratislava I,Abroad,0.0,5,427,432,
+District of Bratislava I,District of Bratislava I,0.0,3171,6666,9837,0.0
+District of Bratislava I,District of Bratislava II,1.0,596,3228,3824,10.649584630034695
+District of Bratislava I,District of Bratislava III,0.0,429,2230,2659,7.320594803221329
+District of Bratislava I,District of Bratislava IV,0.0,488,1326,1814,9.709676371457293
+District of Bratislava I,District of Bratislava V,0.0,702,1593,2295,10.826755670112606
+District of Bratislava I,Not found out,36.0,147,1450,1597,
+District of Bratislava I,Without work address,5.0,0,1522,1522,
+District of Bratislava II,Abroad,0.0,4,978,982,
+District of Bratislava II,District of Bratislava I,1.0,2215,11731,13946,10.649584630034695
+District of Bratislava II,District of Bratislava II,1.0,9348,20196,29544,0.0
+District of Bratislava II,District of Bratislava III,0.0,1291,7845,9136,11.721426166680251
+District of Bratislava II,District of Bratislava IV,0.0,553,3267,3820,20.148257137882933
+District of Bratislava II,District of Bratislava V,1.0,1490,4429,5919,10.606234884047684
+District of Bratislava II,District of Dunajská Streda,0.0,58,188,246,41.74269709015959
+District of Bratislava II,District of Malacky,0.0,13,260,273,44.659192395970855
+District of Bratislava II,District of Pezinok,0.0,24,204,228,29.456448877760955
+District of Bratislava II,District of Senec,0.0,94,696,790,9.899516322074305
+District of Bratislava II,District of Trnava,0.0,154,202,356,50.81745268400915
+District of Bratislava II,Not found out,95.0,202,3209,3411,
+District of Bratislava II,Without work address,20.0,0,4909,4909,
+District of Bratislava III,Abroad,0.0,3,653,656,
+District of Bratislava III,District of Bratislava I,0.0,1801,8059,9860,7.320594803221329
+District of Bratislava III,District of Bratislava II,1.0,1061,7200,8261,11.721426166680251
+District of Bratislava III,District of Bratislava III,0.0,5314,9142,14456,0.0
+District of Bratislava III,District of Bratislava IV,1.0,509,2277,2786,11.577611442701066
+District of Bratislava III,District of Bratislava V,0.0,813,2571,3384,17.001244543734813
+District of Bratislava III,District of Malacky,0.0,7,175,182,33.30705137367508
+District of Bratislava III,District of Pezinok,0.0,25,274,299,23.33992090058275
+District of Bratislava III,District of Senec,0.0,44,453,497,14.908162553094076
+District of Bratislava III,District of Trnava,0.0,121,142,263,46.29099108103199
+District of Bratislava III,Not found out,68.0,201,2217,2418,
+District of Bratislava III,Without work address,12.0,0,3110,3110,
+District of Bratislava IV,Abroad,0.0,4,1008,1012,
+District of Bratislava IV,District of Bratislava I,1.0,2362,10192,12554,9.709676371457293
+District of Bratislava IV,District of Bratislava II,2.0,848,7482,8330,20.148257137882933
+District of Bratislava IV,District of Bratislava III,1.0,794,5350,6144,11.577611442701066
+District of Bratislava IV,District of Bratislava IV,1.0,8965,12351,21316,0.0
+District of Bratislava IV,District of Bratislava V,0.0,1303,3823,5126,19.13454640859676
+District of Bratislava IV,District of Malacky,0.0,32,691,723,32.71683752093261
+District of Bratislava IV,District of Senec,0.0,40,290,330,26.137191463381768
+District of Bratislava IV,District of Trnava,0.0,106,104,210,54.98288000049562
+District of Bratislava IV,Not found out,69.0,148,2637,2785,
+District of Bratislava IV,Without work address,15.0,0,3773,3773,
+District of Bratislava V,Abroad,0.0,3,1302,1305,
+District of Bratislava V,District of Bratislava I,0.0,1825,11340,13165,10.826755670112606
+District of Bratislava V,District of Bratislava II,1.0,968,9656,10624,10.606234884047684
+District of Bratislava V,District of Bratislava III,0.0,670,5860,6530,17.001244543734813
+District of Bratislava V,District of Bratislava IV,0.0,592,3991,4583,19.13454640859676
+District of Bratislava V,District of Bratislava V,1.0,8515,10779,19294,0.0
+District of Bratislava V,District of Malacky,0.0,13,318,331,49.53479080939808
+District of Bratislava V,District of Pezinok,0.0,21,166,187,38.80366532774072
+District of Bratislava V,District of Senec,0.0,56,442,498,20.479379876654352
+District of Bratislava V,District of Trnava,0.0,133,123,256,60.897192173741544
+District of Bratislava V,Not found out,76.0,171,2603,2774,
+District of Bratislava V,Without work address,23.0,0,4278,4278,
+District of Brezno,Abroad,0.0,0,603,603,
+District of Brezno,District of Banská Bystrica,1.0,877,1895,2772,37.701153216474296
+District of Brezno,District of Bratislava I,1.0,83,69,152,241.11415257271
+District of Brezno,District of Bratislava V,0.0,126,32,158,244.02849651687706
+District of Brezno,District of Brezno,1.0,5772,11856,17628,0.0
+District of Brezno,District of Zvolen,0.0,131,175,306,61.910315006808986
+District of Brezno,Not found out,49.0,46,1267,1313,
+District of Brezno,Without work address,4.0,0,2491,2491,
+District of Bytča,Abroad,0.0,0,530,530,
+District of Bytča,District of Bytča,1.0,2849,4406,7255,0.0
+District of Bytča,District of Považská Bystrica,0.0,355,784,1139,14.492757043898804
+District of Bytča,District of Žilina,1.0,1038,3327,4365,21.319864530057316
+District of Bytča,Not found out,50.0,20,779,799,
+District of Bytča,Without work address,2.0,0,1823,1823,
+District of Bánovce nad Bebravou,Abroad,0.0,2,507,509,
+District of Bánovce nad Bebravou,District of Bratislava I,0.0,127,77,204,133.1378713174107
+District of Bánovce nad Bebravou,District of Bánovce nad Bebravou,2.0,3357,8049,11406,0.0
+District of Bánovce nad Bebravou,District of Nitra,0.0,112,62,174,64.34002701380092
+District of Bánovce nad Bebravou,District of Partizánske,0.0,22,300,322,23.082017884462132
+District of Bánovce nad Bebravou,District of Prievidza,1.0,16,177,193,29.04607445486038
+District of Bánovce nad Bebravou,District of Topoľčany,0.0,227,463,690,33.7692786174465
+District of Bánovce nad Bebravou,District of Trenčín,0.0,494,1061,1555,26.301498780869792
+District of Bánovce nad Bebravou,Not found out,42.0,13,880,893,
+District of Bánovce nad Bebravou,Without work address,3.0,0,1903,1903,
+District of Detva,Abroad,0.0,0,373,373,
+District of Detva,District of Banská Bystrica,1.0,350,384,734,34.77470901914604
+District of Detva,District of Detva,2.0,2583,5414,7997,0.0
+District of Detva,District of Lučenec,0.0,56,107,163,31.89738222067748
+District of Detva,District of Zvolen,0.0,575,2178,2753,24.825826422327918
+District of Detva,Not found out,33.0,32,670,702,
+District of Detva,Without work address,4.0,0,1614,1614,
+District of Dolný Kubín,Abroad,0.0,0,539,539,
+District of Dolný Kubín,District of Banská Bystrica,0.0,144,34,178,64.03338586340978
+District of Dolný Kubín,District of Bratislava I,0.0,108,67,175,242.48985608211962
+District of Dolný Kubín,District of Dolný Kubín,0.0,4471,9075,13546,0.0
+District of Dolný Kubín,District of Martin,0.0,89,217,306,42.30830612060342
+District of Dolný Kubín,District of Námestovo,0.0,21,151,172,29.00965039124561
+District of Dolný Kubín,District of Ružomberok,0.0,183,410,593,29.711211116969015
+District of Dolný Kubín,District of Tvrdošín,0.0,222,277,499,28.840291507029345
+District of Dolný Kubín,District of Žilina,0.0,372,288,660,51.66665626641675
+District of Dolný Kubín,Not found out,63.0,14,981,995,
+District of Dolný Kubín,Without work address,1.0,0,1746,1746,
+District of Dunajská Streda,Abroad,0.0,5,2150,2155,
+District of Dunajská Streda,District of Bratislava I,0.0,773,2473,3246,52.34917120097448
+District of Dunajská Streda,District of Bratislava II,1.0,864,4600,5464,41.74269709015959
+District of Dunajská Streda,District of Bratislava III,0.0,389,2073,2462,52.05120827047974
+District of Dunajská Streda,District of Bratislava IV,0.0,202,1357,1559,61.88179367409787
+District of Dunajská Streda,District of Bratislava V,0.0,639,1245,1884,46.911217564829464
+District of Dunajská Streda,District of Dunajská Streda,4.0,12125,23768,35893,0.0
+District of Dunajská Streda,District of Galanta,0.0,124,473,597,25.49369911213505
+District of Dunajská Streda,District of Komárno,0.0,511,343,854,46.87324061172432
+District of Dunajská Streda,District of Nitra,0.0,188,87,275,60.7295838013039
+District of Dunajská Streda,District of Senec,0.0,420,1328,1748,37.97806354228625
+District of Dunajská Streda,District of Trnava,0.0,54,117,171,64.00904198862565
+District of Dunajská Streda,Not found out,155.0,192,3659,3851,
+District of Dunajská Streda,Without work address,35.0,0,9615,9615,
+District of Galanta,Abroad,0.0,1,825,826,
+District of Galanta,District of Bratislava I,0.0,403,1338,1741,46.562443227258726
+District of Galanta,District of Bratislava II,2.0,218,1574,1792,37.137458915857145
+District of Galanta,District of Bratislava III,0.0,199,1346,1545,42.73233558979073
+District of Galanta,District of Bratislava IV,1.0,152,992,1144,54.26058005062494
+District of Galanta,District of Bratislava V,0.0,224,497,721,46.63388888066845
+District of Galanta,District of Dunajská Streda,0.0,211,667,878,25.49369911213505
+District of Galanta,District of Galanta,0.0,8512,17319,25831,0.0
+District of Galanta,District of Hlohovec,0.0,55,298,353,39.44931251951096
+District of Galanta,District of Nitra,0.0,338,681,1019,44.55286339957464
+District of Galanta,District of Pezinok,0.0,27,141,168,35.22712700662254
+District of Galanta,District of Senec,0.0,197,2064,2261,28.387092135117843
+District of Galanta,District of Trnava,1.0,1114,2293,3407,39.04814496091954
+District of Galanta,District of Šaľa,0.0,174,787,961,24.334567519449703
+District of Galanta,Not found out,106.0,105,2428,2533,
+District of Galanta,Without work address,33.0,0,6230,6230,
+District of Gelnica,Abroad,0.0,0,447,447,
+District of Gelnica,District of Gelnica,0.0,3676,3244,6920,0.0
+District of Gelnica,District of Košice - okolie,0.0,12,153,165,22.008076344087254
+District of Gelnica,District of Košice I,0.0,375,545,920,36.613271427745644
+District of Gelnica,District of Košice II,0.0,50,187,237,40.414276435906075
+District of Gelnica,District of Košice IV,1.0,181,346,527,45.5856551062096
+District of Gelnica,District of Prešov,0.0,134,175,309,39.11792004290704
+District of Gelnica,District of Spišská Nová Ves,0.0,382,862,1244,16.599883538536215
+District of Gelnica,Not found out,71.0,123,502,625,
+District of Gelnica,Without work address,3.0,0,1028,1028,
+District of Hlohovec,Abroad,0.0,0,294,294,
+District of Hlohovec,District of Bratislava I,0.0,153,324,477,73.32344679118597
+District of Hlohovec,District of Bratislava II,2.0,14,393,407,67.49216989373923
+District of Hlohovec,District of Bratislava III,0.0,39,319,358,66.80905824167532
+District of Hlohovec,District of Bratislava IV,0.0,35,159,194,77.21962639498668
+District of Hlohovec,District of Bratislava V,0.0,77,88,165,78.09765155581654
+District of Hlohovec,District of Galanta,0.0,48,575,623,39.44931251951096
+District of Hlohovec,District of Hlohovec,0.0,4006,8367,12373,0.0
+District of Hlohovec,District of Nitra,0.0,278,555,833,27.448446957833387
+District of Hlohovec,District of Piešťany,0.0,233,661,894,22.500189106630486
+District of Hlohovec,District of Trnava,0.0,957,2437,3394,26.801511909575048
+District of Hlohovec,Not found out,41.0,42,956,998,
+District of Hlohovec,Without work address,2.0,0,2096,2096,
+District of Humenné,Abroad,0.0,0,1484,1484,
+District of Humenné,District of Bratislava I,0.0,140,70,210,442.55797596988936
+District of Humenné,District of Humenné,0.0,6200,11029,17229,0.0
+District of Humenné,District of Košice I,0.0,411,130,541,72.53876370026018
+District of Humenné,District of Michalovce,0.0,152,800,952,46.31486996574483
+District of Humenné,District of Prešov,0.0,310,204,514,69.54477920592336
+District of Humenné,District of Snina,0.0,60,302,362,33.7752997851401
+District of Humenné,District of Vranov nad Topľou,0.0,30,498,528,29.4202813348465
+District of Humenné,Not found out,73.0,112,1137,1249,
+District of Humenné,Without work address,2.0,0,2293,2293,
+District of Ilava,Abroad,0.0,1,486,487,
+District of Ilava,District of Bratislava I,0.0,133,127,260,151.4003856401941
+District of Ilava,District of Bratislava II,0.0,20,132,152,148.82177586809325
+District of Ilava,District of Ilava,0.0,5459,13143,18602,0.0
+District of Ilava,District of Nové Mesto nad Váhom,0.0,11,249,260,48.57984379549717
+District of Ilava,District of Považská Bystrica,0.0,48,309,357,27.998911863959684
+District of Ilava,District of Púchov,0.0,151,1433,1584,15.767627870922187
+District of Ilava,District of Trenčín,0.0,848,3402,4250,19.298523266022663
+District of Ilava,District of Trnava,0.0,216,33,249,98.12295511370831
+District of Ilava,District of Žilina,0.0,98,105,203,49.21344963365126
+District of Ilava,Not found out,40.0,40,1179,1219,
+District of Ilava,Without work address,5.0,0,2440,2440,
+District of Kežmarok,Abroad,0.0,2,1179,1181,
+District of Kežmarok,District of Bratislava I,0.0,130,83,213,328.8241459439496
+District of Kežmarok,District of Kežmarok,1.0,10615,9244,19859,0.0
+District of Kežmarok,District of Košice I,0.0,316,47,363,88.41473813039845
+District of Kežmarok,District of Levoča,0.0,184,40,224,31.106317555626084
+District of Kežmarok,District of Poprad,2.0,1328,4247,5575,29.383810544363463
+District of Kežmarok,District of Prešov,0.0,183,73,256,66.39983137575697
+District of Kežmarok,District of Stará Ľubovňa,0.0,107,267,374,26.61002404345187
+District of Kežmarok,Not found out,141.0,64,1481,1545,
+District of Kežmarok,Without work address,6.0,0,2951,2951,
+District of Komárno,Abroad,0.0,5,2918,2923,
+District of Komárno,District of Bratislava I,0.0,250,276,526,98.75298673953819
+District of Komárno,District of Bratislava II,2.0,58,331,389,88.10422150327376
+District of Komárno,District of Bratislava III,0.0,86,203,289,97.54244301427849
+District of Komárno,District of Bratislava IV,0.0,64,179,243,108.06651454217332
+District of Komárno,District of Bratislava V,0.0,131,134,265,93.78407497395663
+District of Komárno,District of Dunajská Streda,0.0,218,1204,1422,46.87324061172432
+District of Komárno,District of Galanta,0.0,34,281,315,59.23867385831486
+District of Komárno,District of Komárno,1.0,9612,19748,29360,0.0
+District of Komárno,District of Nitra,0.0,315,288,603,59.397822149353786
+District of Komárno,District of Nové Zámky,0.0,732,1814,2546,19.376617882851853
+District of Komárno,District of Trnava,0.0,59,91,150,94.07673992796894
+District of Komárno,Not found out,119.0,140,2326,2466,
+District of Komárno,Without work address,35.0,0,6753,6753,
+District of Košice - okolie,Abroad,0.0,2,931,933,
+District of Košice - okolie,District of Bratislava I,0.0,60,102,162,350.4541029262977
+District of Košice - okolie,District of Košice - okolie,0.0,11830,10261,22091,0.0
+District of Košice - okolie,District of Košice I,1.0,3794,7152,10946,22.787589511164047
+District of Košice - okolie,District of Košice II,0.0,1338,6565,7903,19.556559171240263
+District of Košice - okolie,District of Košice III,0.0,444,378,822,28.97857670203252
+District of Košice - okolie,District of Košice IV,0.0,2211,6675,8886,26.718104973140786
+District of Košice - okolie,District of Prešov,0.0,339,475,814,42.80734175729214
+District of Košice - okolie,District of Trebišov,0.0,53,134,187,63.05213116514449
+District of Košice - okolie,Not found out,209.0,444,2128,2572,
+District of Košice - okolie,Without work address,16.0,0,5703,5703,
+District of Košice I,Abroad,0.0,2,420,422,
+District of Košice I,District of Bratislava I,0.0,44,115,159,372.5775360810672
+District of Košice I,District of Košice - okolie,0.0,48,765,813,22.787589511164047
+District of Košice I,District of Košice I,1.0,5833,9843,15676,0.0
+District of Košice I,District of Košice II,0.0,804,3813,4617,15.90919761174025
+District of Košice I,District of Košice III,0.0,223,384,607,7.966840311918039
+District of Košice I,District of Košice IV,0.0,765,4477,5242,12.888088727991239
+District of Košice I,District of Prešov,0.0,203,371,574,30.911128710304766
+District of Košice I,Not found out,59.0,236,1430,1666,
+District of Košice I,Without work address,5.0,0,2640,2640,
+District of Košice II,Abroad,0.0,1,516,517,
+District of Košice II,District of Košice - okolie,0.0,96,1001,1097,19.556559171240263
+District of Košice II,District of Košice I,0.0,2461,7732,10193,15.90919761174025
+District of Košice II,District of Košice II,0.0,5690,7540,13230,0.0
+District of Košice II,District of Košice III,0.0,177,317,494,16.18966503521112
+District of Košice II,District of Košice IV,0.0,1060,5148,6208,9.196250978847043
+District of Košice II,District of Prešov,0.0,169,349,518,46.313485050337604
+District of Košice II,Not found out,69.0,644,1378,2022,
+District of Košice II,Without work address,19.0,0,3212,3212,
+District of Košice III,Abroad,0.0,0,171,171,
+District of Košice III,District of Košice - okolie,0.0,35,378,413,28.97857670203252
+District of Košice III,District of Košice I,0.0,944,3022,3966,7.966840311918039
+District of Košice III,District of Košice II,0.0,284,1474,1758,16.18966503521112
+District of Košice III,District of Košice III,0.0,1777,620,2397,0.0
+District of Košice III,District of Košice IV,0.0,395,1959,2354,8.81140072820433
+District of Košice III,District of Prešov,0.0,72,149,221,35.594234937485126
+District of Košice III,Not found out,29.0,95,465,560,
+District of Košice III,Without work address,3.0,0,1123,1123,
+District of Košice IV,Abroad,0.0,0,351,351,
+District of Košice IV,District of Košice - okolie,0.0,41,769,810,26.718104973140786
+District of Košice IV,District of Košice I,3.0,2062,5402,7464,12.888088727991239
+District of Košice IV,District of Košice II,0.0,877,3354,4231,9.196250978847043
+District of Košice IV,District of Košice III,0.0,223,288,511,8.81140072820433
+District of Košice IV,District of Košice IV,1.0,4040,5806,9846,0.0
+District of Košice IV,District of Prešov,0.0,173,250,423,43.37677168802115
+District of Košice IV,Not found out,50.0,224,1174,1398,
+District of Košice IV,Without work address,6.0,0,2386,2386,
+District of Krupina,Abroad,0.0,0,193,193,
+District of Krupina,District of Banská Bystrica,0.0,203,206,409,63.95547806362443
+District of Krupina,District of Banská Štiavnica,0.0,104,58,162,20.24095873767399
+District of Krupina,District of Krupina,0.0,1915,4100,6015,0.0
+District of Krupina,District of Levice,0.0,107,261,368,43.25765314862394
+District of Krupina,District of Nitra,0.0,73,208,281,84.21037489607218
+District of Krupina,District of Zvolen,0.0,252,710,962,26.087021137371014
+District of Krupina,Not found out,26.0,22,406,428,
+District of Krupina,Without work address,5.0,0,948,948,
+District of Kysucké Nové Mesto,Abroad,0.0,0,452,452,
+District of Kysucké Nové Mesto,District of Kysucké Nové Mesto,0.0,3315,5742,9057,0.0
+District of Kysucké Nové Mesto,District of Čadca,0.0,153,309,462,13.816389055269976
+District of Kysucké Nové Mesto,District of Žilina,0.0,933,3620,4553,22.972965317420027
+District of Kysucké Nové Mesto,Not found out,37.0,21,814,835,
+District of Kysucké Nové Mesto,Without work address,3.0,0,1682,1682,
+District of Levice,Abroad,0.0,1,1845,1846,
+District of Levice,District of Banská Bystrica,0.0,185,83,268,97.11160896976463
+District of Levice,District of Bratislava I,0.0,315,261,576,131.17083484558668
+District of Levice,District of Bratislava II,0.0,58,420,478,121.6519500709982
+District of Levice,District of Bratislava III,1.0,106,209,315,126.94991459784966
+District of Levice,District of Bratislava IV,0.0,82,143,225,138.52719204646533
+District of Levice,District of Bratislava V,0.0,174,88,262,130.62793195361024
+District of Levice,District of Komárno,0.0,147,67,214,58.82580735440225
+District of Levice,District of Krupina,0.0,43,255,298,43.25765314862394
+District of Levice,District of Levice,0.0,10709,24543,35252,0.0
+District of Levice,District of Nitra,0.0,814,1003,1817,47.57415173418492
+District of Levice,District of Nové Zámky,0.0,255,458,713,40.02547346481617
+District of Levice,District of Trnava,0.0,145,234,379,100.04971092824934
+District of Levice,District of Zlaté Moravce,0.0,74,148,222,34.76865645240524
+District of Levice,Not found out,118.0,158,2363,2521,
+District of Levice,Without work address,14.0,0,5388,5388,
+District of Levoča,Abroad,0.0,1,532,533,
+District of Levoča,District of Košice I,0.0,182,72,254,57.36921558049402
+District of Levoča,District of Levoča,0.0,3547,3785,7332,0.0
+District of Levoča,District of Poprad,1.0,123,782,905,46.88537441949889
+District of Levoča,District of Prešov,0.0,212,223,435,38.400577572165524
+District of Levoča,District of Spišská Nová Ves,0.0,578,1796,2374,20.439966916277342
+District of Levoča,Not found out,54.0,80,687,767,
+District of Levoča,Without work address,2.0,0,1418,1418,
+District of Liptovský Mikuláš,Abroad,0.0,0,551,551,
+District of Liptovský Mikuláš,District of Banská Bystrica,0.0,146,108,254,59.53887855391408
+District of Liptovský Mikuláš,District of Bratislava I,0.0,155,134,289,260.95999221851605
+District of Liptovský Mikuláš,District of Liptovský Mikuláš,3.0,7673,17749,25422,0.0
+District of Liptovský Mikuláš,District of Martin,0.0,48,127,175,69.20599419566173
+District of Liptovský Mikuláš,District of Poprad,0.0,149,429,578,41.271444091147465
+District of Liptovský Mikuláš,District of Ružomberok,0.0,188,859,1047,41.38298843471553
+District of Liptovský Mikuláš,District of Žilina,0.0,201,180,381,86.13501951942504
+District of Liptovský Mikuláš,Not found out,64.0,61,1868,1929,
+District of Liptovský Mikuláš,Without work address,6.0,0,3539,3539,
+District of Lučenec,Abroad,0.0,1,1196,1197,
+District of Lučenec,District of Banská Bystrica,1.0,269,212,481,65.74982608000349
+District of Lučenec,District of Bratislava I,0.0,154,120,274,227.48496431792645
+District of Lučenec,District of Detva,0.0,55,568,623,31.89738222067748
+District of Lučenec,District of Lučenec,0.0,7438,12685,20123,0.0
+District of Lučenec,District of Nitra,0.0,127,68,195,139.38039526607128
+District of Lučenec,District of Poltár,0.0,70,173,243,22.13654507305804
+District of Lučenec,District of Rimavská Sobota,0.0,117,328,445,39.217531536412956
+District of Lučenec,District of Zvolen,1.0,90,303,393,49.748694123977074
+District of Lučenec,Not found out,100.0,210,1243,1453,
+District of Lučenec,Without work address,30.0,0,2621,2621,
+District of Malacky,Abroad,0.0,3,886,889,
+District of Malacky,District of Bratislava I,0.0,860,2796,3656,38.72166334183667
+District of Malacky,District of Bratislava II,0.0,801,2496,3297,44.659192395970855
+District of Malacky,District of Bratislava III,0.0,568,1934,2502,33.30705137367508
+District of Malacky,District of Bratislava IV,1.0,1304,5136,6440,32.71683752093261
+District of Malacky,District of Bratislava V,1.0,769,1153,1922,49.53479080939808
+District of Malacky,District of Malacky,1.0,7160,13541,20701,0.0
+District of Malacky,District of Senec,0.0,50,129,179,43.05613652108198
+District of Malacky,District of Senica,0.0,67,201,268,27.77943790907007
+District of Malacky,District of Trnava,0.0,121,70,191,39.70597740308395
+District of Malacky,Not found out,80.0,74,2019,2093,
+District of Malacky,Without work address,20.0,0,4581,4581,
+District of Martin,Abroad,0.0,2,682,684,
+District of Martin,District of Banská Bystrica,0.0,239,123,362,46.88330500775735
+District of Martin,District of Bratislava I,0.0,188,207,395,200.18386800911276
+District of Martin,District of Bratislava II,0.0,28,171,199,195.25511900622783
+District of Martin,District of Bratislava III,0.0,44,145,189,193.23398045743733
+District of Martin,District of Martin,3.0,10290,24471,34761,0.0
+District of Martin,District of Ružomberok,0.0,177,142,319,28.694509956573498
+District of Martin,District of Turčianske Teplice,0.0,98,285,383,26.477010339448547
+District of Martin,District of Žilina,0.0,642,3029,3671,21.41726273929448
+District of Martin,Not found out,86.0,129,2216,2345,
+District of Martin,Without work address,7.0,0,3999,3999,
+District of Medzilaborce,Abroad,0.0,0,286,286,
+District of Medzilaborce,District of Humenné,0.0,139,239,378,29.882724195187865
+District of Medzilaborce,District of Medzilaborce,0.0,960,1399,2359,0.0
+District of Medzilaborce,Not found out,21.0,22,240,262,
+District of Medzilaborce,Without work address,0.0,0,324,324,
+District of Michalovce,Abroad,0.0,9,1459,1468,
+District of Michalovce,District of Bratislava I,0.0,142,103,245,432.7013048133727
+District of Michalovce,District of Bratislava II,0.0,22,139,161,424.0128734921227
+District of Michalovce,District of Bratislava III,0.0,68,114,182,427.4774371582653
+District of Michalovce,District of Humenné,0.0,81,317,398,46.31486996574483
+District of Michalovce,District of Košice I,0.0,605,397,1002,64.25157532404477
+District of Michalovce,District of Košice II,0.0,187,119,306,65.31474799055816
+District of Michalovce,District of Košice IV,0.0,101,245,346,57.11700622946256
+District of Michalovce,District of Michalovce,1.0,12494,18634,31128,0.0
+District of Michalovce,District of Prešov,0.0,374,147,521,80.69053276707953
+District of Michalovce,District of Sobrance,0.0,46,461,507,26.686685123212367
+District of Michalovce,District of Trebišov,0.0,304,880,1184,27.705086244554607
+District of Michalovce,District of Vranov nad Topľou,0.0,33,242,275,44.93232462980225
+District of Michalovce,Not found out,143.0,634,1853,2487,
+District of Michalovce,Without work address,14.0,0,3663,3663,
+District of Myjava,Abroad,0.0,0,267,267,
+District of Myjava,District of Bratislava I,0.0,81,72,153,89.40536079678776
+District of Myjava,District of Myjava,0.0,2095,5593,7688,0.0
+District of Myjava,District of Nové Mesto nad Váhom,0.0,146,1023,1169,18.717266598966326
+District of Myjava,District of Piešťany,0.0,99,229,328,23.78322705302148
+District of Myjava,District of Senica,0.0,128,351,479,41.93878810277105
+District of Myjava,District of Skalica,0.0,28,139,167,35.29887116402375
+District of Myjava,District of Trnava,0.0,102,67,169,39.93101317051202
+District of Myjava,Not found out,14.0,18,619,637,
+District of Myjava,Without work address,4.0,0,1004,1004,
+District of Nitra,Abroad,0.0,1,1418,1419,
+District of Nitra,District of Bratislava I,2.0,533,886,1419,88.82565318587785
+District of Nitra,District of Bratislava II,0.0,39,897,936,80.58925468818919
+District of Nitra,District of Bratislava III,0.0,141,601,742,83.52394916767742
+District of Nitra,District of Bratislava IV,0.0,142,289,431,94.90487959861187
+District of Nitra,District of Bratislava V,0.0,195,295,490,90.65300795057942
+District of Nitra,District of Galanta,2.0,39,700,739,44.55286339957464
+District of Nitra,District of Hlohovec,0.0,39,665,704,27.448446957833387
+District of Nitra,District of Krupina,0.0,1,408,409,84.21037489607218
+District of Nitra,District of Levice,0.0,93,861,954,47.57415173418492
+District of Nitra,District of Nitra,1.0,20154,45119,65273,0.0
+District of Nitra,District of Nové Zámky,0.0,153,399,552,45.16795416100804
+District of Nitra,District of Piešťany,0.0,78,92,170,48.06457220091916
+District of Nitra,District of Senec,0.0,9,154,163,71.01214807371508
+District of Nitra,District of Topoľčany,0.0,126,360,486,35.34554458335721
+District of Nitra,District of Trnava,0.0,266,569,835,52.475561308961126
+District of Nitra,District of Zlaté Moravce,0.0,107,505,612,31.58360774005482
+District of Nitra,District of Šaľa,0.0,49,408,457,28.913026943537808
+District of Nitra,Not found out,148.0,137,4005,4142,
+District of Nitra,Without work address,13.0,0,8532,8532,
+District of Nové Mesto nad Váhom,Abroad,0.0,1,446,447,
+District of Nové Mesto nad Váhom,District of Bratislava I,1.0,182,218,400,103.18874175673204
+District of Nové Mesto nad Váhom,District of Bratislava II,2.0,29,233,262,101.28170230132048
+District of Nové Mesto nad Váhom,District of Bratislava III,0.0,77,153,230,95.87444515793867
+District of Nové Mesto nad Váhom,District of Bratislava V,0.0,98,76,174,111.22442101530883
+District of Nové Mesto nad Váhom,District of Myjava,0.0,127,273,400,18.717266598966326
+District of Nové Mesto nad Váhom,District of Nitra,0.0,123,68,191,66.50975802475256
+District of Nové Mesto nad Váhom,District of Nové Mesto nad Váhom,3.0,5904,16351,22255,0.0
+District of Nové Mesto nad Váhom,District of Piešťany,1.0,416,1013,1429,26.735517391080144
+District of Nové Mesto nad Váhom,District of Trenčín,0.0,487,1066,1553,29.87684059672247
+District of Nové Mesto nad Váhom,District of Trnava,0.0,285,157,442,50.498654281290165
+District of Nové Mesto nad Váhom,Not found out,45.0,55,1560,1615,
+District of Nové Mesto nad Váhom,Without work address,8.0,0,2709,2709,
+District of Nové Zámky,Abroad,0.0,8,3219,3227,
+District of Nové Zámky,District of Bratislava I,0.0,432,922,1354,103.4396116316588
+District of Nové Zámky,District of Bratislava II,0.0,86,856,942,93.02172613597995
+District of Nové Zámky,District of Bratislava III,0.0,156,885,1041,100.89013415318621
+District of Nové Zámky,District of Bratislava IV,0.0,135,483,618,112.11457538093848
+District of Nové Zámky,District of Bratislava V,0.0,246,310,556,100.35090744593137
+District of Nové Zámky,District of Dunajská Streda,1.0,30,143,173,55.01916886501131
+District of Nové Zámky,District of Galanta,0.0,36,993,1029,59.06469718139957
+District of Nové Zámky,District of Komárno,0.0,606,1157,1763,19.376617882851853
+District of Nové Zámky,District of Levice,0.0,229,705,934,40.02547346481617
+District of Nové Zámky,District of Nitra,0.0,1404,4578,5982,45.16795416100804
+District of Nové Zámky,District of Nové Zámky,1.0,12696,24823,37519,0.0
+District of Nové Zámky,District of Senec,0.0,36,154,190,86.0202069331278
+District of Nové Zámky,District of Trnava,0.0,124,267,391,88.15892415529255
+District of Nové Zámky,District of Šaľa,0.0,43,495,538,35.72767080033286
+District of Nové Zámky,Not found out,138.0,183,2888,3071,
+District of Nové Zámky,Without work address,29.0,0,7282,7282,
+District of Námestovo,Abroad,0.0,0,2334,2334,
+District of Námestovo,District of Banská Bystrica,0.0,324,80,404,92.91994949040429
+District of Námestovo,District of Bratislava I,0.0,204,118,322,264.9988290572406
+District of Námestovo,District of Bratislava II,0.0,7,180,187,260.73256165878195
+District of Námestovo,District of Bratislava III,0.0,147,112,259,257.8931650179805
+District of Námestovo,District of Bratislava V,0.0,108,74,182,271.2789832152172
+District of Námestovo,District of Dolný Kubín,0.0,459,1016,1475,29.00965039124561
+District of Námestovo,District of Martin,0.0,133,74,207,67.03039459451442
+District of Námestovo,District of Námestovo,4.0,9137,10841,19978,0.0
+District of Námestovo,District of Ružomberok,0.0,205,101,306,58.712270717385906
+District of Námestovo,District of Trnava,0.0,130,30,160,211.7019243902892
+District of Námestovo,District of Tvrdošín,0.0,600,517,1117,25.05507567285546
+District of Námestovo,District of Žilina,0.0,491,196,687,69.30680880867924
+District of Námestovo,Not found out,127.0,15,2175,2190,
+District of Námestovo,Without work address,5.0,0,4790,4790,
+District of Partizánske,Abroad,1.0,0,679,679,
+District of Partizánske,District of Bratislava I,0.0,141,114,255,125.92090422886835
+District of Partizánske,District of Bratislava II,0.0,23,128,151,119.68455303653232
+District of Partizánske,District of Bánovce nad Bebravou,2.0,79,668,747,23.082017884462132
+District of Partizánske,District of Nitra,0.0,228,282,510,46.303342651768645
+District of Partizánske,District of Partizánske,0.0,3746,7235,10981,0.0
+District of Partizánske,District of Prievidza,0.0,119,1124,1243,32.7771369922754
+District of Partizánske,District of Topoľčany,0.0,538,1593,2131,27.34707440562482
+District of Partizánske,District of Trenčín,0.0,62,122,184,47.625569988596894
+District of Partizánske,Not found out,52.0,22,1079,1101,
+District of Partizánske,Without work address,9.0,0,2322,2322,
+District of Pezinok,Abroad,0.0,4,418,422,
+District of Pezinok,District of Bratislava I,0.0,705,3192,3897,30.61835666553482
+District of Pezinok,District of Bratislava II,0.0,637,3576,4213,29.456448877760955
+District of Pezinok,District of Bratislava III,1.0,790,3952,4742,23.33992090058275
+District of Pezinok,District of Bratislava IV,0.0,209,1107,1316,32.08650430434525
+District of Pezinok,District of Bratislava V,0.0,449,1102,1551,38.80366532774072
+District of Pezinok,District of Pezinok,0.0,7146,9403,16549,0.0
+District of Pezinok,District of Senec,0.0,82,1336,1418,22.575221473617585
+District of Pezinok,District of Trnava,0.0,545,619,1164,23.04659461068295
+District of Pezinok,Not found out,68.0,48,1831,1879,
+District of Pezinok,Without work address,11.0,0,3123,3123,
+District of Piešťany,Abroad,0.0,0,706,706,
+District of Piešťany,District of Bratislava I,1.0,208,310,518,78.84232921088636
+District of Piešťany,District of Bratislava II,1.0,40,448,488,75.81549992834005
+District of Piešťany,District of Bratislava III,0.0,67,267,334,71.62802448390119
+District of Piešťany,District of Bratislava V,1.0,135,130,265,86.05740750587373
+District of Piešťany,District of Hlohovec,0.0,64,670,734,22.500189106630486
+District of Piešťany,District of Nitra,0.0,138,139,277,48.06457220091916
+District of Piešťany,District of Nové Mesto nad Váhom,0.0,102,1631,1733,26.735517391080144
+District of Piešťany,District of Piešťany,3.0,5859,12952,18811,0.0
+District of Piešťany,District of Trenčín,0.0,139,129,268,53.71974680818759
+District of Piešťany,District of Trnava,0.0,857,1799,2656,25.34095476476316
+District of Piešťany,Not found out,52.0,83,1414,1497,
+District of Piešťany,Without work address,7.0,0,2645,2645,
+District of Poltár,Abroad,0.0,0,420,420,
+District of Poltár,District of Banská Bystrica,0.0,107,100,207,55.916314756884255
+District of Poltár,District of Detva,0.0,3,187,190,30.01469719723806
+District of Poltár,District of Lučenec,0.0,460,1377,1837,22.13654507305804
+District of Poltár,District of Poltár,0.0,1494,1755,3249,0.0
+District of Poltár,District of Rimavská Sobota,0.0,133,420,553,30.056783625959483
+District of Poltár,Not found out,20.0,23,321,344,
+District of Poltár,Without work address,3.0,0,816,816,
+District of Poprad,Abroad,0.0,1,1149,1150,
+District of Poprad,District of Banská Bystrica,0.0,125,55,180,95.40003761930622
+District of Poprad,District of Bratislava I,0.0,218,175,393,299.8107935587429
+District of Poprad,District of Bratislava II,2.0,23,152,175,293.0660653722942
+District of Poprad,District of Bratislava III,0.0,64,122,186,293.4383828703384
+District of Poprad,District of Bratislava V,0.0,110,53,163,303.524806599781
+District of Poprad,District of Kežmarok,0.0,247,985,1232,29.383810544363463
+District of Poprad,District of Košice I,0.0,396,132,528,99.89598123453591
+District of Poprad,District of Levoča,0.0,206,96,302,46.88537441949889
+District of Poprad,District of Liptovský Mikuláš,0.0,78,227,305,41.271444091147465
+District of Poprad,District of Poprad,2.0,12126,23892,36018,0.0
+District of Poprad,District of Prešov,0.0,217,140,357,85.25123487540515
+District of Poprad,District of Spišská Nová Ves,0.0,136,340,476,49.38789136881667
+District of Poprad,District of Žilina,0.0,118,45,163,126.66150131700749
+District of Poprad,Not found out,117.0,126,2397,2523,
+District of Poprad,Without work address,14.0,0,4268,4268,
+District of Považská Bystrica,Abroad,0.0,0,642,642,
+District of Považská Bystrica,District of Bratislava I,0.0,178,128,306,178.577333676858
+District of Považská Bystrica,District of Bratislava II,0.0,23,163,186,175.52070544310783
+District of Považská Bystrica,District of Bratislava III,0.0,83,87,170,171.31987601492605
+District of Považská Bystrica,District of Bytča,0.0,34,414,448,14.492757043898804
+District of Považská Bystrica,District of Ilava,0.0,108,372,480,27.998911863959684
+District of Považská Bystrica,District of Považská Bystrica,2.0,6003,14088,20091,0.0
+District of Považská Bystrica,District of Púchov,0.0,278,1907,2185,18.446196091791556
+District of Považská Bystrica,District of Trenčín,0.0,190,287,477,46.572433270291704
+District of Považská Bystrica,District of Trnava,0.0,166,19,185,125.11665396971758
+District of Považská Bystrica,District of Žilina,0.0,495,1174,1669,22.894578408942124
+District of Považská Bystrica,Not found out,58.0,39,1543,1582,
+District of Považská Bystrica,Without work address,10.0,0,3235,3235,
+District of Prešov,Abroad,0.0,4,1877,1881,
+District of Prešov,District of Banská Bystrica,0.0,105,71,176,171.38353204548898
+District of Prešov,District of Bardejov,0.0,34,221,255,39.21475065897369
+District of Prešov,District of Bratislava I,0.0,239,179,418,374.53758160994414
+District of Prešov,District of Bratislava II,1.0,19,226,245,366.80653086622254
+District of Prešov,District of Bratislava III,0.0,69,177,246,368.6526032669591
+District of Prešov,District of Bratislava V,0.0,125,65,190,376.95037992410647
+District of Prešov,District of Košice - okolie,0.0,149,311,460,42.80734175729214
+District of Prešov,District of Košice I,0.0,1138,1817,2955,30.911128710304766
+District of Prešov,District of Košice II,0.0,243,612,855,46.313485050337604
+District of Prešov,District of Košice IV,1.0,162,1049,1211,43.37677168802115
+District of Prešov,District of Poprad,0.0,14,155,169,85.25123487540515
+District of Prešov,District of Prešov,2.0,23506,39632,63138,0.0
+District of Prešov,District of Sabinov,0.0,74,732,806,24.254228045525355
+District of Prešov,District of Spišská Nová Ves,0.0,35,183,218,44.12947841741647
+District of Prešov,District of Svidník,0.0,67,98,165,49.609422609699514
+District of Prešov,District of Vranov nad Topľou,0.0,16,141,157,42.33140715846446
+District of Prešov,Not found out,206.0,398,3661,4059,
+District of Prešov,Without work address,15.0,0,7473,7473,
+District of Prievidza,Abroad,0.0,2,2394,2396,
+District of Prievidza,District of Banská Bystrica,0.0,287,140,427,53.23571635010196
+District of Prievidza,District of Bratislava I,0.0,381,242,623,157.55680048682595
+District of Prievidza,District of Bratislava II,1.0,40,298,338,151.80326896362763
+District of Prievidza,District of Bratislava III,1.0,132,198,330,150.86618258185868
+District of Prievidza,District of Bratislava IV,0.0,58,147,205,160.79345885603772
+District of Prievidza,District of Bratislava V,0.0,120,100,220,162.40174386352243
+District of Prievidza,District of Bánovce nad Bebravou,0.0,34,583,617,29.04607445486038
+District of Prievidza,District of Ilava,0.0,29,282,311,49.6857786581228
+District of Prievidza,District of Martin,0.0,113,115,228,45.813033599847884
+District of Prievidza,District of Nitra,0.0,417,142,559,78.59578301150381
+District of Prievidza,District of Partizánske,0.0,134,801,935,32.7771369922754
+District of Prievidza,District of Prievidza,5.0,12748,31000,43748,0.0
+District of Prievidza,District of Topoľčany,0.0,86,159,245,57.09568396140148
+District of Prievidza,District of Trenčín,0.0,187,233,420,50.91279365900591
+District of Prievidza,District of Trnava,0.0,220,89,309,106.48468704785
+District of Prievidza,District of Žiar nad Hronom,0.0,33,185,218,25.955675709843554
+District of Prievidza,District of Žilina,0.0,309,264,573,52.19067188943582
+District of Prievidza,Not found out,111.0,134,2805,2939,
+District of Prievidza,Without work address,23.0,0,6266,6266,
+District of Púchov,Abroad,0.0,0,426,426,
+District of Púchov,District of Bratislava I,1.0,132,79,211,166.00659609232122
+District of Púchov,District of Ilava,1.0,303,1136,1439,15.767627870922187
+District of Púchov,District of Považská Bystrica,0.0,357,852,1209,18.446196091791556
+District of Púchov,District of Púchov,3.0,4265,11886,16151,0.0
+District of Púchov,District of Trenčín,0.0,325,438,763,34.642459607885215
+District of Púchov,District of Žilina,0.0,187,206,393,41.3320804694852
+District of Púchov,Not found out,59.0,22,980,1002,
+District of Púchov,Without work address,4.0,0,1865,1865,
+District of Revúca,Abroad,0.0,0,659,659,
+District of Revúca,District of Banská Bystrica,0.0,118,46,164,87.90906602522975
+District of Revúca,District of Košice I,0.0,141,37,178,91.74694598472942
+District of Revúca,District of Revúca,0.0,4297,5341,9638,0.0
+District of Revúca,District of Rimavská Sobota,0.0,300,402,702,23.982643406683863
+District of Revúca,District of Rožňava,0.0,122,420,542,25.795898903655758
+District of Revúca,Not found out,45.0,128,546,674,
+District of Revúca,Without work address,7.0,0,1208,1208,
+District of Rimavská Sobota,Abroad,0.0,0,1168,1168,
+District of Rimavská Sobota,District of Banská Bystrica,0.0,264,150,414,84.42954390489761
+District of Rimavská Sobota,District of Bratislava I,0.0,102,85,187,265.71696875850745
+District of Rimavská Sobota,District of Brezno,0.0,54,142,196,57.40511656443556
+District of Rimavská Sobota,District of Košice I,0.0,182,25,207,109.95465960627256
+District of Rimavská Sobota,District of Lučenec,0.0,381,512,893,39.217531536412956
+District of Rimavská Sobota,District of Nitra,0.0,149,45,194,177.16520489327038
+District of Rimavská Sobota,District of Revúca,0.0,641,557,1198,23.982643406683863
+District of Rimavská Sobota,District of Rimavská Sobota,1.0,8943,11966,20909,0.0
+District of Rimavská Sobota,District of Rožňava,0.0,43,144,187,47.775783525213264
+District of Rimavská Sobota,District of Zvolen,0.0,89,95,184,83.46844845857383
+District of Rimavská Sobota,Not found out,119.0,246,1296,1542,
+District of Rimavská Sobota,Without work address,13.0,0,2953,2953,
+District of Rožňava,Abroad,0.0,0,966,966,
+District of Rožňava,District of Košice - okolie,0.0,24,267,291,45.30219251690762
+District of Rožňava,District of Košice I,1.0,342,164,506,66.81319889012082
+District of Rožňava,District of Košice II,0.0,80,141,221,64.05139243607454
+District of Rožňava,District of Košice IV,0.0,104,147,251,71.95013705159313
+District of Rožňava,District of Revúca,0.0,89,203,292,25.795898903655758
+District of Rožňava,District of Rožňava,0.0,6569,10426,16995,0.0
+District of Rožňava,Not found out,83.0,197,949,1146,
+District of Rožňava,Without work address,9.0,0,2295,2295,
+District of Ružomberok,Abroad,0.0,3,672,675,
+District of Ružomberok,District of Banská Bystrica,0.0,256,287,543,34.48538219783446
+District of Ružomberok,District of Bratislava I,0.0,135,93,228,221.76025758285493
+District of Ružomberok,District of Dolný Kubín,0.0,76,744,820,29.711211116969015
+District of Ružomberok,District of Liptovský Mikuláš,0.0,536,834,1370,41.38298843471553
+District of Ružomberok,District of Martin,0.0,103,483,586,28.694509956573498
+District of Ružomberok,District of Ružomberok,1.0,6189,12368,18557,0.0
+District of Ružomberok,District of Žilina,0.0,318,535,853,48.208135313826126
+District of Ružomberok,Not found out,65.0,35,1308,1343,
+District of Ružomberok,Without work address,6.0,0,2818,2818,
+District of Sabinov,Abroad,0.0,1,1465,1466,
+District of Sabinov,District of Košice I,0.0,417,178,595,52.647986649922515
+District of Sabinov,District of Košice IV,0.0,48,137,185,65.52871735565742
+District of Sabinov,District of Prešov,0.0,1969,3829,5798,24.254228045525355
+District of Sabinov,District of Sabinov,2.0,7980,6709,14689,0.0
+District of Sabinov,District of Stará Ľubovňa,0.0,8,284,292,27.294371983390562
+District of Sabinov,Not found out,86.0,147,1229,1376,
+District of Sabinov,Without work address,9.0,0,2767,2767,
+District of Senec,Abroad,0.0,3,863,866,
+District of Senec,District of Bratislava I,0.0,1422,6415,7837,18.195245216941057
+District of Senec,District of Bratislava II,2.0,2520,9399,11919,9.899516322074305
+District of Senec,District of Bratislava III,0.0,1312,5940,7252,14.908162553094076
+District of Senec,District of Bratislava IV,0.0,424,2047,2471,26.137191463381768
+District of Senec,District of Bratislava V,0.0,1170,2735,3905,20.479379876654352
+District of Senec,District of Dunajská Streda,0.0,260,525,785,37.97806354228625
+District of Senec,District of Galanta,0.0,110,296,406,28.387092135117843
+District of Senec,District of Nitra,0.0,57,108,165,71.01214807371508
+District of Senec,District of Pezinok,0.0,307,720,1027,22.575221473617585
+District of Senec,District of Senec,0.0,9460,9864,19324,0.0
+District of Senec,District of Trnava,0.0,295,522,817,42.11848880785494
+District of Senec,Not found out,109.0,139,2750,2889,
+District of Senec,Without work address,13.0,0,4879,4879,
+District of Senica,Abroad,1.0,1,897,898,
+District of Senica,District of Bratislava I,0.0,230,401,631,65.7827503042209
+District of Senica,District of Bratislava II,0.0,100,465,565,70.21391403836783
+District of Senica,District of Bratislava III,0.0,132,361,493,59.655124931422144
+District of Senica,District of Bratislava IV,0.0,127,1324,1451,60.44385986693244
+District of Senica,District of Bratislava V,0.0,135,181,316,76.45714361000759
+District of Senica,District of Malacky,1.0,113,2668,2781,27.77943790907007
+District of Senica,District of Myjava,0.0,132,444,576,41.93878810277105
+District of Senica,District of Senica,0.0,5647,10019,15666,0.0
+District of Senica,District of Skalica,0.0,534,1203,1737,17.778018703704436
+District of Senica,District of Trnava,0.0,416,447,863,42.98640884387237
+District of Senica,Not found out,76.0,54,1397,1451,
+District of Senica,Without work address,9.0,0,3256,3256,
+District of Skalica,Abroad,0.0,4,1267,1271,
+District of Skalica,District of Bratislava I,0.0,172,166,338,83.17028305843765
+District of Skalica,District of Bratislava II,0.0,58,250,308,86.97880504074236
+District of Skalica,District of Bratislava III,0.0,89,143,232,76.81715255460698
+District of Skalica,District of Bratislava IV,0.0,62,284,346,78.14210890401296
+District of Skalica,District of Bratislava V,0.0,89,63,152,93.7415574094843
+District of Skalica,District of Malacky,1.0,15,654,669,45.536212026862536
+District of Skalica,District of Senica,0.0,275,747,1022,17.778018703704436
+District of Skalica,District of Skalica,1.0,5068,12041,17109,0.0
+District of Skalica,District of Trnava,0.0,212,107,319,52.38330529555884
+District of Skalica,Not found out,60.0,43,1160,1203,
+District of Skalica,Without work address,6.0,0,1836,1836,
+District of Snina,Abroad,0.0,0,944,944,
+District of Snina,District of Humenné,0.0,330,1010,1340,33.7752997851401
+District of Snina,District of Košice I,0.0,304,82,386,103.92045920333875
+District of Snina,District of Michalovce,0.0,48,190,238,58.73836729140149
+District of Snina,District of Prešov,0.0,226,79,305,103.3152817931058
+District of Snina,District of Snina,0.0,3270,5293,8563,0.0
+District of Snina,Not found out,47.0,68,724,792,
+District of Snina,Without work address,4.0,0,1312,1312,
+District of Sobrance,Abroad,0.0,1,392,393,
+District of Sobrance,District of Košice I,0.0,148,62,210,87.52173548512206
+District of Sobrance,District of Michalovce,0.0,437,1509,1946,26.686685123212367
+District of Sobrance,District of Prešov,0.0,109,42,151,98.25352420417585
+District of Sobrance,District of Sobrance,0.0,1984,2492,4476,0.0
+District of Sobrance,Not found out,62.0,75,325,400,
+District of Sobrance,Without work address,4.0,0,696,696,
+District of Spišská Nová Ves,Abroad,0.0,7,1447,1454,
+District of Spišská Nová Ves,District of Bratislava I,0.0,169,116,285,330.408831664684
+District of Spišská Nová Ves,District of Gelnica,0.0,45,249,294,16.599883538536215
+District of Spišská Nová Ves,District of Kežmarok,0.0,21,137,158,45.49883912019395
+District of Spišská Nová Ves,District of Košice I,0.0,558,333,891,51.021844552820134
+District of Spišská Nová Ves,District of Košice II,0.0,88,67,155,56.733158286707564
+District of Spišská Nová Ves,District of Košice IV,0.0,100,139,239,61.236036090327126
+District of Spišská Nová Ves,District of Levoča,0.0,413,663,1076,20.439966916277342
+District of Spišská Nová Ves,District of Poprad,0.0,292,1534,1826,49.38789136881667
+District of Spišská Nová Ves,District of Prešov,0.0,316,271,587,44.12947841741647
+District of Spišská Nová Ves,District of Spišská Nová Ves,1.0,12702,15826,28528,0.0
+District of Spišská Nová Ves,District of Žilina,0.0,113,71,184,171.833687963648
+District of Spišská Nová Ves,Not found out,122.0,789,1730,2519,
+District of Spišská Nová Ves,Without work address,17.0,0,3282,3282,
+District of Stará Ľubovňa,Abroad,0.0,0,2132,2132,
+District of Stará Ľubovňa,District of Bratislava I,0.0,110,68,178,355.3458511713061
+District of Stará Ľubovňa,District of Kežmarok,0.0,132,393,525,26.61002404345187
+District of Stará Ľubovňa,District of Košice I,0.0,305,71,376,79.46440879730802
+District of Stará Ľubovňa,District of Poprad,0.0,163,324,487,55.60392464164062
+District of Stará Ľubovňa,District of Prešov,1.0,476,186,662,51.46685204280095
+District of Stará Ľubovňa,District of Sabinov,0.0,127,109,236,27.294371983390562
+District of Stará Ľubovňa,District of Stará Ľubovňa,1.0,6692,8208,14900,0.0
+District of Stará Ľubovňa,Not found out,79.0,125,1358,1483,
+District of Stará Ľubovňa,Without work address,7.0,0,2389,2389,
+District of Stropkov,Abroad,0.0,0,673,673,
+District of Stropkov,District of Košice I,0.0,160,41,201,71.6716948826801
+District of Stropkov,District of Prešov,0.0,242,141,383,54.86100768900337
+District of Stropkov,District of Stropkov,0.0,1933,3076,5009,0.0
+District of Stropkov,District of Svidník,0.0,198,378,576,13.670989851089907
+District of Stropkov,Not found out,21.0,18,420,438,
+District of Stropkov,Without work address,1.0,0,841,841,
+District of Svidník,Abroad,0.0,1,1160,1161,
+District of Svidník,District of Bardejov,0.0,106,298,404,28.76453976419658
+District of Svidník,District of Košice I,1.0,198,93,291,71.66789330410852
+District of Svidník,District of Prešov,0.0,453,808,1261,49.609422609699514
+District of Svidník,District of Stropkov,0.0,44,362,406,13.670989851089907
+District of Svidník,District of Svidník,1.0,3366,4307,7673,0.0
+District of Svidník,Not found out,56.0,38,694,732,
+District of Svidník,Without work address,8.0,0,1386,1386,
+District of Topoľčany,Abroad,0.0,2,861,863,
+District of Topoľčany,District of Bratislava I,0.0,226,274,500,100.59274235643431
+District of Topoľčany,District of Bratislava II,1.0,27,227,254,95.28130913022454
+District of Topoľčany,District of Bratislava III,0.0,90,213,303,93.82665633399688
+District of Topoľčany,District of Bratislava IV,0.0,50,104,154,103.69825102782781
+District of Topoľčany,District of Bratislava V,0.0,120,88,208,105.88391467523033
+District of Topoľčany,District of Bánovce nad Bebravou,0.0,34,201,235,33.7692786174465
+District of Topoľčany,District of Hlohovec,0.0,25,217,242,27.977310082724472
+District of Topoľčany,District of Nitra,0.0,894,2328,3222,35.34554458335721
+District of Topoľčany,District of Partizánske,0.0,54,670,724,27.34707440562482
+District of Topoľčany,District of Piešťany,0.0,190,784,974,28.95535972775647
+District of Topoľčany,District of Topoľčany,0.0,7043,15422,22465,0.0
+District of Topoľčany,District of Trnava,0.0,175,159,334,49.68013689145277
+District of Topoľčany,Not found out,75.0,42,1639,1681,
+District of Topoľčany,Without work address,9.0,0,3732,3732,
+District of Trebišov,Abroad,0.0,8,1793,1801,
+District of Trebišov,District of Bratislava I,1.0,80,98,178,407.71658027033607
+District of Trebišov,District of Košice - okolie,0.0,44,524,568,63.05213116514449
+District of Trebišov,District of Košice I,0.0,982,1296,2278,48.2728056235417
+District of Trebišov,District of Košice II,0.0,181,717,898,43.516014952660896
+District of Trebišov,District of Košice IV,1.0,329,1217,1546,37.38701477486388
+District of Trebišov,District of Michalovce,0.0,302,954,1256,27.705086244554607
+District of Trebišov,District of Prešov,0.0,291,112,403,73.33288614789355
+District of Trebišov,District of Trebišov,2.0,11907,14682,26589,0.0
+District of Trebišov,Not found out,194.0,482,1612,2094,
+District of Trebišov,Without work address,12.0,0,3676,3676,
+District of Trenčín,Abroad,0.0,2,974,976,
+District of Trenčín,District of Bratislava I,0.0,299,328,627,132.19649690888292
+District of Trenčín,District of Bratislava II,1.0,39,418,457,129.52948052922747
+District of Trenčín,District of Bratislava III,0.0,126,333,459,124.91558358393266
+District of Trenčín,District of Bratislava IV,0.0,72,101,173,132.58960255667336
+District of Trenčín,District of Bratislava V,0.0,200,110,310,139.73022296761317
+District of Trenčín,District of Bánovce nad Bebravou,0.0,90,688,778,26.301498780869792
+District of Trenčín,District of Ilava,0.0,751,2747,3498,19.298523266022663
+District of Trenčín,District of Nitra,0.0,146,78,224,80.0012060439863
+District of Trenčín,District of Nové Mesto nad Váhom,0.0,174,1998,2172,29.87684059672247
+District of Trenčín,District of Piešťany,0.0,71,152,223,53.71974680818759
+District of Trenčín,District of Púchov,0.0,20,236,256,34.642459607885215
+District of Trenčín,District of Trenčín,1.0,12615,29087,41702,0.0
+District of Trenčín,District of Trnava,0.0,301,114,415,78.85742576525912
+District of Trenčín,District of Žilina,1.0,204,174,378,66.13314150601654
+District of Trenčín,Not found out,90.0,87,2664,2751,
+District of Trenčín,Without work address,17.0,0,5310,5310,
+District of Trnava,Abroad,0.0,0,838,838,
+District of Trnava,District of Bratislava I,0.0,508,1748,2256,53.501481798927955
+District of Trnava,District of Bratislava II,0.0,109,2014,2123,50.81745268400915
+District of Trnava,District of Bratislava III,0.0,192,1392,1584,46.29099108103199
+District of Trnava,District of Bratislava IV,0.0,138,946,1084,54.98288000049562
+District of Trnava,District of Bratislava V,0.0,344,570,914,60.897192173741544
+District of Trnava,District of Galanta,0.0,113,1298,1411,39.04814496091954
+District of Trnava,District of Hlohovec,0.0,155,833,988,26.801511909575048
+District of Trnava,District of Nitra,0.0,217,498,715,52.475561308961126
+District of Trnava,District of Pezinok,0.0,130,671,801,23.04659461068295
+District of Trnava,District of Piešťany,0.0,171,533,704,25.34095476476316
+District of Trnava,District of Senec,0.0,25,650,675,42.11848880785494
+District of Trnava,District of Trnava,2.0,16143,34260,50403,0.0
+District of Trnava,Not found out,123.0,118,3257,3375,
+District of Trnava,Without work address,15.0,0,6231,6231,
+District of Turčianske Teplice,District of Banská Bystrica,0.0,86,88,174,35.13407111357503
+District of Turčianske Teplice,District of Martin,0.0,364,1546,1910,26.477010339448547
+District of Turčianske Teplice,District of Turčianske Teplice,0.0,1140,2355,3495,0.0
+District of Turčianske Teplice,District of Žilina,0.0,95,173,268,40.93508512430777
+District of Turčianske Teplice,Not found out,25.0,14,416,430,
+District of Turčianske Teplice,Without work address,3.0,0,814,814,
+District of Tvrdošín,Abroad,0.0,3,785,788,
+District of Tvrdošín,District of Bratislava I,0.0,189,52,241,270.93019455208025
+District of Tvrdošín,District of Dolný Kubín,1.0,179,456,635,28.840291507029345
+District of Tvrdošín,District of Námestovo,1.0,332,695,1027,25.05507567285546
+District of Tvrdošín,District of Ružomberok,0.0,96,57,153,52.33515489153535
+District of Tvrdošín,District of Tvrdošín,1.0,4342,7147,11489,0.0
+District of Tvrdošín,District of Žilina,0.0,244,113,357,80.02154439343043
+District of Tvrdošín,Not found out,56.0,13,1056,1069,
+District of Tvrdošín,Without work address,7.0,0,2027,2027,
+District of Veľký Krtíš,Abroad,0.0,6,1027,1033,
+District of Veľký Krtíš,District of Banská Bystrica,0.0,234,144,378,71.94181151608556
+District of Veľký Krtíš,District of Bratislava I,0.0,90,65,155,200.97197104838185
+District of Veľký Krtíš,District of Krupina,0.0,64,127,191,31.205827772675057
+District of Veľký Krtíš,District of Levice,0.0,173,394,567,70.00089886528542
+District of Veľký Krtíš,District of Lučenec,0.0,263,346,609,30.34136605494867
+District of Veľký Krtíš,District of Nitra,0.0,146,60,206,114.3829529383867
+District of Veľký Krtíš,District of Veľký Krtíš,0.0,3472,6877,10349,0.0
+District of Veľký Krtíš,District of Zvolen,0.0,103,208,311,40.28604366733279
+District of Veľký Krtíš,Not found out,73.0,69,720,789,
+District of Veľký Krtíš,Without work address,12.0,0,2052,2052,
+District of Vranov nad Topľou,Abroad,0.0,3,1596,1599,
+District of Vranov nad Topľou,District of Bratislava I,0.0,96,68,164,413.31657161803867
+District of Vranov nad Topľou,District of Bratislava II,0.0,9,142,151,405.26722895742745
+District of Vranov nad Topľou,District of Humenné,0.0,240,391,631,29.4202813348465
+District of Vranov nad Topľou,District of Košice I,0.0,525,276,801,43.58165548443115
+District of Vranov nad Topľou,District of Košice II,0.0,120,121,241,55.346830655383606
+District of Vranov nad Topľou,District of Košice IV,0.0,80,200,280,46.66844267879527
+District of Vranov nad Topľou,District of Michalovce,0.0,257,547,804,44.93232462980225
+District of Vranov nad Topľou,District of Prešov,0.0,990,1599,2589,42.33140715846446
+District of Vranov nad Topľou,District of Svidník,0.0,83,73,156,41.54745160266407
+District of Vranov nad Topľou,District of Trebišov,0.0,170,321,491,51.339411482551945
+District of Vranov nad Topľou,District of Vranov nad Topľou,1.0,9453,10815,20268,0.0
+District of Vranov nad Topľou,Not found out,134.0,199,1621,1820,
+District of Vranov nad Topľou,Without work address,12.0,0,3305,3305,
+District of Zlaté Moravce,Abroad,0.0,0,622,622,
+District of Zlaté Moravce,District of Bratislava I,0.0,121,107,228,119.76421928166181
+District of Zlaté Moravce,District of Bratislava II,0.0,11,188,199,111.89795951731638
+District of Zlaté Moravce,District of Levice,0.0,63,739,802,34.76865645240524
+District of Zlaté Moravce,District of Nitra,1.0,943,2644,3587,31.58360774005482
+District of Zlaté Moravce,District of Zlaté Moravce,0.0,3700,7083,10783,0.0
+District of Zlaté Moravce,Not found out,41.0,25,1001,1026,
+District of Zlaté Moravce,Without work address,7.0,0,2155,2155,
+District of Zvolen,Abroad,0.0,1,459,460,
+District of Zvolen,District of Banská Bystrica,0.0,1339,3594,4933,37.91752285383494
+District of Zvolen,District of Banská Štiavnica,0.0,107,77,184,18.26250219818856
+District of Zvolen,District of Bratislava I,0.0,196,160,356,184.48038965708133
+District of Zvolen,District of Bratislava II,0.0,20,139,159,176.258460241486
+District of Zvolen,District of Bratislava III,0.0,60,155,215,178.98996851385638
+District of Zvolen,District of Detva,0.0,53,489,542,24.825826422327918
+District of Zvolen,District of Krupina,0.0,36,242,278,26.087021137371014
+District of Zvolen,District of Nitra,0.0,105,67,172,95.69817162588909
+District of Zvolen,District of Zvolen,1.0,6278,15126,21404,0.0
+District of Zvolen,District of Žiar nad Hronom,0.0,65,265,330,32.14577488832542
+District of Zvolen,Not found out,46.0,60,1382,1442,
+District of Zvolen,Without work address,9.0,0,3099,3099,
+District of Čadca,Abroad,0.0,3,4144,4147,
+District of Čadca,District of Banská Bystrica,0.0,167,39,206,97.44640186888242
+District of Čadca,District of Bratislava I,0.0,253,115,368,219.84050859194605
+District of Čadca,District of Bratislava II,0.0,23,218,241,217.15902576211965
+District of Čadca,District of Bratislava III,0.0,105,113,218,212.54852569070854
+District of Čadca,District of Bratislava V,0.0,127,62,189,227.39574521788595
+District of Čadca,District of Bytča,0.0,12,171,183,27.925907828508784
+District of Čadca,District of Kysucké Nové Mesto,0.0,646,2378,3024,13.816389055269976
+District of Čadca,District of Martin,0.0,63,102,165,51.38862503740523
+District of Čadca,District of Trnava,0.0,229,57,286,166.53476278844602
+District of Čadca,District of Čadca,0.0,9666,14711,24377,0.0
+District of Čadca,District of Žilina,0.0,982,3821,4803,34.52191112268498
+District of Čadca,Not found out,119.0,47,2242,2289,
+District of Čadca,Without work address,22.0,0,5367,5367,
+District of Šaľa,Abroad,0.0,1,517,518,
+District of Šaľa,District of Bratislava I,1.0,209,534,743,70.61159540110553
+District of Šaľa,District of Bratislava II,0.0,49,513,562,60.77453004439773
+District of Šaľa,District of Bratislava III,0.0,95,440,535,67.04821146012323
+District of Šaľa,District of Bratislava IV,0.0,60,657,717,78.55246931824362
+District of Šaľa,District of Bratislava V,0.0,93,152,245,69.55185265231256
+District of Šaľa,District of Dunajská Streda,0.0,42,162,204,32.38549164698931
+District of Šaľa,District of Galanta,0.0,353,2877,3230,24.334567519449703
+District of Šaľa,District of Komárno,0.0,142,153,295,40.55165568736061
+District of Šaľa,District of Nitra,0.0,733,1252,1985,28.913026943537808
+District of Šaľa,District of Nové Zámky,0.0,137,141,278,35.72767080033286
+District of Šaľa,District of Senec,0.0,44,265,309,52.54192637619701
+District of Šaľa,District of Trnava,0.0,97,469,566,53.76738224322187
+District of Šaľa,District of Šaľa,1.0,4467,7623,12090,0.0
+District of Šaľa,Not found out,50.0,58,1268,1326,
+District of Šaľa,Without work address,10.0,0,3163,3163,
+District of Žarnovica,Abroad,0.0,0,295,295,
+District of Žarnovica,District of Banská Bystrica,0.0,142,110,252,60.645312102543905
+District of Žarnovica,District of Bratislava I,0.0,93,63,156,147.7365855789341
+District of Žarnovica,District of Levice,0.0,102,303,405,41.086732969411464
+District of Žarnovica,District of Nitra,0.0,122,135,257,59.44939369429443
+District of Žarnovica,District of Zlaté Moravce,0.0,105,151,256,27.993226230012155
+District of Žarnovica,District of Zvolen,0.0,79,115,194,37.56011489804526
+District of Žarnovica,District of Žarnovica,1.0,2106,4623,6729,0.0
+District of Žarnovica,District of Žiar nad Hronom,0.0,155,599,754,23.266175371491858
+District of Žarnovica,Not found out,35.0,32,655,687,
+District of Žarnovica,Without work address,1.0,0,1256,1256,
+District of Žiar nad Hronom,Abroad,0.0,0,389,389,
+District of Žiar nad Hronom,District of Banská Bystrica,0.0,335,451,786,39.93074608408516
+District of Žiar nad Hronom,District of Banská Štiavnica,0.0,101,85,186,26.61194776145319
+District of Žiar nad Hronom,District of Bratislava I,0.0,138,70,208,165.03756004961915
+District of Žiar nad Hronom,District of Nitra,0.0,119,56,175,78.91631347930306
+District of Žiar nad Hronom,District of Zvolen,0.0,286,673,959,32.14577488832542
+District of Žiar nad Hronom,District of Žarnovica,0.0,94,665,759,23.266175371491858
+District of Žiar nad Hronom,District of Žiar nad Hronom,2.0,4102,10117,14219,0.0
+District of Žiar nad Hronom,Not found out,39.0,38,838,876,
+District of Žiar nad Hronom,Without work address,6.0,0,1940,1940,
+District of Žilina,Abroad,0.0,5,1796,1801,
+District of Žilina,District of Banská Bystrica,0.0,236,114,350,67.79465755535807
+District of Žilina,District of Bratislava I,0.0,398,314,712,196.0749805664264
+District of Žilina,District of Bratislava II,2.0,52,402,454,192.19098004920892
+District of Žilina,District of Bratislava III,0.0,143,204,347,188.9176722404809
+District of Žilina,District of Bratislava V,3.0,178,119,297,202.67779305590793
+District of Žilina,District of Bytča,0.0,44,588,632,21.319864530057316
+District of Žilina,District of Kysucké Nové Mesto,0.0,361,946,1307,22.972965317420027
+District of Žilina,District of Martin,0.0,280,620,900,21.41726273929448
+District of Žilina,District of Nitra,0.0,140,71,211,127.21063661787981
+District of Žilina,District of Považská Bystrica,0.0,83,371,454,22.894578408942124
+District of Žilina,District of Ružomberok,0.0,112,63,175,48.208135313826126
+District of Žilina,District of Trenčín,0.0,92,127,219,66.13314150601654
+District of Žilina,District of Trnava,0.0,243,64,307,142.65212633924884
+District of Žilina,District of Čadca,0.0,85,245,330,34.52191112268498
+District of Žilina,District of Žilina,2.0,20162,45580,65742,0.0
+District of Žilina,Not found out,142.0,130,4561,4691,
+District of Žilina,Without work address,18.0,0,8369,8369,
