@@ -28,6 +28,7 @@ from report  import demographic_portrait, compare_snapshots
 def run(
     env_path:       str  = "environment.json",
     commuting_path: str  = "commuting_filtered_with_travel.csv",
+    agent_dist_path: str = "agent_init_distributions.json",
     n_agents:       int  = 70000,
     n_ticks:        int  = 60,
     seed:           int  = 42,
@@ -44,7 +45,7 @@ def run(
 
     if verbose:
         print(f"\n[2/4] Создаём агентов (n={n_agents:,}, seed={seed})...")
-    df = create_agents(env_path, n_agents=n_agents, seed=seed)
+    df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed)
 
     snapshot_ticks = [0, n_ticks // 4, n_ticks // 2, n_ticks]
 
@@ -87,6 +88,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ABM Миграция — Словакия")
     parser.add_argument("--env",       default="environment.json")
     parser.add_argument("--commuting", default="commuting_filtered_with_travel.csv")
+    parser.add_argument("--agent_dist", default="agent_init_distributions.json")
     parser.add_argument("--agents",    type=int, default=70000)
     parser.add_argument("--ticks",     type=int, default=60)
     parser.add_argument("--seed",      type=int, default=42)
@@ -97,6 +99,7 @@ if __name__ == "__main__":
     run(
         env_path=args.env,
         commuting_path=args.commuting,
+        agent_dist_path=args.agent_dist,
         n_agents=args.agents,
         n_ticks=args.ticks,
         seed=args.seed,
