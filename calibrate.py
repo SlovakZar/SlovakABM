@@ -18,7 +18,7 @@ import agents
 
 # ========== 1. Настройки калибровки ==========
 TARGET_RATE = 0.00875      # 0.875% за 6 тиков (1.75% годовых)
-N_AGENTS_CALIB = 5000
+N_AGENTS_CALIB = 55000
 N_TICKS_CALIB = 6
 N_SEEDS = 3
 N_INIT_POINTS = 6
