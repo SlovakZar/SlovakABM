@@ -18,6 +18,12 @@ import math
 import numpy as np
 import pandas as pd
 from pathlib import Path
+INERTIA_WEIGHT_AGE = 0.5
+INERTIA_WEIGHT_SOCIAL = 0.4
+INERTIA_WEIGHT_TENURE = 0.1
+INERTIA_PROPERTY_BONUS = 0.07
+THRESHOLD_OFFSET = 0.0
+CONTROL_BOOST = 0.0
 
 BERNOULLI_PARAMS = {'network_job_search', 'network_location'}
 
