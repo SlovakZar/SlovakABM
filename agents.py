@@ -18,12 +18,6 @@ import math
 import numpy as np
 import pandas as pd
 from pathlib import Path
-INERTIA_WEIGHT_AGE = 0.5
-INERTIA_WEIGHT_SOCIAL = 0.4
-INERTIA_WEIGHT_TENURE = 0.1
-INERTIA_PROPERTY_BONUS = 0.07
-THRESHOLD_OFFSET = 0.0
-CONTROL_BOOST = 0.0
 
 BERNOULLI_PARAMS = {'network_job_search', 'network_location'}
 
@@ -333,9 +327,9 @@ def create_agents(
             owns_property    = bool(rng.random() < owner_share) and age >= 25
 
             inertia = float(np.clip(
-                inertia_from_age * 0.5 +
-                inertia_social   * 0.4 +
-                tenure_bonus     * 0.1 +
+                inertia_from_age * 0.70 +
+                inertia_social   * 0.15 +
+                tenure_bonus     * 0.15 +
                 (0.07 if owns_property else 0.0),
                 0.05, 0.95
             ))
