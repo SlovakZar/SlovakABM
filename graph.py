@@ -17,7 +17,7 @@ graph.py v3 — граф Словакии на основе реальных com
   real_population               — численность населения
   owner_share                   — доля собственников жилья [0,1]
   region                        — код региона (BA, TT, TN, NR, ZA, BB, PO, KE)
-  infrastructure_score          — уровень инфраструктуры [0,1] (на основе плотности на 10к населения)
+  infrastructure_score          — уровень инфраструктуры [0,1]
   agent_count                   — текущее число агентов (обновляется каждый тик)
 
 Атрибуты рёбер:
@@ -32,7 +32,6 @@ graph.py v3 — граф Словакии на основе реальных com
 """
 
 import json
-import math
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -54,43 +53,32 @@ REGIONAL_CENTERS = {
     "KE": "District of Košice I",
 }
 
-# ── Параметры расчёта infrastructure_score (вариант A: плотность на 10к населения) ───
-INFRA_WEIGHTS = {
-    "polyclinics": 0.3,
-    "hospitals":   0.7,
-    "cinemas":     0.1,
-    "museums":     0.1,
-    "galleries":   0.05,
-}
-SIGMOID_STEEPNESS = 1.5   # крутизна
-SIGMOID_SHIFT     = 2.0   # значение density, при котором score = 0.5
-MIN_SCORE = 0.1
-MAX_SCORE = 1.0
-
-
-def _compute_infrastructure_score(infra_data: dict, population: int) -> float:
+# ── Вспомогательная функция для расчёта infrastructure_score ─────────────────
+def _compute_infrastructure_score(infra_data: dict) -> float:
     """
-    Вычисляет score инфраструктуры района в диапазоне [MIN_SCORE, MAX_SCORE]
-    на основе взвешенной плотности учреждений на 10 000 реального населения.
-    Используется сигмоида для мягкого насыщения.
+    Вычисляет score инфраструктуры района в диапазоне [0, 1] на основе
+    количества медицинских, культурных и социальных учреждений.
     """
-    if not infra_data or population <= 0:
-        return 0.5  # значение по умолчанию при отсутствии данных
+    if not infra_data:
+        return 0.5  # значение по умолчанию
 
-    # Суммируем взвешенное количество учреждений
-    total_weight = 0.0
-    for key, weight in INFRA_WEIGHTS.items():
-        total_weight += infra_data.get(key, 0) * weight
+    polyclinics = infra_data.get("polyclinics", 0)
+    hospitals   = infra_data.get("hospitals", 0)
+    cinemas     = infra_data.get("cinemas", 0)
+    museums     = infra_data.get("museums", 0)
+    galleries   = infra_data.get("galleries", 0)
 
-    # Плотность на 10 000 населения
-    density = (total_weight * 10000.0) / population
+    # Веса: больницы и поликлиники важнее, культура — дополнительный бонус
+    raw = (polyclinics * 0.2 +
+           hospitals   * 0.5 +
+           cinemas     * 0.1 +
+           museums     * 0.1 +
+           galleries   * 0.1)
 
-    # Сигмоида: 1 / (1 + exp(-k*(density - x0)))
-    raw_score = 1.0 / (1.0 + math.exp(-SIGMOID_STEEPNESS * (density - SIGMOID_SHIFT)))
-
-    # Ограничиваем и округляем
-    score = max(MIN_SCORE, min(MAX_SCORE, raw_score))
-    return round(score, 4)
+    # Нормализация: максимальное raw по данным ~7.4 (Bratislava I) → делим на 5,
+    # чтобы получить score ~0.8-1.0 для лидеров.
+    score = min(1.0, raw / 5.0)
+    return round(score, 3)
 
 
 def build_graph(
@@ -147,9 +135,9 @@ def build_graph(
         owner_share = (loc.get("housing", {}) or {}).get("owner_share") or 0.65
         housing_m2 = (loc.get("housing", {}) or {}).get("price_m2") or 1500.0
 
-        # Вычисляем infrastructure_score на основе блока "infrastructure" и населения
+        # Вычисляем infrastructure_score на основе блока "infrastructure"
         infra_data = loc.get("infrastructure", {})
-        infrastructure_score = _compute_infrastructure_score(infra_data, population)
+        infrastructure_score = _compute_infrastructure_score(infra_data)
 
         # jobs_capacity — сумма занятых по всем отраслям из environment
         salary_by_ind = loc.get("salary_by_industry", {})
@@ -167,7 +155,7 @@ def build_graph(
             # Базовые (неизменяемые)
             avg_wage_base=float(avg_wage),
             housing_price_base=float(housing_m2),
-            infrastructure_score=infrastructure_score,
+            infrastructure_score=infrastructure_score,   # <-- НОВЫЙ АТРИБУТ
             # Динамические (обновляются каждый тик)
             avg_wage=float(avg_wage),
             housing_price_m2=float(housing_m2),
@@ -293,6 +281,7 @@ def print_graph_summary(G: nx.DiGraph):
     regions = Counter(G.nodes[d].get("region", "XX") for d in G.nodes)
     print("Районов по регионам:", dict(sorted(regions.items())))
 
+    # Дополнительно: средний infrastructure_score
     infra_scores = [G.nodes[d].get("infrastructure_score", 0.5) for d in G.nodes]
     print(f"Средний infrastructure_score: {np.mean(infra_scores):.3f} (min={np.min(infra_scores):.3f}, max={np.max(infra_scores):.3f})")
 
