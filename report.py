@@ -1,16 +1,15 @@
 """
-report.py v2 — демографический портрет для всей Словакии.
+report.py v3 — демографический портрет, матрицы потоков и агентский аудит.
 
-Адаптирован под новую структуру агента:
-  - Четыре домена satisfaction
-  - TPB intention_state
-  - agent_type
-  - Региональная агрегация (8 краёв)
+Адаптирован под архитектуру FFT:
+  - Разделение на residence_district и workplace_district.
+  - Матрица маятниковой миграции (Commute-срез).
+  - Поведенческий аудит 30 случайных агентов, принявших решения.
 """
 
 import pandas as pd
 import numpy as np
-from typing import Optional
+from typing import Optional, List, Dict
 
 AGE_BINS   = [0, 18, 30, 45, 60, 75, 150]
 AGE_LABELS = ["0–17", "18–29", "30–44", "45–59", "60–74", "75+"]
@@ -46,7 +45,7 @@ def demographic_portrait(
     lines = []
     total = len(df)
 
-    header = "=" * 70
+    header = "=" * 75
     title  = f"  ДЕМОГРАФИЧЕСКИЙ ПОРТРЕТ — {label}"
     if tick_num is not None:
         yr = tick_num // 12
@@ -55,45 +54,31 @@ def demographic_portrait(
     lines += [header, title, header]
     lines.append(f"\n  Агентов всего: {total:,}\n")
 
-    # ── Регионы ───────────────────────────────────────────────────────────────
-    lines.append("  РАСПРЕДЕЛЕНИЕ ПО РЕГИОНАМ (краям)")
+    # ── Регионы проживания (residence_district -> region) ─────────────────────
+    lines.append("  РАСПРЕДЕЛЕНИЕ ПО РЕГИОНАМ ПРОЖИВАНИЯ")
     lines.append(f"  {'Регион':<22} {'Агентов':>8}  {'Доля':>6}  {'':18}")
     lines.append("  " + "-" * 58)
     by_region = df.groupby("region")["id"].count().sort_values(ascending=False)
-    max_r = by_region.max()
+    max_r = by_region.max() if not by_region.empty else 1
     for code, count in by_region.items():
         name = REGION_NAMES.get(code, code)
         lines.append(f"  {name:<22} {count:>8,}  {_pct(count, total)}  {_bar(count, max_r)}")
 
-    # ── Топ-10 районов по агентам ─────────────────────────────────────────────
-    lines.append("\n  ТОП-10 РАЙОНОВ")
-    by_d = df.groupby("district")["id"].count().sort_values(ascending=False).head(10)
-    for dist, count in by_d.items():
-        name = dist.replace("District of ", "")
-        lines.append(f"  {name:<30} {count:>8,}  {_pct(count, total)}")
-
-    # ── Типы агентов ──────────────────────────────────────────────────────────
-    lines.append("\n  ТИПЫ АГЕНТОВ")
-    type_dist = df["agent_type"].value_counts()
-    max_t = type_dist.max()
-    for t, count in type_dist.items():
-        lines.append(f"  {t:<16} {count:>8,}  {_pct(count, total)}  {_bar(count, max_t)}")
-
-    # ── TPB состояния ─────────────────────────────────────────────────────────
-    lines.append("\n  TPB INTENTION STATE")
-    intent_dist = df["intention_state"].value_counts()
-    for state, count in intent_dist.items():
-        lines.append(f"  {state:<14} {count:>8,}  {_pct(count, total)}")
-
-    # ── Возраст ───────────────────────────────────────────────────────────────
-    lines.append("\n  ВОЗРАСТНАЯ СТРУКТУРА")
-    df2 = df.copy()
-    df2["age_bin"] = pd.cut(df2["age"], bins=AGE_BINS, labels=AGE_LABELS, right=False)
-    age_dist = df2["age_bin"].value_counts().reindex(AGE_LABELS, fill_value=0)
-    max_a = age_dist.max()
-    for lbl, count in age_dist.items():
-        lines.append(f"  {lbl:>6} {count:>8,}  {_pct(count, total)}  {_bar(count, max_a)}")
-    lines.append(f"\n  Средний возраст: {df['age'].mean():.1f} | Медиана: {df['age'].median():.1f}")
+    # ── Топ-10 маятниковых маршрутов (Где живут -> Где работают) ──────────────
+    lines.append("\n  ТОП-10 НАПРАВЛЕНИЙ МАЯТНИКОВОЙ МИГРАЦИИ (COMMUTING)")
+    lines.append(f"  {'Живут в районе':<22} →  {'Работают в районе':<22} | {'Агентов':>6}")
+    lines.append("  " + "-" * 60)
+    
+    # Фильтруем тех, у кого район работы отличается от района проживания
+    commuters = df[df["residence_district"] != df["workplace_district"]]
+    if not commuters.empty:
+        top_commutes = commuters.groupby(["residence_district", "workplace_district"]).size().sort_values(ascending=False).head(10)
+        for (res, work), count in top_commutes.items():
+            r_name = str(res).replace("District of ", "")[:20]
+            w_name = str(work).replace("District of ", "")[:20]
+            lines.append(f"  {r_name:<22} →  {w_name:<22} | {count:>6,}")
+    else:
+        lines.append("  [Маятниковые связи между районами не обнаружены или все работают дома]")
 
     # ── Домены satisfaction ───────────────────────────────────────────────────
     lines.append("\n  SATISFACTION ПО ДОМЕНАМ (средние)")
@@ -108,21 +93,62 @@ def demographic_portrait(
             bar = _bar(m, 1.0, width=20)
             lines.append(f"  {label_d}  {m:.4f}  {bar}")
 
-    # ── Inertia и dissatisfaction ─────────────────────────────────────────────
-    lines.append("\n  ПОВЕДЕНЧЕСКИЕ ПАРАМЕТРЫ")
-    lines.append(f"  Ср. inertia:           {df['inertia'].mean():.3f}")
-    lines.append(f"  Ср. perceived_control: {df['perceived_control'].mean():.3f}")
-    lines.append(f"  Ср. info_quality:      {df['info_quality'].mean():.3f}")
-    lines.append(f"  network_location:      {df['network_location'].mean():.1%}")
-    lines.append(f"  network_signal +ve:    {(df['network_signal']=='positive').mean():.1%}")
+    lines.append("\n" + "=" * 75)
+    return "\n".join(lines)
 
-    # ── Зарплата ──────────────────────────────────────────────────────────────
-    employed = df[df["wage"] > 0]
-    lines.append(f"\n  ЗАРПЛАТА (занятые, n={len(employed):,})")
-    lines.append(f"  Средняя: {employed['wage'].mean():,.0f}€  |  Медиана: {employed['wage'].median():,.0f}€")
-    lines.append(f"  P25: {employed['wage'].quantile(.25):,.0f}€  |  P75: {employed['wage'].quantile(.75):,.0f}€")
 
-    lines.append("\n" + "=" * 70)
+def agent_behavior_audit(agents_list: List[dict], sample_size: int = 30) -> str:
+    """
+    Генерирует подробный поведенческий срез по фиксированной группе агентов,
+    сделавших выбор на текущем шаге. Разделяет их по стратегиям адаптации.
+    """
+    lines = [
+        "\n" + "═" * 85,
+        f"  ПОВЕДЕНЧЕСКИЙ АУДИТ АГЕНТОВ (Срез {sample_size} случайных решений)",
+        "═" * 85
+    ]
+    
+    if not agents_list:
+        lines.append("  [Нет зарегистрированных поведенческих актов за данный период]")
+        lines.append("═" * 85)
+        return "\n".join(lines)
+
+    # Выбираем случайную выборку, если агентов больше лимита
+    np.random.seed(42)  # Фиксация для воспроизводимости отчета
+    sample_indices = np.random.choice(len(agents_list), min(sample_size, len(agents_list)), replace=False)
+    sampled_agents = [agents_list[i] for i in sample_indices]
+
+    lines.append(f"  {'ID':<6} | {'Тип':<10} | {'Решение':<10} | {'Откуда → Куда (Жилье)':<25} | {'Зарплата':<8} | {'Ctrl':<4} | {'Gap':<4}")
+    lines.append("  " + "-" * 81)
+
+    for idx, ag in enumerate(sampled_agents):
+        ag_id = ag.get('id', 'N/A')
+        ag_type = ag.get('agent_type', 'norm')
+        
+        # Определяем тип принятого решения (из лога изменений агента)
+        decision = ag.get('last_decision', 'stay') # move, commute, adapt, none
+        
+        # Форматируем локации
+        prev_res = str(ag.get('prev_residence', ag.get('residence_district'))).replace("District of ", "")[:10]
+        curr_res = str(ag.get('residence_district')).replace("District of ", "")[:10]
+        curr_work = str(ag.get('workplace_district')).replace("District of ", "")[:10]
+        
+        loc_flow = f"{prev_res}→{curr_res}" if decision == "move" else f"{curr_res} [W:{curr_work}]"
+        
+        wage = f"{ag.get('wage', 0):,.0f}€"
+        ctrl = f"{ag.get('econ_perceived_control', 0.5):.2f}"
+        gap = f"{ag.get('domain_economic_gap', 0.0):.2f}"
+        
+        lines.append(f"  {ag_id:<6} | {ag_type:<10} | {decision:<10} | {loc_flow:<25} | {wage:>8} | {ctrl:<4} | {gap:<4}")
+    
+    # Сводная аналитика по выбранному срезу
+    lines.append("  " + "-" * 81)
+    decisions_series = pd.Series([a.get('last_decision', 'stay') for a in sampled_agents])
+    counts = decisions_series.value_counts()
+    
+    summary_str = "Распределение в срезе: " + ", ".join([f"{k}: {v}" for k, v in counts.items()])
+    lines.append(f"  {summary_str}")
+    lines.append("═" * 85)
     return "\n".join(lines)
 
 
@@ -135,15 +161,15 @@ def migration_summary(tick_stats: list) -> str:
     avg_moves = total_moves / len(tick_stats)
 
     lines = [
-        "\n" + "=" * 70,
-        "  СВОДКА МИГРАЦИИ",
-        "=" * 70,
-        f"  Переездов за симуляцию:  {total_moves:,}",
-        f"  Маятниковых решений:      {total_commutes:,}",
-        f"  Адаптаций на месте:       {total_adapts:,}",
-        f"  Среднее переездов/тик:    {avg_moves:.1f}",
+        "\n" + "=" * 75,
+        "  СВОДКА ДИНАМИКИ И ИЗМЕНЕНИЙ СТРАТЕГИЙ",
+        "=" * 75,
+        f"  Физических переездов (Move):     {total_moves:,}",
+        f"  Маятниковых решений (Commute):   {total_commutes:,}",
+        f"  Вынужденных адаптаций (Adapt):   {total_adapts:,}",
+        f"  Средняя интенсивность миграции: {avg_moves:.1f} переездов/тик",
         "",
-        "  Динамика переездов по годам:",
+        "  Динамика изменения стратегий по годам (Переезды):",
     ]
 
     yearly = {}
@@ -155,18 +181,18 @@ def migration_summary(tick_stats: list) -> str:
     for year, monthly in sorted(yearly.items()):
         annual = sum(monthly)
         bar = _bar(annual, max_annual, width=22)
-        lines.append(f"  Год {year:2d}  {annual:>6,} переездов  {bar}")
+        lines.append(f"  Год {year:2d}  {annual:>6,} актов переезда  {bar}")
 
-    lines.append("=" * 70)
+    lines.append("=" * 75)
     return "\n".join(lines)
 
 
-def compare_snapshots(snapshots: dict, tick_stats: list) -> str:
+def compare_snapshots(snapshots: dict, tick_stats: list, active_agents_log: Optional[List[dict]] = None) -> str:
     ticks = sorted(snapshots.keys())
     lines = [
-        "\n" + "=" * 70,
-        "  ДИНАМИКА ПО РЕГИОНАМ (агенты)",
-        "=" * 70,
+        "\n" + "=" * 75,
+        "  МЕЖРЕГИОНАЛЬНЫЙ БАЛАНС НАСЕЛЕНИЯ (Краи Словакии)",
+        "=" * 75,
     ]
 
     header = f"  {'Регион':<22}"
@@ -191,6 +217,13 @@ def compare_snapshots(snapshots: dict, tick_stats: list) -> str:
         row  += f"  {sign}{delta:>7,}"
         lines.append(row)
 
-    lines.append("=" * 70)
+    lines.append("=" * 75)
+    
+    # Добавляем общую сводку
     lines.append(migration_summary(tick_stats))
+    
+    # Если передан список активных агентов за тик — выводим глубокий аудит
+    if active_agents_log is not None:
+        lines.append(agent_behavior_audit(active_agents_log, sample_size=30))
+        
     return "\n".join(lines)
