@@ -20,7 +20,7 @@ SIM_DIR = Path(__file__).parent
 sys.path.insert(0, str(SIM_DIR))
 
 from graph   import build_graph, print_graph_summary
-from agents  import create_agents
+from agents  import create_agents, JOBS_CAPACITY
 from engine  import run_simulation
 from report  import demographic_portrait, compare_snapshots
 
@@ -45,7 +45,7 @@ def run(
 
     if verbose:
         print(f"\n[2/4] Создаём агентов (n={n_agents:,}, seed={seed})...")
-    df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed)
+    df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed, commuting_path=commuting_path)
 
     snapshot_ticks = [0, n_ticks // 4, n_ticks // 2, n_ticks]
 
@@ -57,6 +57,7 @@ def run(
         snapshot_ticks=snapshot_ticks,
         seed=seed,
         verbose=verbose,
+        jobs_capacity=JOBS_CAPACITY
     )
 
     if verbose:
