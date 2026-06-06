@@ -19,13 +19,14 @@ agents.py v8 — FFT Architecture
    Каждый агент имеет два поля:
      residence_district  — где живёт (жильё, социальные связи, inertia)
      workplace_district  — где работает (зарплата, отрасль)
-   status: "stay" | "commute" | "unemployed"
+   status: "stay" | "commute" | "unemployed" | "student"
 
 2. ИНИЦИАЛИЗАЦИЯ ИЗ COMMUTING-МАТРИЦЫ:
    Шаг 1 — workplace_district из реальных flow_work пропорций.
    Если origin == destination → status "stay".
    Если origin != destination → status "commute".
    Безработные → workplace_district = residence_district, status "unemployed".
+   Студенты (15–26) → workplace_district = место учёбы (flow_school), status "student".
 
 3. ОТРАСЛЬ И ЗАРПЛАТА — из workplace_district:
    industry и wage берутся из распределений района РАБОТЫ, не проживания.
@@ -232,6 +233,111 @@ def _get_commuting(path="commuting_filtered_with_travel.csv"):
     return _COMMUTING
 
 
+# ── Школьные/студенческие потоки ──────────────────────────────────────────────
+
+_SCHOOL_OUTFLOW = None
+_ENROLLMENT_RATES: dict = {}   # {district: {age_bin: rate}}
+
+
+def _compute_school_outflow(path="commuting_filtered_with_travel.csv"):
+    """
+    Строит два словаря на основе flow_school:
+      school_outflow[origin] = {destination: probability}
+      enrollment_rates[district] = {age_bin: rate}
+
+    enrollment_rate = total_flow_school_origin / pop_15_24
+    Затем разбивается по возрастным бинам с весами:
+      15–19: ×1.20 (средняя школа, почти все)
+      20–24: ×0.80 (университет)
+      25–29: ×0.15 (PhD, второе высшее)
+    """
+    global _SCHOOL_OUTFLOW, _ENROLLMENT_RATES
+    if _SCHOOL_OUTFLOW is not None:
+        return _SCHOOL_OUTFLOW, _ENROLLMENT_RATES
+
+    p = Path(path)
+    if not p.exists():
+        p = Path(__file__).parent / path
+
+    df = pd.read_csv(p)
+
+    mask = (
+        df["origin_district"].str.startswith("District of") &
+        df["destination_district"].str.startswith("District of")
+    )
+    df = df[mask].copy()
+
+    # ── school_outflow ────────────────────────────────────────────────────────
+    school_outflow = {}
+    total_students_by_district = {}
+    for origin, grp in df.groupby("origin_district"):
+        total = grp["flow_school"].sum()
+        if total <= 0:
+            continue
+        total_students_by_district[origin] = total
+        school_outflow[origin] = {
+            row["destination_district"]: row["flow_school"] / total
+            for _, row in grp.iterrows()
+            if row["flow_school"] > 0
+        }
+
+    # ── enrollment_rates ─────────────────────────────────────────────────────
+    init_dists = _get_init_dists()
+
+    for district in init_dists:
+        age_sex = init_dists[district].get("age_sex", {})
+        pop_15_19 = sum(
+            meta["count"] * AGE_BIN_META[key.split("|")[0]][2]
+            for key, meta in age_sex.items()
+            if key.split("|")[0] in ("15 - 19 years",)
+        )
+        pop_20_24 = sum(
+            meta["count"] * AGE_BIN_META[key.split("|")[0]][2]
+            for key, meta in age_sex.items()
+            if key.split("|")[0] in ("20 - 24 years",)
+        )
+        pop_25_29 = sum(
+            meta["count"] * AGE_BIN_META[key.split("|")[0]][2]
+            for key, meta in age_sex.items()
+            if key.split("|")[0] in ("25 - 29 years",)
+        )
+        pop_15_24 = max(pop_15_19 + pop_20_24, 1)
+
+        # Базовая доля студентов из данных flow_school
+        total_students = total_students_by_district.get(district, 0)
+        base_rate = np.clip(total_students / pop_15_24, 0.02, 0.95)
+
+        # Возрастной профиль
+        _ENROLLMENT_RATES[district] = {
+            "15-19": float(np.clip(base_rate * 1.20, 0.05, 0.98)),
+            "20-24": float(np.clip(base_rate * 0.80, 0.02, 0.90)),
+            "25-29": float(np.clip(base_rate * 0.15, 0.01, 0.25)),
+        }
+
+    _SCHOOL_OUTFLOW = school_outflow
+    n_with = sum(1 for v in _ENROLLMENT_RATES.values() if v["15-19"] > 0.05)
+    avg_15_19 = np.mean([v["15-19"] for v in _ENROLLMENT_RATES.values()])
+    avg_20_24 = np.mean([v["20-24"] for v in _ENROLLMENT_RATES.values()])
+    print(f"  Школьные потоки: {len(school_outflow)} районов-источников")
+    print(f"  Enrollment rates: {n_with} районов, "
+          f"ср. 15-19={avg_15_19:.2f}, 20-24={avg_20_24:.2f}")
+    return school_outflow, _ENROLLMENT_RATES
+
+
+def _sample_schoolplace(
+    residence: str,
+    school_outflow: dict,
+    rng: np.random.Generator,
+) -> str:
+    """Выбирает место учёбы из flow_school пропорций (аналог _sample_workplace)."""
+    probs = school_outflow.get(residence)
+    if not probs:
+        return residence
+    destinations = list(probs.keys())
+    weights = np.array([probs[d] for d in destinations], dtype=float)
+    return destinations[rng.choice(len(destinations), p=weights / weights.sum())]
+
+
 # ── Вспомогательные функции ───────────────────────────────────────────────────
 
 def rogers_castro_mobility(age: float) -> float:
@@ -349,6 +455,7 @@ def create_agents(
     init_dists   = _get_init_dists(dist_path)
     _get_survey(survey_path)
     outflow_probs = _get_commuting(commuting_path)
+    school_outflow, _ = _compute_school_outflow(commuting_path)
 
     districts = list(init_dists.keys())
 
@@ -412,42 +519,74 @@ def create_agents(
             )
             nationality = _weighted_choice(nat_dist_d, rng)
 
-            # ── Шаг 1: workplace из commuting-матрицы ─────────────────────────
-            # Занятость сначала определяем по вероятности
-            if age < 25:
-                inactivity_r = 0.35
-            elif age < 55:
-                inactivity_r = 0.10
+            # ── Шаг 0: СТУДЕНТ? ──────────────────────────────────────────────
+            # Определяем до занятости: агенты 15–25 могут быть студентами.
+            is_student   = False
+            graduation_tick_val = -1  # -1 = не студент
+
+            if age <= 26:
+                if age < 20:
+                    age_bin_key = "15-19"
+                elif age < 25:
+                    age_bin_key = "20-24"
+                else:
+                    age_bin_key = "25-29"
+
+                enroll_r = _ENROLLMENT_RATES.get(residence, {}).get(age_bin_key, 0.05)
+                is_student = rng.random() < enroll_r
+
+            if is_student:
+                # ── Студент ──────────────────────────────────────────────────
+                status    = "student"
+                is_employed = False
+                workplace = _sample_schoolplace(residence, school_outflow, rng)
+                industry  = "Education"
+                wage      = 0.0
+
+                # Дата выпуска: тики от текущего возраста до graduation_age
+                if age < 19:
+                    grad_age = 19.0   # средняя школа
+                elif age < 22:
+                    grad_age = 22.0   # бакалавриат
+                else:
+                    grad_age = 24.0   # магистратура
+
+                graduation_tick_val = max(1, int(round((grad_age - age) * 12)))
             else:
-                inactivity_r = 0.22
+                # ── Не студент: обычная занятость ────────────────────────────
+                if age < 25:
+                    inactivity_r = 0.35
+                elif age < 55:
+                    inactivity_r = 0.10
+                else:
+                    inactivity_r = 0.22
 
-            p_employed = float(np.clip(
-                (1.0 - inactivity_r) * (1.0 - unemployment_r), 0.0, 1.0
-            ))
-            is_employed = rng.random() < p_employed
+                p_employed = float(np.clip(
+                    (1.0 - inactivity_r) * (1.0 - unemployment_r), 0.0, 1.0
+                ))
+                is_employed = rng.random() < p_employed
 
-            if is_employed:
-                # Workplace из commuting-матрицы
-                workplace = _sample_workplace(residence, outflow_probs, rng)
-                status    = "stay" if workplace == residence else "commute"
-            else:
-                workplace = residence
-                status    = "unemployed"
+                if is_employed:
+                    workplace = _sample_workplace(residence, outflow_probs, rng)
+                    status    = "stay" if workplace == residence else "commute"
+                else:
+                    workplace = residence
+                    status    = "unemployed"
 
-            # ── Шаг 2: отрасль и зарплата из workplace_district ───────────────
-            if is_employed:
-                wp_data        = init_dists.get(workplace, dd)
-                industry_dist  = wp_data.get("industry", {})
-                salary_by_ind  = wp_data.get("salary_by_industry", {})
-                avg_wage_wp    = wp_data.get("avg_wage", 1400.0)
+                # ── Отрасль и зарплата из workplace_district ─────────────────
+                if is_employed:
+                    wp_data        = init_dists.get(workplace, dd)
+                    industry_dist  = wp_data.get("industry", {})
+                    salary_by_ind  = wp_data.get("salary_by_industry", {})
+                    avg_wage_wp    = wp_data.get("avg_wage", 1400.0)
 
-                industry = _weighted_choice(industry_dist, rng) if industry_dist else "Other"
-                base_wage = salary_by_ind.get(industry, avg_wage_wp)
-                edu_mult  = {"low": 0.82, "medium": 1.0, "high": 1.35}.get(education, 1.0)
-                wage = float(max(0, rng.normal(base_wage * edu_mult, base_wage * 0.22)))
-            else:
-                industry = "Unemployed"
-                wage     = 0.0
+                    industry = _weighted_choice(industry_dist, rng) if industry_dist else "Other"
+                    base_wage = salary_by_ind.get(industry, avg_wage_wp)
+                    edu_mult  = {"low": 0.82, "medium": 1.0, "high": 1.35}.get(education, 1.0)
+                    wage = float(max(0, rng.normal(base_wage * edu_mult, base_wage * 0.22)))
+                else:
+                    industry = "Unemployed"
+                    wage     = 0.0
 
             # ── SASD параметры ────────────────────────────────────────────────
             settlement = SETTLEMENT_MAP.get(residence, "town")
@@ -485,7 +624,6 @@ def create_agents(
                 internal_mig_thr + (1.0 - d_future_value) * 0.20, 0.0, 1.0
             ))
             job_flexibility        = sp("job_flexibility_threshold")
-            tenure_loyalty         = sp("tenure_loyalty_bonus")
             shock_sensitivity      = sp("inertia_shock_sensitivity")
             satisfaction_base      = sp("satisfaction_init")
 
@@ -520,7 +658,7 @@ def create_agents(
             inertia_from_age = float(np.clip(1.0 - age_base, 0.1, 0.95))
             tenure_mean      = min(12 + age * 1.0, 180)
             tenure           = int(np.clip(rng.exponential(tenure_mean), 0, 420))
-            tenure_bonus     = tenure_loyalty * math.log1p(tenure / 12) * 0.1
+            tenure_bonus     = (1.0 - perceived_control) * math.log1p(tenure / 12) * 0.1
             owns_property    = bool(rng.random() < owner_share) and age >= 25
 
             inertia = float(np.clip(
@@ -538,13 +676,13 @@ def create_agents(
 
             # Веса доменов с модификаторами типа агента
             type_modifiers = {
-                "seeker":       {"econ": 1.2, "social": 1.0, "family": 0.8, "future": 1.1},
-                "waiting":      {"econ": 1.0, "social": 0.9, "family": 1.0, "future": 0.9},
-                "anchored":     {"econ": 0.7, "social": 1.1, "family": 1.2, "future": 0.7},
-                "family_first": {"econ": 0.9, "social": 0.9, "family": 1.4, "future": 0.9},
+                "seeker":       {"econ": 1.2, "social": 1.0, "family": 0.8, "future": 1.1, "place": 0.8},
+                "waiting":      {"econ": 1.0, "social": 0.9, "family": 1.0, "future": 0.9, "place": 1.0},
+                "anchored":     {"econ": 0.7, "social": 1.1, "family": 1.2, "future": 0.7, "place": 1.5},
+                "family_first": {"econ": 0.9, "social": 0.9, "family": 1.4, "future": 0.9, "place": 1.2},
             }
             mod = type_modifiers.get(agent_type,
-                                     {"econ": 1.0, "social": 1.0, "family": 1.0, "future": 1.0})
+                                     {"econ": 1.0, "social": 1.0, "family": 1.0, "future": 1.0, "place": 1.0})
 
             w_econ   = d_econ_weight * mod["econ"]
             w_social = d_social_weight * mod["social"]
@@ -556,6 +694,28 @@ def create_agents(
 
             sat_init   = float(np.clip(satisfaction_base + rng.normal(0, 0.06), 0.05, 0.99))
             econ_value = float(np.clip(1.0 - d_econ_gap + rng.normal(0, 0.05), 0.0, 1.0))
+
+            # ── Порог place: база × тип агента + шум от place_aspiration ─────
+            # domain_future_place μ≈0.316, σ≈0.185 — широкий разброс
+            # множители типа: seeker=0.8, waiting=1.0, anchored=1.5, family_first=1.2
+            thr_place_val = float(np.clip(
+                0.40 * mod["place"] + 0.20 * (d_future_place - 0.316),
+                0.05, 0.90
+            ))
+
+            # ═══ Блок E: индивидуальные пороги social/family по типу агента ═══
+            thr_social_map = {
+                "seeker": 0.30, "waiting": 0.35, "anchored": 0.55, "family_first": 0.40
+            }
+            thr_family_map = {
+                "seeker": 0.25, "waiting": 0.35, "anchored": 0.50, "family_first": 0.60
+            }
+            thr_social_val = float(np.clip(
+                thr_social_map.get(agent_type, 0.35) + rng.normal(0, 0.04), 0.15, 0.85
+            ))
+            thr_family_val = float(np.clip(
+                thr_family_map.get(agent_type, 0.35) + rng.normal(0, 0.04), 0.15, 0.85
+            ))
 
             records.append({
                 # ── Идентификация ────────────────────────────────────────────
@@ -569,7 +729,8 @@ def create_agents(
                 "district":            residence,
 
                 # ── Статус занятости (НОВОЕ) ──────────────────────────────────
-                "status":              status,   # stay | commute | unemployed
+                "status":              status,   # stay | commute | unemployed | student
+                "graduation_tick":     graduation_tick_val,  # -1 = не студент
 
                 # ── Демография ───────────────────────────────────────────────
                 "age":                 round(age, 2),
@@ -599,6 +760,8 @@ def create_agents(
                 # "commute_pending"   — решил на commute, проверяет feasibility
                 "intention_state":     "none",
                 "dst_work":            "",    # целевой район работы (пуст до активации)
+                "activation_timer":    0,     # Блок D: счётчик тиков ожидания (inertia-задержка)
+                "social_boost":        0.0,   # Блок B: временный буст social target от событий
 
                 # ── Домены satisfaction ───────────────────────────────────────
                 "sat_economic":        round(econ_value, 4),
@@ -614,9 +777,9 @@ def create_agents(
 
                 # ── Пороги доменов ───────────────────────────────────────────
                 "thr_economic":        round(d_econ_threshold, 4),
-                "thr_social":          0.35,
-                "thr_family":          0.35,
-                "thr_place":           0.40,
+                "thr_social":          round(thr_social_val, 4),
+                "thr_family":          round(thr_family_val, 4),
+                "thr_place":           round(thr_place_val, 4),
 
                 # ── Психологические параметры (SASD) ──────────────────────────
                 "perceived_control":       round(perceived_control, 4),
@@ -631,7 +794,6 @@ def create_agents(
                 "job_flexibility":     round(job_flexibility, 4),
 
                 # ── Инерционные параметры ────────────────────────────────────
-                "tenure_loyalty":      round(tenure_loyalty, 4),
                 "shock_sensitivity":   round(shock_sensitivity, 4),
 
                 # ── Сеть ─────────────────────────────────────────────────────
@@ -681,6 +843,23 @@ def _print_summary(df: pd.DataFrame):
                      .head(5))
         print("  Топ-5 потоков:")
         for (res, wp), cnt in top_flows.items():
+            r = res.replace("District of ", "")
+            w = wp.replace("District of ", "")
+            print(f"    {r} → {w}: {cnt:,}")
+
+    # Student диагностика
+    students = df[df["status"] == "student"]
+    if len(students) > 0:
+        print(f"\n  СТУДЕНТЫ: {len(students):,}  "
+              f"ср.возраст={students['age'].mean():.1f}  "
+              f"ср.выпуск через {students['graduation_tick'].mean():.0f} тиков")
+        top_school_flows = (students
+                            .groupby(["residence_district", "workplace_district"])
+                            .size()
+                            .sort_values(ascending=False)
+                            .head(5))
+        print("  Топ-5 студенческих потоков:")
+        for (res, wp), cnt in top_school_flows.items():
             r = res.replace("District of ", "")
             w = wp.replace("District of ", "")
             print(f"    {r} → {w}: {cnt:,}")
