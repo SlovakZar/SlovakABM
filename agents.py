@@ -1,5 +1,17 @@
 """
-agents.py v4 — FFT Architecture
+agents.py v8 — FFT Architecture
+
+ИЗМЕНЕНИЯ v8:
+  1. FIX Bernoulli regional: network_location/network_job_search теперь
+     получают региональную коррекцию (раньше проверка Bernoulli была до неё).
+  4. HURDLE для shock_sensitivity: Bernoulli(был ли шок) × интенсивность,
+     вместо normal+clip который давал массу искусственных нулей.
+  6. КОРРЕЛЯЦИИ: perceived_control→econ_perceived_control,
+     digital_comm→info_quality, digital_comm→digital_trust,
+     future_orientation→internal_mig_threshold.
+  7. SETTLEMENT в группах: sample_param принимает settlement (metro/city/town/rural),
+     влияет на commuter_threshold/internal_mig_threshold/external_mig_threshold/
+     job_flexibility/future_orientation.
 
 Ключевые изменения относительно v3.1:
 
@@ -114,6 +126,30 @@ DISTRICT_TO_REGION_CODE = {
     "District of Michalovce": "KE",
 }
 
+# ── Тип поселения (v8) ──────────────────────────────────────────────────────
+# metro: Братислава I–V, Кошице I–IV
+# city:  региональные центры (Trnava, Nitra, Žilina, Banská Bystrica, Prešov, Trenčín)
+# town:  районные центры с населением >30k
+# rural: всё остальное
+SETTLEMENT_MAP: dict[str, str] = {}
+for d in DISTRICT_TO_REGION_CODE:
+    name = d.replace("District of ", "")
+    if "Bratislava" in name:
+        SETTLEMENT_MAP[d] = "metro"
+    elif "Košice I" in name or "Košice II" in name or "Košice III" in name or "Košice IV" in name:
+        SETTLEMENT_MAP[d] = "metro"
+    elif name in ("Trnava", "Nitra", "Žilina", "Banská Bystrica", "Prešov", "Trenčín"):
+        SETTLEMENT_MAP[d] = "city"
+    elif name in ("Poprad", "Martin", "Zvolen", "Prievidza", "Michalovce",
+                  "Spišská Nová Ves", "Humenné", "Bardejov", "Liptovský Mikuláš",
+                  "Ružomberok", "Piešťany", "Nové Zámky", "Komárno", "Levice",
+                  "Lučenec", "Čadca", "Dunajská Streda", "Trebišov",
+                  "Vranov nad Topľou", "Rimavská Sobota", "Senec", "Pezinok",
+                  "Považská Bystrica", "Dolný Kubín", "Galanta"):
+        SETTLEMENT_MAP[d] = "town"
+    else:
+        SETTLEMENT_MAP[d] = "rural"
+
 # ── Кэш загруженных данных ────────────────────────────────────────────────────
 
 _INIT_DISTS = None
@@ -209,8 +245,9 @@ def rogers_castro_mobility(age: float) -> float:
 
 
 def sample_param(name: str, age: float, education: str,
-                 region: str = None, rng: np.random.Generator = None) -> float:
-    """Сэмплирует параметр агента из SASD-распределений (по группе возраст×образование)."""
+                 region: str = None, settlement: str = None,
+                 rng: np.random.Generator = None) -> float:
+    """Сэмплирует параметр агента из SASD-распределений (по группе возраст×образование×[поселение])."""
     if rng is None:
         rng = np.random.default_rng()
     survey = _get_survey()
@@ -222,10 +259,25 @@ def sample_param(name: str, age: float, education: str,
           else "46-60" if age < 61 else "60+")
     eg = education if education in ("low", "medium", "high") else "medium"
 
-    g  = p.get("by_group", {}).get(str((ag, eg)))
+    by_group = p.get("by_group", {})
+
+    # Ищем группу: сначала age+edu+settlement, потом age+edu, потом global
+    g = None
+    if settlement:
+        g = by_group.get(str((ag, eg, settlement)))
+    if g is None:
+        g = by_group.get(str((ag, eg)))
     mu = float(g["mean"]) if g else float(p.get("global_mean", 0.5))
     sd = float(g["std"])  if g else float(p.get("global_std", 0.1))
     n  = int(g["n"])      if g else 100
+
+    # Если группа не найдена — заполняем из регионального среднего
+    if not g and region:
+        regional = survey.get("_regional", {}).get(name, {})
+        r = regional.get(region)
+        if r and r.get("n", 0) > 5:
+            mu = float(r["mean"])
+            sd = float(r["std"])
 
     # Взвешивание с региональным профилем
     regional = survey.get("_regional", {}).get(name, {})
@@ -237,6 +289,10 @@ def sample_param(name: str, age: float, education: str,
             mu  = (w_g * mu + w_r * r["mean"]) / (w_g + w_r)
             sd  = max(sd, r["std"]) * 0.8
 
+    # ═══ ИСПРАВЛЕНИЕ v8: Bernoulli ПОСЛЕ regional ═══
+    # Раньше Bernoulli-проверка была до regional-коррекции,
+    # из-за чего network_location и network_job_search игнорировали
+    # региональные профили (BA=0.18 vs NR=0.43 для network_location).
     if name in BERNOULLI_PARAMS:
         return float(rng.random() < float(np.clip(mu, 0, 1)))
     return float(np.clip(rng.normal(mu, max(sd, 0.01)), 0.0, 1.0))
@@ -394,10 +450,22 @@ def create_agents(
                 wage     = 0.0
 
             # ── SASD параметры ────────────────────────────────────────────────
-            def sp(name): return sample_param(name, age, education, region_code, rng)
+            settlement = SETTLEMENT_MAP.get(residence, "town")
+            def sp(name): return sample_param(name, age, education, region_code,
+                                              settlement, rng)
 
             perceived_control      = sp("perceived_control")
             econ_perceived_control = sp("econ_perceived_control")
+
+            # ═══ Пункт 6: условная связь perceived_control → econ_perceived_control ═══
+            # В реальности они коррелируют ~0.4: общий локус контроля влияет на
+            # восприятие контроля в рабочей сфере. Смешиваем 60% независимого
+            # семпла + 40% от perceived_control чтобы избежать нереалистичных
+            # комбинаций (pc=0.9, epc=0.1).
+            econ_perceived_control = float(np.clip(
+                econ_perceived_control * 0.60 + perceived_control * 0.40, 0.0, 1.0
+            ))
+
             inertia_social         = sp("inertia_social_component")
             info_quality           = sp("info_quality_modifier")
             d_econ_weight          = sp("domain_economic_weight")
@@ -410,16 +478,42 @@ def create_agents(
             commuter_threshold     = sp("commuter_mode_threshold")
             internal_mig_thr       = sp("internal_mig_threshold")
             external_mig_thr       = sp("external_mig_threshold")
+
+            # ═══ v8: future_orientation → internal_mig_threshold (r≈0.3) ═══
+            # Оптимистичные люди имеют более низкий порог внутренней миграции.
+            internal_mig_thr = float(np.clip(
+                internal_mig_thr + (1.0 - d_future_value) * 0.20, 0.0, 1.0
+            ))
             job_flexibility        = sp("job_flexibility_threshold")
             tenure_loyalty         = sp("tenure_loyalty_bonus")
             shock_sensitivity      = sp("inertia_shock_sensitivity")
             satisfaction_base      = sp("satisfaction_init")
+
+            # ═══ Пункт 4 (v8): Hurdle модель для shock_sensitivity ═══
+            # В опросе большинство не переживало шок → mean≈0.05.
+            # Normal + clip создаёт массу искусственных нулей.
+            # Правильно: Bernoulli(был ли шок) × intensity(насколько сильный).
+            # p_shock — из данных: доля респондентов с shock > 0 после norm01.
+            # Используем survey-параметр если доступен, иначе консервативно 0.30.
+            p_shock_raw = _get_survey().get("inertia_shock_sensitivity", {}).get("p_shock", 0.30)
+            if rng.random() < p_shock_raw:
+                # Интенсивность шока: усечённый normal со средним ~0.20
+                shock_intensity = max(0.02, rng.normal(0.20, 0.08))
+                shock_sensitivity = float(np.clip(shock_intensity, 0.02, 0.50))
+            else:
+                shock_sensitivity = 0.0
             network_loc            = sp("network_location")
             network_job            = sp("network_job_search")
             weak_ties              = sp("weak_ties_utility")
             digital_comm           = sp("digital_comm_intensity")
             net_signal_susc        = sp("network_signal_susceptibility")
             digital_trust_v        = sp("digital_trust")
+
+            # ═══ v8: условные связи цифровых параметров ═══
+            # digital_comm → info_quality: активные пользователи лучше информированы (r≈0.5)
+            info_quality = float(np.clip(info_quality * 0.55 + digital_comm * 0.45, 0.0, 1.0))
+            # digital_comm → digital_trust: больше пользуешься → больше доверяешь (r≈0.3)
+            digital_trust_v = float(np.clip(digital_trust_v * 0.75 + digital_comm * 0.25, 0.0, 1.0))
 
             # ── Inertia ───────────────────────────────────────────────────────
             age_base         = rogers_castro_mobility(age)

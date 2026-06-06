@@ -178,13 +178,31 @@ def build_battery(df, spec):
 
 
 def norm01(s):
-    """MinMax нормализация в [0, 1]."""
+    """
+    Ранговая нормализация (процентильный ранг) → [0, 1].
+
+    В отличие от MinMaxScaler, сохраняет форму распределения:
+      - скошенность не растягивается
+      - выбросы не задают крайние точки
+      - доля агентов ниже порога приближена к реальной популяции
+
+    Использует scipy.stats.rankdata — при недоступности scipy
+    fallback на MinMaxScaler.
+    """
     idx  = s.dropna().index
-    vals = s.dropna().values.reshape(-1, 1)
-    if len(vals) == 0:
+    vals = s.dropna().values
+    if len(vals) < 2:
         return s
+    try:
+        from scipy.stats import rankdata
+        ranks = rankdata(vals) / (len(vals) + 1)
+    except ImportError:
+        # Fallback: MinMax (старый метод)
+        out = s.copy().astype(float)
+        out[idx] = MinMaxScaler().fit_transform(vals.reshape(-1, 1)).flatten()
+        return out
     out = s.copy().astype(float)
-    out[idx] = MinMaxScaler().fit_transform(vals).flatten()
+    out[idx] = ranks
     return out
 
 
@@ -249,8 +267,27 @@ print("✓ Демография готова")
 from factor_analyzer import FactorAnalyzer, calculate_bartlett_sphericity, calculate_kmo
 
 
-# Дисперсия EFA по конструктам (из консоли v6) — используется для весов
-# в составных параметрах Ячейки 5b.
+# ── Экспертные веса для составных параметров (v8) ──────────────────────────
+# Замена EFA-дисперсии: объяснённая дисперсия EFA меряет «похожесть вопросов»
+# внутри батареи, а не содержательную важность конструкта.
+# Веса ниже — экспертная оценка относительной важности компонент.
+COMPOSITE_WEIGHTS = {
+    'info_quality_final': {
+        # Умение оценивать информацию (цифровые навыки) важнее,
+        # чем интенсивность её поиска — примерно 65/35.
+        'info_seeking':         0.35,
+        'info_quality_digital': 0.65,
+    },
+    'inertia_social_component': {
+        # Качество сильных связей — главный якорь инерции.
+        # Включённость в сеть и семейные обязательства — примерно поровну.
+        'social_embeddedness':  0.30,
+        'strong_ties_quality':  0.40,
+        'family_domain_weight': 0.30,
+    },
+}
+
+# Старые EFA_VARIANCE оставлены для справки, но не используются в v8.
 EFA_VARIANCE = {
     'perceived_control':    28.0,
     'social_embeddedness':  55.1,
@@ -526,14 +563,20 @@ if df22 is not None:
     print(f"    r26 (инверт): mean={s.mean():.2f}  n={s.notna().sum()}")
 
     print("\n--- historical_shock [2022] ---")
-    # Произведение: факт шока × его серьёзность.
-    # BSK2: пережил шок (1=да → 1.0, 2=нет → 0.0)
-    # BSK3: серьёзность 1=нет доп..5=сильный
+    # Hurdle-модель (v8):
+    #   Шаг 1: был ли шок? Bernoulli(p_shock)
+    #   Шаг 2: если да — насколько сильный? (интенсивность)
+    # BSK2: пережил шок (1=да, 2=нет)
+    # BSK3: серьёзность (1=нет доп..5=сильный) — только для переживших
     bsk2 = get_col(df22, 'bsk2').map({1:1.0, 2:0.0})
     bsk3 = get_col(df22, 'bsk3')
+    # Доля переживших шок (для hurdle: Bernoulli p)
+    p_shock = float(bsk2.mean()) if bsk2.notna().sum() > 0 else 0.30
     shock = (bsk2.fillna(0) * bsk3.fillna(0)).rename('historical_shock')
     scores['historical_shock'] = norm01(shock)
-    print(f"    Пережили шок: {(bsk2==1).sum()} ({(bsk2==1).mean():.1%})")
+    # Сохраняем p_shock для экспорта (используется в agents.py для hurdle)
+    scores['historical_shock'].attrs['p_shock'] = round(p_shock, 4)
+    print(f"    Пережили шок: {(bsk2==1).sum()} (p_shock={p_shock:.1%})")
 
 
 # ── 2016 ──────────────────────────────────────────────────────────────────────
@@ -736,25 +779,21 @@ def composite_from_variance(component_names, scores_dict, efa_variance, out_name
 
 print("\n--- info_quality_final ---")
 # Реальная способность агента получать и обрабатывать информацию о районах.
-# info_seeking (2017): интенсивность + каналы поиска, дисперсия 40.5%
-# info_quality_digital (2024): качество цифровых навыков, дисперсия 67.1%
-# Веса: 40.5/(40.5+67.1)=0.376 и 67.1/(40.5+67.1)=0.624
-IQ_WEIGHTS = composite_from_variance(
-    ['info_seeking', 'info_quality_digital'],
-    scores, EFA_VARIANCE, 'info_quality_final'
-)
+# info_seeking (2017): интенсивность + каналы поиска
+# info_quality_digital (2024): качество цифровых навыков
+# Веса экспертные: 0.35 / 0.65 (навыки важнее частоты)
+IQ_WEIGHTS = COMPOSITE_WEIGHTS['info_quality_final']
+print(f"  [info_quality_final] экспертные веса: {IQ_WEIGHTS}")
 scores['info_quality_final'] = None   # заполняется через групповые агрегаты в ячейке 6b
 
 print("\n--- inertia_social_component ---")
 # Социальная составляющая инерции: качество и глубина социальных связей.
-# social_embeddedness (2017): включённость в сеть, дисперсия 55.1%
-# strong_ties_quality (2017): качество сильных связей, дисперсия 64.1%
-# family_domain_weight (2022): семейные обязательства, дисперсия 37.0%
-# Веса: 55.1/156.2=0.353, 64.1/156.2=0.411, 37.0/156.2=0.237
-ISC_WEIGHTS = composite_from_variance(
-    ['social_embeddedness', 'strong_ties_quality', 'family_domain_weight'],
-    scores, EFA_VARIANCE, 'inertia_social_component'
-)
+# social_embeddedness (2017): включённость в сеть
+# strong_ties_quality (2017): качество сильных связей
+# family_domain_weight (2022): семейные обязательства
+# Веса экспертные: 0.30 / 0.40 / 0.30 (сильные связи — главный якорь)
+ISC_WEIGHTS = COMPOSITE_WEIGHTS['inertia_social_component']
+print(f"  [inertia_social_component] экспертные веса: {ISC_WEIGHTS}")
 scores['inertia_social_component'] = None  # заполняется через групповые агрегаты в ячейке 6b
 
 print("\n✓ Веса составных параметров определены")
@@ -773,7 +812,7 @@ SOURCES = {
     'social_embeddedness':           (demo17, ['age_group','edu_group','settlement']),
     'social_domain_weight':          (demo17, ['age_group','edu_group']),
     'strong_ties_quality':           (demo17, ['age_group','edu_group']),
-    'future_orientation':            (demo17, ['age_group','edu_group']),
+    'future_orientation':            (demo17, ['age_group','edu_group','settlement']),
     'info_seeking':                  (demo17, ['age_group','edu_group']),
     'weak_ties_utility':             (demo17, ['age_group','edu_group']),
     'network_location':              (demo17, ['age_group','edu_group']),
@@ -785,10 +824,11 @@ SOURCES = {
     'job_loss_fear':                 (demo16, ['age_group','edu_group']),
     'econ_perceived_control':        (demo16, ['age_group','edu_group']),
     # job_satisfaction удалён в v7 — Q23 входит в econ_perceived_control
-    'commuter_threshold':            (demo16, ['age_group','edu_group']),
-    'internal_mig_threshold':        (demo16, ['age_group','edu_group']),
-    'external_mig_threshold':        (demo16, ['age_group','edu_group']),
-    'job_flexibility':               (demo16, ['age_group','edu_group']),
+    # ═══ v8: settlement для ключевых миграционных параметров ═══
+    'commuter_threshold':            (demo16, ['age_group','edu_group','settlement']),
+    'internal_mig_threshold':        (demo16, ['age_group','edu_group','settlement']),
+    'external_mig_threshold':        (demo16, ['age_group','edu_group','settlement']),
+    'job_flexibility':               (demo16, ['age_group','edu_group','settlement']),
     'work_family_conflict':          (demo16, ['age_group','edu_group']),
     'org_loyalty':                   (demo16, ['age_group','edu_group']),
     'place_aspiration':              (demo16, ['age_group','edu_group']),
@@ -1075,6 +1115,10 @@ for construct, (param, scale, offset) in MAPPING.items():
         entry["sampling"] = "bernoulli"
     if "composite_weights" in src:
         entry["composite_weights"] = src["composite_weights"]
+    # ═══ v8: p_shock для hurdle-модели shock_sensitivity ═══
+    if param == "inertia_shock_sensitivity" and construct in scores and scores[construct] is not None:
+        p_shock_val = getattr(scores[construct], 'attrs', {}).get('p_shock', 0.30)
+        entry["p_shock"] = round(float(p_shock_val), 4)
     agent_params[param] = entry
     print(f"  {param:44s} mean={entry['global_mean']:.3f}  groups={len(entry['by_group'])}"
           + ("  [bernoulli]" if param in BERNOULLI_PARAMS else "")
