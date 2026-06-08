@@ -14,6 +14,7 @@ run.py v2 — точка входа для запуска симуляции (в
 import argparse
 import sys
 import time
+import json
 from pathlib import Path
 
 SIM_DIR = Path(__file__).parent
@@ -47,6 +48,13 @@ def run(
         print(f"\n[2/4] Создаём агентов (n={n_agents:,}, seed={seed})...")
     df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed, commuting_path=commuting_path)
 
+    # Загружаем init_dists для graduation (отрасль выпускников)
+    dist_path = Path(agent_dist_path)
+    if not dist_path.exists():
+        dist_path = SIM_DIR / agent_dist_path
+    with open(dist_path, encoding="utf-8") as f:
+        init_dists = json.load(f).get("districts", {})
+
     snapshot_ticks = [0, n_ticks // 4, n_ticks // 2, n_ticks]
 
     if verbose:
@@ -57,7 +65,8 @@ def run(
         snapshot_ticks=snapshot_ticks,
         seed=seed,
         verbose=verbose,
-        jobs_capacity=JOBS_CAPACITY
+        jobs_capacity=JOBS_CAPACITY,
+        init_dists=init_dists,
     )
 
     if verbose:

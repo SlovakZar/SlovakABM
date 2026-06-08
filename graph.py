@@ -155,7 +155,8 @@ def build_graph(
             # Базовые (неизменяемые)
             avg_wage_base=float(avg_wage),
             housing_price_base=float(housing_m2),
-            infrastructure_score=infrastructure_score,   # <-- НОВЫЙ АТРИБУТ
+            infrastructure_score=infrastructure_score,
+            salary_by_industry=salary_by_ind,             # <-- v8: отраслевые зарплаты
             # Динамические (обновляются каждый тик)
             avg_wage=float(avg_wage),
             housing_price_m2=float(housing_m2),

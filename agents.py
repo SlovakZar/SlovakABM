@@ -519,8 +519,14 @@ def create_agents(
             )
             nationality = _weighted_choice(nat_dist_d, rng)
 
-            # ── Шаг 0: СТУДЕНТ? ──────────────────────────────────────────────
-            # Определяем до занятости: агенты 15–25 могут быть студентами.
+            # ── Шаг 0a: ОТРАСЛЕВАЯ СПЕЦИАЛИЗАЦИЯ (для всех, кроме студентов) ─
+            # Безработные получают отрасль из residence_district — они потеряли
+            # работу в своей отрасли, но сохраняют специализацию.
+            # Для занятых отрасль позже переопределяется из workplace_district.
+            res_industry_dist = dd.get("industry", {})
+            agent_industry = _weighted_choice(res_industry_dist, rng) if res_industry_dist else "Other"
+
+            # ── Шаг 0b: СТУДЕНТ? ─────────────────────────────────────────────
             is_student   = False
             graduation_tick_val = -1  # -1 = не студент
 
@@ -573,19 +579,21 @@ def create_agents(
                     workplace = residence
                     status    = "unemployed"
 
-                # ── Отрасль и зарплата из workplace_district ─────────────────
+                # ── Отрасль и зарплата ───────────────────────────────────────
                 if is_employed:
+                    # Занятый: отрасль из workplace_district (реальная работа)
                     wp_data        = init_dists.get(workplace, dd)
                     industry_dist  = wp_data.get("industry", {})
                     salary_by_ind  = wp_data.get("salary_by_industry", {})
                     avg_wage_wp    = wp_data.get("avg_wage", 1400.0)
 
-                    industry = _weighted_choice(industry_dist, rng) if industry_dist else "Other"
+                    industry = _weighted_choice(industry_dist, rng) if industry_dist else agent_industry
                     base_wage = salary_by_ind.get(industry, avg_wage_wp)
                     edu_mult  = {"low": 0.82, "medium": 1.0, "high": 1.35}.get(education, 1.0)
                     wage = float(max(0, rng.normal(base_wage * edu_mult, base_wage * 0.22)))
                 else:
-                    industry = "Unemployed"
+                    # Безработный: сохраняет отраслевую специализацию из residence_district
+                    industry = agent_industry
                     wage     = 0.0
 
             # ── SASD параметры ────────────────────────────────────────────────
@@ -761,6 +769,7 @@ def create_agents(
                 "intention_state":     "none",
                 "dst_work":            "",    # целевой район работы (пуст до активации)
                 "activation_timer":    0,     # Блок D: счётчик тиков ожидания (inertia-задержка)
+                "activation_domain":   "",    # доминантный домен при активации (economic/place/social/family)
                 "social_boost":        0.0,   # Блок B: временный буст social target от событий
 
                 # ── Домены satisfaction ───────────────────────────────────────
