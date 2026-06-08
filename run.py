@@ -59,7 +59,7 @@ def run(
 
     if verbose:
         print(f"\n[3/4] Запуск симуляции ({n_ticks} тиков = {n_ticks//12} лет {n_ticks%12} мес)...")
-    df_final, snapshots, tick_stats = run_simulation(
+    df_final, snapshots, tick_stats, all_action_log = run_simulation(
         df, G,
         n_ticks=n_ticks,
         snapshot_ticks=snapshot_ticks,
@@ -78,7 +78,7 @@ def run(
         portrait = demographic_portrait(snapshots[t], label=label, tick_num=t)
         report_parts.append(portrait)
 
-    comparison = compare_snapshots(snapshots, tick_stats)
+    comparison = compare_snapshots(snapshots, tick_stats, all_action_log)
     report_parts.append(comparison)
 
     full_report = "\n\n".join(report_parts)
@@ -91,7 +91,7 @@ def run(
         Path(output_file).write_text(full_report, encoding="utf-8")
         print(f"\n  Отчёт сохранён: {output_file}")
 
-    return df_final, snapshots, tick_stats
+    return df_final, snapshots, tick_stats, all_action_log
 
 
 if __name__ == "__main__":

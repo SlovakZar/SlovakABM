@@ -688,7 +688,7 @@ def _fft_pipeline(
     dissatisfaction: np.ndarray,
     jobs_pressure: dict,
     rng: np.random.Generator,
-) -> tuple[pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame, dict, list]:
     """
     Полный FFT pipeline за один тик.
 
@@ -705,6 +705,9 @@ def _fft_pipeline(
 
     Проход 3b (place-driven, seeking_residence из фильтра 1):
       _place_driven_search → move (с сохранением workplace) | adapt | none
+
+    Возвращает (df, stats, action_log).
+    action_log — список словарей с деталями каждого совершённого действия.
     """
     df = df.copy()
     stats = {
@@ -713,6 +716,22 @@ def _fft_pipeline(
         "econ_driven_moves": 0, "place_driven_moves": 0,
         "econ_activated": 0, "place_activated": 0,
     }
+    action_log = []
+
+    def _snapshot(idx):
+        """Снимает слепок агента ДО изменений для лога."""
+        row = df.iloc[idx]
+        thr_e = max(float(row["thr_economic"]), 0.01)
+        sat_e = float(row["sat_economic"])
+        return {
+            "id":                  int(row["id"]),
+            "agent_type":          str(row["agent_type"]),
+            "activation_domain":   str(row["activation_domain"]),
+            "prev_residence":      str(row["residence_district"]),
+            "prev_workplace":      str(row["workplace_district"]),
+            "industry":            str(row["industry"]),
+            "domain_economic_gap": round(float(np.clip((thr_e - sat_e) / thr_e, 0.0, 1.0)), 4),
+        }
 
     # ── Проход 1: Фильтр 1 (доминантный домен + активация) ───────────────
     df, activate_mask = _fft_filter1(df, dissatisfaction)
@@ -760,7 +779,14 @@ def _fft_pipeline(
 
             if (primary_econ_pressure > other_pressure and
                     float(row["job_flexibility"]) > ADAPT_FLEX_THRESHOLD):
+                snap = _snapshot(idx)
                 _execute_adapt(df, idx, domain="economic")
+                snap["decision"] = "adapt"
+                snap["new_residence"] = str(df.at[idx, "residence_district"])
+                snap["new_workplace"] = str(df.at[idx, "workplace_district"])
+                snap["wage"] = float(df.at[idx, "wage"])
+                snap["desired_raise"] = 0.0
+                action_log.append(snap)
                 stats["adapts"] += 1
             else:
                 df.at[idx, "intention_state"] = "none"
@@ -804,11 +830,47 @@ def _fft_pipeline(
         )
 
         if outcome == "commute":
+            snap = _snapshot(idx)
+            old_wp = str(df.at[idx, "workplace_district"])
+            # Вычисляем desired_raise до исполнения (те же формулы что в фильтре 2)
+            agent_w = float(row["wage"])
+            thr_e = max(float(row["thr_economic"]), 0.01)
+            sat_e = float(row["sat_economic"])
+            epc   = float(row["econ_perceived_control"])
+            if agent_w > 0:
+                base_appetite = BASE_APPETITE_MIN + epc * BASE_APPETITE_MAX
+                desperation = float(np.clip((thr_e - sat_e) / thr_e, 0.0, 1.0))
+                desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) * (1.0 - desperation)
+            else:
+                desired_raise = 0.0
             _execute_commute(df, idx, dst_work, G, rng)
+            snap["decision"]      = "commute"
+            snap["new_residence"] = str(df.at[idx, "residence_district"])
+            snap["new_workplace"] = str(df.at[idx, "workplace_district"])
+            snap["wage"]          = float(df.at[idx, "wage"])
+            snap["desired_raise"] = round(desired_raise, 4)
+            action_log.append(snap)
             stats["commutes"] += 1
 
         elif outcome in ("move", "satellite_move"):
+            snap = _snapshot(idx)
+            agent_w = float(row["wage"])
+            thr_e = max(float(row["thr_economic"]), 0.01)
+            sat_e = float(row["sat_economic"])
+            epc   = float(row["econ_perceived_control"])
+            if agent_w > 0:
+                base_appetite = BASE_APPETITE_MIN + epc * BASE_APPETITE_MAX
+                desperation = float(np.clip((thr_e - sat_e) / thr_e, 0.0, 1.0))
+                desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) * (1.0 - desperation)
+            else:
+                desired_raise = 0.0
             _execute_move(df, idx, new_residence, dst_work, G, rng)
+            snap["decision"]      = outcome  # "move" или "satellite_move"
+            snap["new_residence"] = str(df.at[idx, "residence_district"])
+            snap["new_workplace"] = str(df.at[idx, "workplace_district"])
+            snap["wage"]          = float(df.at[idx, "wage"])
+            snap["desired_raise"] = round(desired_raise, 4)
+            action_log.append(snap)
             stats["moves"] += 1
             stats["econ_driven_moves"] += 1
             if outcome == "satellite_move":
@@ -816,7 +878,14 @@ def _fft_pipeline(
 
         else:
             if float(row["job_flexibility"]) > ADAPT_FLEX_THRESHOLD:
+                snap = _snapshot(idx)
                 _execute_adapt(df, idx, domain="economic")
+                snap["decision"]      = "adapt"
+                snap["new_residence"] = str(df.at[idx, "residence_district"])
+                snap["new_workplace"] = str(df.at[idx, "workplace_district"])
+                snap["wage"]          = float(df.at[idx, "wage"])
+                snap["desired_raise"] = 0.0
+                action_log.append(snap)
                 stats["adapts"] += 1
             else:
                 df.at[idx, "intention_state"] = "none"
@@ -849,18 +918,32 @@ def _fft_pipeline(
 
         if new_residence is not None and new_residence != residence:
             # Переезд с сохранением workplace
+            snap = _snapshot(idx)
             _execute_move(df, idx, new_residence, workplace, G, rng)
+            snap["decision"]      = "move"
+            snap["new_residence"] = str(df.at[idx, "residence_district"])
+            snap["new_workplace"] = str(df.at[idx, "workplace_district"])
+            snap["wage"]          = float(df.at[idx, "wage"])
+            snap["desired_raise"] = 0.0  # place-driven: нет поиска работы
+            action_log.append(snap)
             stats["moves"] += 1
             stats["place_driven_moves"] += 1
         else:
             # Fallback: адаптация места или возврат в none
             if float(row["job_flexibility"]) > ADAPT_FLEX_THRESHOLD:
+                snap = _snapshot(idx)
                 _execute_adapt(df, idx, domain="place")
+                snap["decision"]      = "adapt"
+                snap["new_residence"] = str(df.at[idx, "residence_district"])
+                snap["new_workplace"] = str(df.at[idx, "workplace_district"])
+                snap["wage"]          = float(df.at[idx, "wage"])
+                snap["desired_raise"] = 0.0
+                action_log.append(snap)
                 stats["adapts"] += 1
             else:
                 df.at[idx, "intention_state"] = "none"
 
-    return df, stats
+    return df, stats, action_log
 
 
 # ── Главный tick ──────────────────────────────────────────────────────────────
@@ -944,7 +1027,7 @@ def tick(
     workplace_before  = df["workplace_district"].values.copy()
     wage_before       = df["wage"].values.copy()
     status_before     = df["status"].values.copy()
-    df, fft_stats     = _fft_pipeline(df, G, dissatisfaction, jobs_pressure, rng)
+    df, fft_stats, action_log = _fft_pipeline(df, G, dissatisfaction, jobs_pressure, rng)
 
     # 5b. Блок B: событийные сигналы (social_boost)
     # Триггер 1: Переезд → shock старому району, positive новому
@@ -1022,6 +1105,7 @@ def tick(
         "avg_inertia":       round(float(df["inertia"].mean()), 4),
         "district_counts":   residence_counts,
         "jobs_pressure_max": round(max(jobs_pressure.values()) if jobs_pressure else 0, 2),
+        "action_log":        action_log,
     }
 
     return df, stats
@@ -1038,13 +1122,15 @@ def run_simulation(
     seed: int = 42,
     verbose: bool = True,
     init_dists: dict = None,
-) -> tuple[pd.DataFrame, dict, list]:
+) -> tuple[pd.DataFrame, dict, list, list]:
     """
     Главный цикл симуляции.
 
     Принимает jobs_capacity явно — строится в agents.py из commuting-матрицы
     и передаётся через run.py.
     init_dists — распределения из agent_init_distributions.json (для graduation).
+
+    Возвращает (df_final, snapshots, tick_stats, all_action_log).
     """
     rng = np.random.default_rng(seed)
 
@@ -1057,6 +1143,7 @@ def run_simulation(
 
     snapshots  = {}
     tick_stats = []
+    all_action_log = []  # агрегированный лог решений за все тики
 
     if 0 in snapshot_ticks:
         snapshots[0] = df.copy()
@@ -1072,6 +1159,7 @@ def run_simulation(
     for t in range(1, n_ticks + 1):
         df, stats = tick(df, G, jobs_capacity, t, rng, init_dists=init_dists)
         tick_stats.append(stats)
+        all_action_log.extend(stats.get("action_log", []))
 
         if t in snapshot_ticks:
             snapshots[t] = df.copy()
@@ -1115,4 +1203,4 @@ def run_simulation(
         print(f"  Итого адаптаций:        {total_adapts:,}")
         print(f"  Безработных в конце:    {tick_stats[-1]['n_unemployed']:,}")
 
-    return df, snapshots, tick_stats
+    return df, snapshots, tick_stats, all_action_log
