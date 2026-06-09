@@ -23,7 +23,7 @@ sys.path.insert(0, str(SIM_DIR))
 from graph   import build_graph, print_graph_summary
 from agents  import create_agents, JOBS_CAPACITY
 from engine  import run_simulation
-from report  import demographic_portrait, compare_snapshots
+from report  import demographic_portrait, compare_snapshots, summary_report
 
 
 def run(
@@ -35,6 +35,7 @@ def run(
     seed:           int  = 42,
     output_file:    str  = None,
     verbose:        bool = True,
+    detail:         bool = False,
 ) -> tuple:
     t0 = time.time()
 
@@ -72,18 +73,27 @@ def run(
     if verbose:
         print(f"\n[4/4] Генерируем отчёт...")
 
+    # Снимки по тикам (демографические портреты)
     report_parts = []
     for t in sorted(snapshots.keys()):
         label = {0: "НАЧАЛО"}.get(t, f"Тик {t}")
-        portrait = demographic_portrait(snapshots[t], label=label, tick_num=t)
+        portrait = demographic_portrait(snapshots[t], label=label, tick_num=t, detail=detail)
         report_parts.append(portrait)
 
-    comparison = compare_snapshots(snapshots, tick_stats, all_action_log)
+    # Итоговая сводка
+    final_summary = summary_report(df_final, tick_stats, all_action_log, snapshots, detail=detail)
+    report_parts.append(final_summary)
+    # Также межрегиональный баланс (compare_snapshots)
+    comparison = compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail)
     report_parts.append(comparison)
 
     full_report = "\n\n".join(report_parts)
     elapsed = time.time() - t0
     full_report += f"\n\n⏱  {elapsed:.1f} сек | {n_ticks} тиков | {n_agents:,} агентов"
+    if detail:
+        full_report += " | режим: полный (detail=True)"
+    else:
+        full_report += " | режим: summary"
 
     print(full_report)
 
@@ -104,6 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed",      type=int, default=42)
     parser.add_argument("--output",    default=None)
     parser.add_argument("--quiet",     action="store_true")
+    parser.add_argument("--detail",    action="store_true", help="Полный отчёт с аудитом и доп. метриками")
     args = parser.parse_args()
 
     run(
@@ -115,4 +126,5 @@ if __name__ == "__main__":
         seed=args.seed,
         output_file=args.output,
         verbose=not args.quiet,
+        detail=args.detail,
     )
