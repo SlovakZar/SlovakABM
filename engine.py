@@ -517,6 +517,23 @@ def _place_driven_search(
             continue
 
         return dst
+
+    return None
+
+
+# ── FFT: Фильтр 3 — Дерево локации ───────────────────────────────────────────
+
+def _fft_filter3_find_residence(
+    residence: str,
+    dst_work: str,
+    agent_wage: float,
+    G: nx.DiGraph,
+    rng: np.random.Generator,
+    commuter_threshold_min: float,
+    sat_place: float,
+    thr_place: float,
+):
+    """
     Возвращает (new_residence, outcome):
       outcome: "commute" | "move" | "satellite_move" | "none"
 
