@@ -233,6 +233,25 @@ def _get_commuting(path="commuting_filtered_with_travel.csv"):
     return _COMMUTING
 
 
+def _scale_jobs_capacity(n_agents: int):
+    """
+    Сжимает JOBS_CAPACITY с реальной популяции (~2.5 млн занятых)
+    до масштаба симуляции (~70 000 агентов).
+
+    scale = n_agents / сумма всех capacity.
+    Минимум 1 — защита от деления на 0 в engine.
+    """
+    global JOBS_CAPACITY
+    total_cap = sum(JOBS_CAPACITY.values())
+    if total_cap == 0:
+        return
+    scale = n_agents / total_cap
+    JOBS_CAPACITY = {
+        d: max(1, int(v * scale))
+        for d, v in JOBS_CAPACITY.items()
+    }
+
+
 # ── Школьные/студенческие потоки ──────────────────────────────────────────────
 
 _SCHOOL_OUTFLOW = None
@@ -824,6 +843,11 @@ def create_agents(
     df = pd.DataFrame(records)
     print(f"\n  Создано агентов: {len(df):,}  |  Районов: {df['residence_district'].nunique()}")
     _print_summary(df)
+
+    # Масштабируем JOBS_CAPACITY от реальной популяции к числу агентов,
+    # чтобы jobs_pressure колебался вокруг 1.0, а не 0.03
+    _scale_jobs_capacity(n_agents)
+
     return df
 
 

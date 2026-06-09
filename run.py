@@ -49,6 +49,13 @@ def run(
         print(f"\n[2/4] Создаём агентов (n={n_agents:,}, seed={seed})...")
     df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed, commuting_path=commuting_path)
 
+    # Синхронизируем jobs_capacity в узлах графа с отмасштабированным JOBS_CAPACITY.
+    # G.nodes использует свою оценку (pop × 0.45), а JOBS_CAPACITY — из реальной
+    # commuting-матрицы. Приводим к единому знаменателю.
+    for d in G.nodes:
+        if d in JOBS_CAPACITY:
+            G.nodes[d]["jobs_capacity"] = JOBS_CAPACITY[d]
+
     # Загружаем init_dists для graduation (отрасль выпускников)
     dist_path = Path(agent_dist_path)
     if not dist_path.exists():
