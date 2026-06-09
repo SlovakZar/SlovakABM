@@ -299,7 +299,7 @@ def _fft_filter1(
     # Базовые маски
     none_mask    = df["intention_state"].values == "none"
     age_mask     = (df["age"].values >= 18) & (df["age"].values <= 62)
-    moved_mask   = df["moved_ticks"].values >= 6
+    moved_mask   = df["moved_ticks"].values >= 9
     econ_pc_mask = df["econ_perceived_control"].values > MIN_ECON_PC_TO_ACTIVATE
     unemployed   = df["status"].values == "unemployed"
     student_mask = df["status"].values == "student"
@@ -465,12 +465,19 @@ def _place_driven_search(
       1. Доступность жилья: _housing_affordable(agent_wage, housing_price)
       2. Время в пути до workplace ≤ commuter_threshold_min × PLACE_DRIVEN_TRAVEL_BUF
          (расширенный порог — мотивация места высока)
+      3. target_place нового района строго лучше текущего (зазор > 2%)
 
     Satisficing: первый подходящий после shuffle.
     Возвращает new_residence или None.
     """
     # Расширенный порог: place-мотивация допускает более долгий commute
     expanded_threshold = commuter_threshold_min * PLACE_DRIVEN_TRAVEL_BUF
+
+    # Текущий target_place — опорная точка для сравнения
+    current_attr = G.nodes.get(residence, {})
+    cur_h = current_attr.get("housing_price_m2", 1800)
+    cur_i = current_attr.get("infrastructure_score", 0.5)
+    cur_target = _sigmoid(0.5 * (1800 - cur_h) / 1800 + 0.5 * (cur_i - 0.5))
 
     # Кандидаты из awareness_set вокруг workplace
     candidates = get_awareness_set(
@@ -498,27 +505,18 @@ def _place_driven_search(
         # Критерий 2: время в пути до текущей работы
         if G.has_edge(dst, workplace):
             tt = G[dst][workplace].get("travel_time_min", 999)
-            if tt <= expanded_threshold:
-                return dst
+            if tt > expanded_threshold:
+                continue
+        else:
+            continue  # нет прямого пути — пропускаем
 
-    return None
+        # Критерий 3: target_place строго лучше текущего (зазор 2% против джиттера)
+        dst_infra = dst_attr.get("infrastructure_score", 0.5)
+        dst_target = _sigmoid(0.5 * (1800 - housing_price) / 1800 + 0.5 * (dst_infra - 0.5))
+        if dst_target <= cur_target + 0.02:
+            continue
 
-
-# ── FFT: Фильтр 3 — Дерево локации ───────────────────────────────────────────
-
-def _fft_filter3_find_residence(
-    residence: str,
-    dst_work: str,
-    agent_wage: float,
-    G: nx.DiGraph,
-    rng: np.random.Generator,
-    commuter_threshold_min: float,
-    sat_place: float = 1.0,
-    thr_place: float = 0.5,
-) -> tuple[str, str]:
-    """
-    Определяет стратегию локации после нахождения dst_work.
-
+        return dst
     Возвращает (new_residence, outcome):
       outcome: "commute" | "move" | "satellite_move" | "none"
 
@@ -645,8 +643,16 @@ def _execute_move(
     df.at[idx, "wage"] = new_wage
 
     # Стресс переезда
-    for col in ["sat_economic", "sat_social", "sat_family"]:
+    for col in ["sat_economic", "sat_social", "sat_family", "sat_place"]:
         df.at[idx, col] = float(np.clip(df.at[idx, col] * MOVE_STRESS_FACTOR, 0.05, 0.95))
+
+    # Форсированный рывок sat_place к target_place нового района
+    new_h = G.nodes[new_residence].get("housing_price_m2", 1800)
+    new_i = G.nodes[new_residence].get("infrastructure_score", 0.5)
+    new_target = _sigmoid(0.5 * (1800 - new_h) / 1800 + 0.5 * (new_i - 0.5))
+    df.at[idx, "sat_place"] = float(np.clip(
+        df.at[idx, "sat_place"] * 0.5 + new_target * 0.5, 0.05, 0.95
+    ))
 
     # Inertia сбрасывается частично: социальный компонент остаётся
     new_inertia = float(np.clip(
@@ -675,6 +681,10 @@ def _execute_adapt(df: pd.DataFrame, idx: int, domain: str = "economic"):
     elif domain == "place":
         df.at[idx, "sat_place"] = float(np.clip(
             df.at[idx, "sat_place"] + flex * ADAPT_SAT_BOOST * 0.7, 0.0, 1.0
+        ))
+        # Также снижаем порог — адаптация «места» это не только рост sat, но и снижение планки
+        df.at[idx, "thr_place"] = float(np.clip(
+            df.at[idx, "thr_place"] - ADAPT_SAT_BOOST * 0.5, 0.10, 0.85
         ))
     df.at[idx, "intention_state"] = "none"
     df.at[idx, "dst_work"]        = ""

@@ -707,8 +707,8 @@ def create_agents(
             # domain_future_place μ≈0.316, σ≈0.185 — широкий разброс
             # множители типа: seeker=0.8, waiting=1.0, anchored=1.5, family_first=1.2
             thr_place_val = float(np.clip(
-                0.40 * mod["place"] + 0.20 * (d_future_place - 0.316),
-                0.05, 0.90
+                0.28 * mod["place"] + 0.25 * (d_future_place - 0.316),
+                0.05, 0.85
             ))
 
             # ═══ Блок E: индивидуальные пороги social/family по типу агента ═══
