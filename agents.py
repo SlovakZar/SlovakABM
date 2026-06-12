@@ -837,6 +837,14 @@ def create_agents(
 
                 # ── Жильё ────────────────────────────────────────────────────
                 "housing_price_m2":    round(housing_m2, 0),
+
+                # ── Двухбарьерная модель (Aspirations×Capabilities → TPB) ────
+                "aspirations":         0.0,          # EWMA-накопление D_instant (обновляется в engine.tick)
+                "signal_reduction":    0.0,          # накопленный эффект соц. сигналов, снижающий инерцию
+                "tpb_active":          False,        # флаг фазы TPB
+                "intention_delay":     0,            # счётчик тиков задержки после превышения порога намерения
+                "econ_gap":            round(float(d_econ_gap), 4),  # адаптивное восприятие econ-разрыва
+                "domain_future_place": round(float(d_future_place), 4),  # адаптивные ожидания места
             })
             agent_id += 1
 

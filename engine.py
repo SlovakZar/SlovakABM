@@ -84,6 +84,27 @@ UNEMPLOYED_WAGE_CEIL     = 0.20   # добавка за econ_perceived_control (
 SAT_SMOOTHING            = 0.88
 NATIONAL_AVG_WAGE        = 1614.0
 
+# ── Двухбарьерная модель: константы ──────────────────────────────────────────
+ASPIRATIONS_ALPHA        = 0.08   # скорость EWMA-накопления aspirations из D_instant
+SIGNAL_DECAY             = 0.85   # затухание signal_reduction за тик
+GAP_ADAPT_LAMBDA         = 0.05   # скорость адаптации econ_gap и domain_future_place
+HUB_WEAK_TIES_BONUS      = 0.005  # прирост weak_ties_utility за тик в хабах
+MOVE_WEAK_TIES_PENALTY   = -0.10  # сброс weak_ties при переезде
+UNEMPLOYED_SIGNAL        = 0.35   # добавка к signal_reduction при потере работы
+NEIGHBOR_SIGNAL_COEF     = 0.04   # коэфф. сигнала от переехавшего соседа
+
+# Хабы: районные центры с повышенной социальной динамикой
+HUB_DISTRICTS = {
+    "District of Bratislava I", "District of Bratislava II",
+    "District of Bratislava III", "District of Bratislava IV",
+    "District of Bratislava V",
+    "District of Košice I", "District of Košice II",
+    "District of Košice III", "District of Košice IV",
+    "District of Trnava", "District of Nitra", "District of Žilina",
+    "District of Banská Bystrica", "District of Prešov",
+    "District of Trenčín",
+}
+
 
 # ── Вспомогательные ───────────────────────────────────────────────────────────
 
@@ -252,7 +273,224 @@ def _compute_jobs_pressure(df: pd.DataFrame, jobs_capacity: dict) -> dict:
     return pressure
 
 
-# ── FFT: Фильтр 1 — Страж ворот ──────────────────────────────────────────────
+# ── Двухбарьерная модель: Барьер 1 — Потенциал против динамической инерции ──
+
+def _compute_d_instant(
+    agent_wage: float,
+    industry_avg_wage_wp: float,
+    econ_gap: float,
+    job_flexibility: float,
+    housing_price_m2: float,
+    infrastructure_score: float,
+    domain_future_place: float,
+    w_econ: float,
+    w_future: float,
+) -> tuple[float, float, float]:
+    """
+    Вычисляет мгновенную неудовлетворённость D_instant.
+
+    Returns (D_instant, D_econ, D_place).
+    """
+    # Экономическая компонента
+    if agent_wage > 0 and industry_avg_wage_wp > 0:
+        wage_pressure = max(0.0, 1.0 - agent_wage / industry_avg_wage_wp)
+    else:
+        wage_pressure = 1.0  # безработный — максимальное давление
+    D_econ = w_econ * wage_pressure * econ_gap * (1.0 - job_flexibility)
+
+    # Жилищная компонента
+    monthly_cost = housing_price_m2 * 50 * 0.004
+    burden = monthly_cost / max(agent_wage, 1.0)
+    affordability = max(0.0, 1.0 - burden / 0.35)
+    place_reality = 0.6 * affordability + 0.4 * infrastructure_score
+    D_place = w_future * max(0.0, domain_future_place - place_reality)
+
+    D_instant = D_econ + D_place
+    return float(np.clip(D_instant, 0.0, 1.0)), float(D_econ), float(D_place)
+
+
+def _two_barrier_activation(
+    df: pd.DataFrame,
+    G: nx.DiGraph,
+    dissatisfaction: np.ndarray,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
+    """
+    Двухбарьерная модель активации (Aspirations×Capabilities → TPB → Эвристический поиск).
+
+    Барьер 1 — Потенциал миграции против динамической инерции:
+      Обновляет aspirations (EWMA от D_instant).
+      Вычисляет capabilities (income + education + weak_ties).
+      Вычисляет динамическую инерцию (base_inertia, сниженную signal_reduction).
+      Если aspirations × capabilities > dynamic_inertia → tpb_active = True.
+
+    Барьер 2 — Теория запланированного поведения (TPB):
+      Attitude = D_econ + D_place (мгновенные).
+      Subjective norm = social_pressure + family_pressure.
+      Perceived control = (econ_perceived_control + perceived_control) / 2.
+      Intention = (Attitude + SubjectiveNorm + PBC) / 3.
+      Если intention > internal_mig_threshold → intention_delay = 1-3 тика.
+
+    Для агентов с tpb_active и intention_delay > 0: декремент задержки.
+    Когда intention_delay == 0: установка intention_state → эвристический поиск.
+
+    Возвращает обновлённый DataFrame.
+    """
+    df = df.copy()
+    n = len(df)
+
+    # ── Массивы для векторизации ──────────────────────────────────────────
+    ages           = df["age"].values
+    educations     = df["education"].values
+    wages          = df["wage"].values
+    statuses       = df["status"].values
+    workplaces     = df["workplace_district"].values
+    residences     = df["district"].values
+    industries     = df["industry"].values
+
+    aspirations    = df["aspirations"].values.copy()
+    signal_red     = df["signal_reduction"].values.copy()
+    tpb_active     = df["tpb_active"].values.copy()
+    intention_del  = df["intention_delay"].values.copy()
+    econ_gaps      = df["econ_gap"].values.copy()
+    domain_future  = df["domain_future_place"].values.copy()
+
+    w_econs        = df["w_economic"].values
+    w_futures      = df["w_future"].values
+    job_flexs      = df["job_flexibility"].values
+    inertias       = df["inertia"].values
+    percontrols    = df["perceived_control"].values
+    econ_percontrols = df["econ_perceived_control"].values
+    weak_ties      = df["weak_ties_utility"].values
+    net_susc       = df["net_signal_susc"].values
+    family_mods    = df["family_weight_modifier"].values
+    social_boosts  = df["social_boost"].values
+    maritals       = df["marital"].values
+    internal_thrs  = df["internal_mig_thr"].values
+    moved_ticks    = df["moved_ticks"].values
+    intention_states = df["intention_state"].values.copy()
+
+    # Доминантный домен (заполним позже для активированных)
+    activation_domains = df["activation_domain"].values.copy()
+
+    # ── Поагентный цикл (основная логика) ─────────────────────────────────
+    for i in range(n):
+        # Пропускаем студентов
+        if statuses[i] == "student":
+            continue
+
+        # Пропускаем агентов с недавним переездом (< 9 тиков)
+        if moved_ticks[i] < 9:
+            tpb_active[i] = False
+            intention_del[i] = 0
+            continue
+
+        # Пропускаем слишком старых/молодых
+        if ages[i] < 18 or ages[i] > 62:
+            tpb_active[i] = False
+            intention_del[i] = 0
+            continue
+
+        wp = workplaces[i]
+        res = residences[i]
+
+        wp_attr  = G.nodes.get(wp, {})
+        res_attr = G.nodes.get(res, {})
+
+        industry_avg_wp = wp_attr.get("avg_wage", NATIONAL_AVG_WAGE)
+        housing_price   = res_attr.get("housing_price_m2", 1800.0)
+        infra_score     = res_attr.get("infrastructure_score", 0.5)
+
+        # ── Вычисляем D_instant ───────────────────────────────────────────
+        D_inst, D_econ, D_place = _compute_d_instant(
+            agent_wage=wages[i],
+            industry_avg_wage_wp=industry_avg_wp,
+            econ_gap=econ_gaps[i],
+            job_flexibility=job_flexs[i],
+            housing_price_m2=housing_price,
+            infrastructure_score=infra_score,
+            domain_future_place=domain_future[i],
+            w_econ=w_econs[i],
+            w_future=w_futures[i],
+        )
+
+        # ── Обновление aspirations (EWMA) ─────────────────────────────────
+        aspirations[i] = ASPIRATIONS_ALPHA * D_inst + (1.0 - ASPIRATIONS_ALPHA) * aspirations[i]
+
+        # ── Capabilities ──────────────────────────────────────────────────
+        income_index = min(wages[i] / (1.5 * NATIONAL_AVG_WAGE), 1.0)
+        edu_map = {"low": 0.25, "medium": 0.55, "high": 0.85}
+        education_index = edu_map.get(educations[i], 0.55)
+        capabilities = (income_index + education_index + weak_ties[i]) / 3.0
+
+        # ── Динамическая инерция ──────────────────────────────────────────
+        dynamic_inertia = inertias[i] * max(0.3, 1.0 - signal_red[i])
+
+        # ── БАРЬЕР 1: Потенциал vs Инерция ───────────────────────────────
+        if aspirations[i] * capabilities > dynamic_inertia:
+            # ── БАРЬЕР 2: TPB ─────────────────────────────────────────────
+            if not tpb_active[i]:
+                # Первый вход в TPB — вычисляем компоненты
+                tpb_active[i] = True
+
+                # Определяем доминантный домен
+                if D_econ >= D_place:
+                    activation_domains[i] = "economic"
+                else:
+                    activation_domains[i] = "place"
+
+                # Attitude = D_econ + D_place (мгновенные)
+                attitude = D_econ + D_place
+
+                # Subjective norm
+                social_pressure = net_susc[i] * social_boosts[i]
+                family_pressure_val = -family_mods[i] * (1.0 if maritals[i] == "married" else 0.5)
+                subjective_norm = float(np.clip(0.5 + social_pressure + family_pressure_val, 0.0, 1.0))
+
+                # Perceived behavioral control
+                pbc = (econ_percontrols[i] + percontrols[i]) / 2.0
+
+                # Intention
+                intention = (attitude + subjective_norm + pbc) / 3.0
+
+                if intention > internal_thrs[i]:
+                    # Задержка 1-3 тика (обратно пропорциональна perceived_control)
+                    intention_del[i] = max(1, 3 - int(2.0 * percontrols[i]))
+                else:
+                    tpb_active[i] = False
+                    intention_del[i] = 0
+        else:
+            tpb_active[i] = False
+            intention_del[i] = 0
+
+        # ── Декремент задержки для активных TPB ───────────────────────────
+        if tpb_active[i] and intention_del[i] > 0:
+            intention_del[i] -= 1
+
+            # Когда задержка истекла — активируем эвристический поиск
+            if intention_del[i] == 0:
+                dom = activation_domains[i]
+                if dom == "economic":
+                    intention_states[i] = "seeking_work"
+                elif dom == "place":
+                    intention_states[i] = "seeking_residence"
+                else:
+                    intention_states[i] = "none"
+
+    # ── Запись обратно в DataFrame ────────────────────────────────────────
+    df["aspirations"]        = np.clip(aspirations, 0.0, 1.0)
+    df["signal_reduction"]   = np.clip(signal_red, 0.0, 1.0)
+    df["tpb_active"]         = tpb_active
+    df["intention_delay"]    = intention_del
+    df["econ_gap"]           = np.clip(econ_gaps, 0.0, 1.0)
+    df["domain_future_place"] = np.clip(domain_future, 0.0, 1.0)
+    df["intention_state"]    = intention_states
+    df["activation_domain"]  = activation_domains
+
+    return df
+
+
+# ── FFT: Фильтр 1 — Страж ворот (DEPRECATED — заменён на _two_barrier_activation) ──
 
 def _fft_filter1(
     df: pd.DataFrame,
@@ -610,6 +848,8 @@ def _execute_commute(
     df.at[idx, "intention_state"]    = "none"
     df.at[idx, "dst_work"]           = ""
     df.at[idx, "moved_ticks"]        = 0
+    df.at[idx, "tpb_active"]         = False
+    df.at[idx, "intention_delay"]    = 0
 
     # v8: отраслевая зарплата в новом районе работы
     agent_industry = str(df.at[idx, "industry"])
@@ -650,6 +890,13 @@ def _execute_move(
     df.at[idx, "dst_work"]        = ""
     df.at[idx, "moved_ticks"]     = 0
     df.at[idx, "tenure"]          = 0
+    df.at[idx, "tpb_active"]      = False
+    df.at[idx, "intention_delay"] = 0
+
+    # Сброс части слабых связей при переезде
+    df.at[idx, "weak_ties_utility"] = float(np.clip(
+        df.at[idx, "weak_ties_utility"] + MOVE_WEAK_TIES_PENALTY, 0.0, 1.0
+    ))
 
     # v8: отраслевая зарплата от нового workplace
     agent_industry = str(df.at[idx, "industry"])
@@ -705,6 +952,8 @@ def _execute_adapt(df: pd.DataFrame, idx: int, domain: str = "economic"):
         ))
     df.at[idx, "intention_state"] = "none"
     df.at[idx, "dst_work"]        = ""
+    df.at[idx, "tpb_active"]      = False
+    df.at[idx, "intention_delay"] = 0
 
 
 # ── Главный FFT pipeline ──────────────────────────────────────────────────────
@@ -719,10 +968,10 @@ def _fft_pipeline(
     """
     Полный FFT pipeline за один тик.
 
-    Проход 1: Фильтр 1 → активация по доминантному домену:
-      economic → "seeking_work"
-      place    → "seeking_residence"
-      social / family → "none"
+    Проход 1: Двухбарьерная активация (Aspirations×Capabilities → TPB):
+      Барьер 1 — потенциал против динамической инерции.
+      Барьер 2 — TPB (Attitude + SubjectiveNorm + PBC) → intention_delay.
+      После задержки → intention_state = "seeking_work" | "seeking_residence".
 
     Проход 2 (только seeking_work): Фильтр 2 → ищем dst_work
       → "seeking_residence" | adapt | none
@@ -730,7 +979,7 @@ def _fft_pipeline(
     Проход 3a (economic-driven, seeking_residence после фильтра 2):
       Фильтр 3 → commute | move | satellite_move | none
 
-    Проход 3b (place-driven, seeking_residence из фильтра 1):
+    Проход 3b (place-driven, seeking_residence из барьера 1):
       _place_driven_search → move (с сохранением workplace) | adapt | none
 
     Возвращает (df, stats, action_log).
@@ -760,20 +1009,27 @@ def _fft_pipeline(
             "domain_economic_gap": round(float(np.clip((thr_e - sat_e) / thr_e, 0.0, 1.0)), 4),
         }
 
-    # ── Проход 1: Фильтр 1 (доминантный домен + активация) ───────────────
-    df, activate_mask = _fft_filter1(df, dissatisfaction)
-    n_activate = int(activate_mask.sum())
+    # ── Проход 1: Двухбарьерная активация ────────────────────────────────
+    intention_before = df["intention_state"].values.copy()
+    df = _two_barrier_activation(df, G, dissatisfaction, rng)
 
-    if n_activate > 0:
-        activate_idx = np.where(activate_mask)[0]
-        for idx in activate_idx:
+    # Статистика активации
+    tpb_active_count = int(df["tpb_active"].sum())
+    stats["activated"] = tpb_active_count
+
+    # Считаем свежеактивированных (intention_state изменился на seeking_*)
+    new_seeking = (
+        (df["intention_state"].values != intention_before) &
+        (df["intention_state"].values != "none")
+    )
+    if new_seeking.any():
+        new_idx = np.where(new_seeking)[0]
+        for idx in new_idx:
             dom = df.at[idx, "activation_domain"]
             if dom == "economic":
                 stats["econ_activated"] += 1
             elif dom == "place":
                 stats["place_activated"] += 1
-            # intention_state уже установлен в _fft_filter1
-        stats["activated"] = n_activate
 
     # ── Проход 2: Фильтр 2 — дерево занятости (только seeking_work) ──────
     seeking_work_idx = np.where(df["intention_state"].values == "seeking_work")[0]
@@ -817,6 +1073,8 @@ def _fft_pipeline(
                 stats["adapts"] += 1
             else:
                 df.at[idx, "intention_state"] = "none"
+                df.at[idx, "tpb_active"]      = False
+                df.at[idx, "intention_delay"] = 0
                 df.at[idx, "inertia"] = float(np.clip(
                     df.at[idx, "inertia"] + 0.03, 0.05, 0.95
                 ))
@@ -840,6 +1098,8 @@ def _fft_pipeline(
 
         if not dst_work:
             df.at[idx, "intention_state"] = "none"
+            df.at[idx, "tpb_active"]      = False
+            df.at[idx, "intention_delay"] = 0
             continue
 
         comm_thr_norm = float(row["commuter_threshold"])
@@ -917,6 +1177,8 @@ def _fft_pipeline(
             else:
                 df.at[idx, "intention_state"] = "none"
                 df.at[idx, "dst_work"]        = ""
+                df.at[idx, "tpb_active"]      = False
+                df.at[idx, "intention_delay"] = 0
 
     # ── Проход 3b: Place-driven — поиск жилья с сохранением работы ────────
     place_driven_idx = np.where(
@@ -969,6 +1231,8 @@ def _fft_pipeline(
                 stats["adapts"] += 1
             else:
                 df.at[idx, "intention_state"] = "none"
+                df.at[idx, "tpb_active"]      = False
+                df.at[idx, "intention_delay"] = 0
 
     return df, stats, action_log
 
@@ -1040,6 +1304,50 @@ def tick(
             if n_grad > 0:
                 print(f"  [tick {tick_num}] Выпустилось студентов: {n_grad}")
 
+    # 1c. Ежетиковые обновления перед двухбарьерной проверкой
+    # ── signal_reduction: затухание ───────────────────────────────────────
+    df["signal_reduction"] = df["signal_reduction"].values * SIGNAL_DECAY
+
+    # ── weak_ties_utility: бонус за нахождение в хабе ─────────────────────
+    hub_mask = df["workplace_district"].isin(HUB_DISTRICTS).values
+    if hub_mask.any():
+        df.loc[hub_mask, "weak_ties_utility"] = np.clip(
+            df.loc[hub_mask, "weak_ties_utility"] + HUB_WEAK_TIES_BONUS, 0.0, 1.0
+        )
+
+    # ── econ_gap: адаптация восприятия к реальности ──────────────────────
+    for i in range(len(df)):
+        wp = df.at[i, "workplace_district"]
+        wp_attr = G.nodes.get(wp, {})
+        industry_avg_wp = wp_attr.get("avg_wage", NATIONAL_AVG_WAGE)
+        w = df.at[i, "wage"]
+        if w > 0 and industry_avg_wp > 0:
+            target_econ_gap = max(0.0, 1.0 - w / industry_avg_wp)
+        else:
+            target_econ_gap = 1.0
+        old_gap = df.at[i, "econ_gap"]
+        df.at[i, "econ_gap"] = float(np.clip(
+            (1.0 - GAP_ADAPT_LAMBDA) * old_gap + GAP_ADAPT_LAMBDA * target_econ_gap,
+            0.0, 1.0
+        ))
+
+    # ── domain_future_place: адаптация ожиданий места ─────────────────────
+    for i in range(len(df)):
+        res = df.at[i, "district"]
+        res_attr = G.nodes.get(res, {})
+        housing_price = res_attr.get("housing_price_m2", 1800.0)
+        infra_score   = res_attr.get("infrastructure_score", 0.5)
+        w = df.at[i, "wage"]
+        monthly_cost = housing_price * 50 * 0.004
+        burden = monthly_cost / max(w, 1.0)
+        affordability = max(0.0, 1.0 - burden / 0.35)
+        place_reality = 0.6 * affordability + 0.4 * infra_score
+        old_dfp = df.at[i, "domain_future_place"]
+        df.at[i, "domain_future_place"] = float(np.clip(
+            (1.0 - GAP_ADAPT_LAMBDA) * old_dfp + GAP_ADAPT_LAMBDA * place_reality,
+            0.0, 1.0
+        ))
+
     # 2. Давление рынка труда
     jobs_pressure = _compute_jobs_pressure(df, jobs_capacity)
 
@@ -1099,6 +1407,32 @@ def tick(
 
     df["social_boost"] = social_boosts
 
+    # 6. Блок C: обновление signal_reduction (новые сигналы от событий)
+    signal_reds = df["signal_reduction"].values.copy()
+    status_new   = df["status"].values
+    net_suscs    = df["net_signal_susc"].values
+
+    for i in range(len(df)):
+        new_signals = 0.0
+
+        # Сигнал 1: агент стал безработным
+        if status_before[i] != "unemployed" and status_new[i] == "unemployed":
+            new_signals += UNEMPLOYED_SIGNAL
+
+        # Сигнал 2: соседи переехали (residence изменился)
+        if residence_before[i] != df.at[i, "district"]:
+            # Этот агент переехал → его бывшие соседи получают сигнал
+            old_res = residence_before[i]
+            mask_neighbors = df["district"].values == old_res
+            signal_reds[mask_neighbors] = np.clip(
+                signal_reds[mask_neighbors] + NEIGHBOR_SIGNAL_COEF * net_suscs[mask_neighbors],
+                0.0, 1.0
+            )
+
+        signal_reds[i] = float(np.clip(signal_reds[i] + new_signals, 0.0, 1.0))
+
+    df["signal_reduction"] = signal_reds
+
     # 7. Реакция среды (residence counts для жилья, workplace counts для зарплат)
     residence_counts = df.groupby("district")["id"].count().to_dict()
     update_graph(G, residence_counts, n_agents)
@@ -1121,6 +1455,9 @@ def tick(
         "place_driven_moves": fft_stats["place_driven_moves"],
         "econ_activated":    fft_stats["econ_activated"],
         "place_activated":   fft_stats["place_activated"],
+        "tpb_active_count":  int(df["tpb_active"].sum()),
+        "avg_aspirations":   round(float(df["aspirations"].mean()), 4),
+        "avg_signal_red":    round(float(df["signal_reduction"].mean()), 4),
         "n_unemployed":      n_unemployed,
         "n_commuters":       n_commuters,
         "n_stay":            n_stay,
