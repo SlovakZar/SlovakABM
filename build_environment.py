@@ -1,30 +1,29 @@
-"""
-build_environment.py — собирает environment.json и agent_init_distributions.json
-из двух CSV: districts_master.csv и agent_distributions_with_industry.csv.
-
-Заменяет старый initializer.py + loaders.py для данных среды и дистрибуций.
-Данные опросного пайплайна (agent_params_from_survey.json) не затрагиваются.
-
-Выходные файлы:
-  environment.json         — узловые атрибуты для graph.py (среда)
-  agent_init_distributions.json — дистрибуции для agents.py (инициализация)
-
-Запуск:
-  python build_environment.py
-  python build_environment.py --master districts_master.csv \
-      --distributions agent_distributions_with_industry.csv \
-      --env_out environment.json --dist_out agent_init_distributions.json
-"""
-
+# build_environment_colab_fixed.py
 import json
 import argparse
+import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
+# ---- Определение среды Colab ----
+def is_colab():
+    try:
+        import google.colab
+        return True
+    except ImportError:
+        return False
 
+def mount_drive_if_colab():
+    if is_colab():
+        from google.colab import drive
+        drive.mount('/content/drive')
+        print("Google Drive смонтирован в /content/drive")
+    else:
+        print("Запуск не в Colab, монтирование Drive пропущено.")
+
+# ---- Вспомогательные функции (без изменений) ----
 def _to_float(val) -> float | None:
-    """Парсит числа с пробелами-разделителями тысяч и запятой как десятичным."""
     if pd.isna(val):
         return None
     s = str(val).replace("\xa0", "").replace("\u202f", "").replace(" ", "").replace(",", ".")
@@ -33,36 +32,31 @@ def _to_float(val) -> float | None:
     except ValueError:
         return None
 
-
-# ── Маппинги ──────────────────────────────────────────────────────────────────
-
-# Полная категория образования → 3-уровневая группа (для SASD lookup)
 EDU_MAP = {
-    "With no school education (aged 15+)":                              "low",
-    "Elementary - 1st level of primary school":                         "low",
-    "Elementary - 2nd level of primary school":                         "low",
-    "Primary education (not specified)":                                "low",
+    "With no school education (aged 15+)": "low",
+    "Elementary - 1st level of primary school": "low",
+    "Elementary - 2nd level of primary school": "low",
+    "Primary education (not specified)": "low",
     "Secondary technical (vocational) education with no graduation - with no certificate of apprenticeship (on-the-job training, pre-employment training)": "low",
     "Secondary technical (vocational) education with no graduation - with a certificate of apprenticeship": "low",
     "Secondary technical (vocational) education with no graduation - with a final examination certificate": "low",
     "Secondary technical (vocational) education with no graduation (not specified)": "low",
-    "Complete secondary education with graduation (not specified)":      "medium",
-    "Complete secondary education with graduation - general":           "medium",
-    "Complete secondary education with graduation - technical":         "medium",
+    "Complete secondary education with graduation (not specified)": "medium",
+    "Complete secondary education with graduation - general": "medium",
+    "Complete secondary education with graduation - technical": "medium",
     "Complete secondary education with graduation - technical (vocational) with a certificate of apprenticeship": "medium",
-    "Higher technical education (not specified)":                       "medium",
+    "Higher technical education (not specified)": "medium",
     "Higher technical education - higher technical (school-leaving examination, graduation diploma)": "medium",
     "Higher technical education - post-secondary (post-graduation qualifying)": "medium",
     "Higher technical education - post-secondary (school-leaving examination in the fields of study for secondary technical school graduates)": "medium",
-    "Higher education (not specified)":                                 "high",
-    "Higher education - 1st level (Bc.)":                              "high",
-    "Higher education - 2nd level (Ing.; Mgr.; MUDr.; etc.)":         "high",
-    "Higher education - 3rd level (PhD.; etc.)":                       "high",
-    "Confidential":                                                     None,
-    "Not found out":                                                    None,
+    "Higher education (not specified)": "high",
+    "Higher education - 1st level (Bc.)": "high",
+    "Higher education - 2nd level (Ing.; Mgr.; MUDr.; etc.)": "high",
+    "Higher education - 3rd level (PhD.; etc.)": "high",
+    "Confidential": None,
+    "Not found out": None,
 }
 
-# Возрастная группа (бин из SODB) → мидпоинт и ширина
 AGE_BIN_META = {
     "15 - 19 years": (17.0, 5),
     "20 - 24 years": (22.0, 5),
@@ -82,31 +76,23 @@ AGE_BIN_META = {
     "90 and more years": (93.0, 10),
 }
 
-# Отрасль (из agent_distributions) → зарплатный столбец в districts_master
 INDUSTRY_TO_SALARY_COL = {
-    "Agriculture, forestry and fishing":                                           "salary_agriculture",
-    "Manufacturing total":                                                         "salary_manufacturing",
-    "Water supply; sewerage, waste management and remediation activities":         "salary_water",
-    "Construction":                                                                "salary_construction",
-    "Wholesale and retail trade; repair of motor vehicles and motorcycles":        "salary_trade",
-    "Transportation and storage":                                                  "salary_transport",
-    "Accommodation and food service activities":                                   "salary_accommodation",
-    "Information and communication":                                               "salary_ict",
-    "Professional, scientific and technical activities":                           "salary_professional",
-    "Administrative and support service activities":                               "salary_admin",
-    "Public administration and defence":                                           "salary_public",
-    "Human health and social work activities":                                     "salary_health",
-    "Other":                                                                       "avg_wage",
+    "Agriculture, forestry and fishing": "salary_agriculture",
+    "Manufacturing total": "salary_manufacturing",
+    "Water supply; sewerage, waste management and remediation activities": "salary_water",
+    "Construction": "salary_construction",
+    "Wholesale and retail trade; repair of motor vehicles and motorcycles": "salary_trade",
+    "Transportation and storage": "salary_transport",
+    "Accommodation and food service activities": "salary_accommodation",
+    "Information and communication": "salary_ict",
+    "Professional, scientific and technical activities": "salary_professional",
+    "Administrative and support service activities": "salary_admin",
+    "Public administration and defence": "salary_public",
+    "Human health and social work activities": "salary_health",
+    "Other": "avg_wage",
 }
 
-
-# ── Вспомогательные функции ───────────────────────────────────────────────────
-
 def _pivot_distribution(df_var: pd.DataFrame, sex_col_needed: bool = True) -> dict:
-    """
-    Преобразует строки (district, sex, category, count, share) в
-    {district: {sex: {category: count}}} или {district: {category: count}}.
-    """
     result = {}
     for (district, sex), grp in df_var.groupby(["district", "sex"]):
         cats = {row["category"]: int(row["count"])
@@ -117,21 +103,16 @@ def _pivot_distribution(df_var: pd.DataFrame, sex_col_needed: bool = True) -> di
         if sex_col_needed:
             result.setdefault(district, {})[sex] = cats
         else:
-            # Merge across sex (already 'all')
             result[district] = cats
     return result
 
-
 def _normalize(d: dict) -> dict:
-    """Нормирует словарь {k: count} → {k: share}, пропуская нули."""
     total = sum(d.values())
     if total == 0:
         return {}
     return {k: round(v / total, 6) for k, v in d.items() if v > 0}
 
-
 def _collapse_education(edu_counts: dict) -> dict:
-    """Сворачивает детальные категории образования в low/medium/high."""
     out = {"low": 0, "medium": 0, "high": 0}
     for cat, cnt in edu_counts.items():
         grp = EDU_MAP.get(cat)
@@ -139,28 +120,40 @@ def _collapse_education(edu_counts: dict) -> dict:
             out[grp] += cnt
     return {k: v for k, v in out.items() if v > 0}
 
-
-# ── Основная функция ──────────────────────────────────────────────────────────
+def _build_companies_by_industry(df_companies: pd.DataFrame) -> dict:
+    result = {}
+    for _, row in df_companies.iterrows():
+        district = row["District"]
+        industry = row["Industry"]
+        size = row["Size"]
+        count = int(row["Companies"])
+        if district not in result:
+            result[district] = {}
+        if industry not in result[district]:
+            result[district][industry] = {"small": 0, "medium": 0, "large": 0, "total": 0}
+        result[district][industry][size] = count
+        result[district][industry]["total"] += count
+    return result
 
 def build(
     master_path: str = "districts_master.csv",
     dist_path: str = "agent_distributions_with_industry.csv",
-    workers_path: str = "WorkersCategories.csv",
+    companies_path: str = "companies_by_district_industry_size.csv",
     env_out: str = "environment.json",
     dist_out: str = "agent_init_distributions.json",
 ):
     print("Загрузка данных...")
     dm = pd.read_csv(master_path, sep=";")
     dd = pd.read_csv(dist_path)
+    dc = pd.read_csv(companies_path, sep=";")
 
-    # Убираем BOM если есть
     dd.columns = [c.lstrip("\ufeff") for c in dd.columns]
 
     print(f"  districts_master: {len(dm)} районов, {len(dm.columns)} столбцов")
-
+    print(f"  companies: {len(dc)} строк, {dc['Industry'].nunique()} отраслей")
     print(f"  agent_distributions: {len(dd)} строк, {dd['variable'].nunique()} переменных")
 
-    # ── Пивот по переменным ───────────────────────────────────────────────────
+    companies_by_ind = _build_companies_by_industry(dc)
     var_dfs = {v: dd[dd["variable"] == v].copy() for v in dd["variable"].unique()}
 
     age_dist    = _pivot_distribution(var_dfs["age_group"], sex_col_needed=True)
@@ -171,15 +164,13 @@ def build(
     econ_dist   = _pivot_distribution(var_dfs["economic_activity"], sex_col_needed=False)
     ind_dist    = _pivot_distribution(var_dfs["industry"], sex_col_needed=False)
 
-    # ── environment.json: узловые атрибуты ───────────────────────────────────
+    # environment.json
     print("\nСтроим environment.json...")
     locations = {}
-
     for _, row in dm.iterrows():
         district = row["district"]
         region   = row["region"]
 
-        # Зарплаты по отраслям
         salary_by_industry = {}
         for ind_label, col in INDUSTRY_TO_SALARY_COL.items():
             if col in dm.columns:
@@ -187,7 +178,6 @@ def build(
                 if pd.notna(val) and val > 0:
                     salary_by_industry[ind_label] = float(val)
 
-        # Жильё
         housing = {
             "price_m2":             _to_float(row["housing_price_m2"]),
             "apartment_price_eur":  _to_float(row["apartment_price_eur"]),
@@ -197,7 +187,6 @@ def build(
             "vacant_dwellings":     int(row["vacant_dwellings"]) if pd.notna(row["vacant_dwellings"]) else None,
         }
 
-        # Инфраструктура
         infrastructure = {
             "polyclinics":     (int(_to_float(row["polyclinics_count"]) or 0)),
             "hospitals":       (int(_to_float(row["hospitals_count"]) or 0)),
@@ -206,13 +195,14 @@ def build(
             "galleries":       (int(_to_float(row["galleries_count"]) or 0)),
         }
 
-        # Бизнес
+        companies_industry = companies_by_ind.get(district, {})
         business = {
             "total_companies":   (int(_to_float(row["total_companies"]) or 0)),
             "foreign_companies": int(str(row["foreign_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["foreign_companies"]) else 0,
             "small_companies":   int(str(row["small_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["small_companies"]) else 0,
             "medium_companies":  int(str(row["medium_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["medium_companies"]) else 0,
             "large_companies":   int(str(row["large_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["large_companies"]) else 0,
+            "by_industry":       companies_industry,
         }
 
         locations[district] = {
@@ -242,16 +232,15 @@ def build(
     size_kb = Path(env_out).stat().st_size / 1024
     print(f"  ✓ {env_out} — {len(locations)} районов, {size_kb:.0f} KB")
 
-    # ── agent_init_distributions.json ────────────────────────────────────────
+    # agent_init_distributions.json
     print("\nСтроим agent_init_distributions.json...")
-
     agent_dists = {}
 
     for district in dm["district"]:
         row = dm[dm["district"] == district].iloc[0]
         region = row["region"]
 
-        # 1. Возраст × пол (ключ для сэмплирования)
+        # Возраст × пол
         age_sex = {}
         for sex, age_cats in age_dist.get(district, {}).items():
             for cat, cnt in age_cats.items():
@@ -263,12 +252,12 @@ def build(
                         "sex": sex,
                     }
 
-        # 2. Образование (детальное + сгруппированное)
+        # Образование
         edu_raw = edu_dist.get(district, {})
         edu_grouped = _collapse_education(edu_raw)
         edu_shares = _normalize(edu_grouped)
 
-        # 3. Семейный статус по полу
+        # Семейный статус
         marital = {}
         for sex, cats in marital_dist.get(district, {}).items():
             clean = {k: v for k, v in cats.items()
@@ -276,7 +265,7 @@ def build(
             if clean:
                 marital[sex] = _normalize(clean)
 
-        # 4. Национальность (агрегированная)
+        # Национальность
         nat_agg = {"Slovak": 0, "Hungarian": 0, "Roma": 0, "Other": 0}
         for sex, cats in nat_dist.get(district, {}).items():
             for cat, cnt in cats.items():
@@ -292,7 +281,7 @@ def build(
         if not nat_shares:
             nat_shares = {"Slovak": 1.0}
 
-        # 5. Занятость
+        # Занятость
         econ_raw = econ_dist.get(district, {})
         employed_cnt = sum(v for k, v in econ_raw.items()
                            if "Working" in k and "Confidential" not in k)
@@ -307,12 +296,12 @@ def build(
                                   if k not in ("Confidential",)},
         }
 
-        # 6. Отрасль занятости — из agent_distributions (residence-based, SODB 2021)
+        # Отрасль занятости
         ind_raw = ind_dist.get(district, {})
         workers_counts = {k: v for k, v in ind_raw.items() if k not in ("Confidential",)}
         ind_shares = _normalize(workers_counts)
 
-        # 7. Зарплата по отраслям (из districts_master) — маппинг к WC-отраслям
+        # Зарплата по отраслям
         salary_lookup = {}
         for ind_label, col in INDUSTRY_TO_SALARY_COL.items():
             if col in dm.columns:
@@ -320,7 +309,6 @@ def build(
                 if pd.notna(val) and val > 0:
                     salary_lookup[ind_label] = float(val)
 
-        # 8. Жильё — owns_property proxy
         owner_share = float(row["owner_share"]) if pd.notna(row["owner_share"]) else 0.65
 
         agent_dists[district] = {
@@ -353,7 +341,7 @@ def build(
     size_kb = Path(dist_out).stat().st_size / 1024
     print(f"  ✓ {dist_out} — {len(agent_dists)} районов, {size_kb:.0f} KB")
 
-    # ── Диагностика ───────────────────────────────────────────────────────────
+    # Диагностика
     print("\n── Диагностика ──")
     sample_d = "District of Bratislava I"
     if sample_d in agent_dists:
@@ -374,20 +362,40 @@ def build(
     print("\n✓ Готово.")
     return env_data, dist_data
 
-
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
+# ---- CLI с поддержкой Colab и parse_known_args ----
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build environment + agent init distributions")
-    parser.add_argument("--master",        default="districts_master.csv")
-    parser.add_argument("--distributions", default="agent_distributions_with_industry.csv")
-    parser.add_argument("--env_out",       default="environment.json")
-    parser.add_argument("--dist_out",      default="agent_init_distributions.json")
-    args = parser.parse_args()
+    mount_drive_if_colab()
+
+    parser = argparse.ArgumentParser(description="Build environment + agent init distributions (Colab-ready)")
+    parser.add_argument("--data_dir", default="/content/drive/MyDrive/",
+                        help="Корневая папка с CSV-файлами (например, /content/drive/MyDrive/agent_data)")
+    parser.add_argument("--master", default="districts_master.csv",
+                        help="Имя файла districts_master.csv (относительно data_dir)")
+    parser.add_argument("--distributions", default="agent_distributions_with_industry.csv",
+                        help="Имя файла agent_distributions_with_industry.csv")
+    parser.add_argument("--companies", default="companies_by_district_industry_size.csv",
+                        help="Имя файла companies_by_district_industry_size.csv")
+    parser.add_argument("--env_out", default="environment.json",
+                        help="Выходной файл environment.json")
+    parser.add_argument("--dist_out", default="agent_init_distributions.json",
+                        help="Выходной файл agent_init_distributions.json")
+
+    # Разрешаем неизвестные аргументы (например, -f из Colab)
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"⚠️ Предупреждение: игнорирую неизвестные аргументы: {unknown}")
+
+    master_path = os.path.join(args.data_dir, args.master)
+    dist_path = os.path.join(args.data_dir, args.distributions)
+    companies_path = os.path.join(args.data_dir, args.companies)
 
     build(
-        master_path=args.master,
-        dist_path=args.distributions,
+        master_path=master_path,
+        dist_path=dist_path,
+        companies_path=companies_path,
         env_out=args.env_out,
         dist_out=args.dist_out,
     )
+    from google.colab import files
+    files.download('environment.json')
+    files.download('agent_init_distributions.json')
