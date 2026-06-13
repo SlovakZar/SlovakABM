@@ -141,8 +141,21 @@ def build_graph(
 
         # jobs_capacity — сумма занятых по всем отраслям из environment
         salary_by_ind = loc.get("salary_by_industry", {})
+        business_data = loc.get("business", {})
         # Если нет детальных данных — используем population * занятость ~45%
         jobs_capacity = max(1, int(population * (1 - unemployment_rate) * 0.45))
+
+        # ── Отраслевая ёмкость: распределяем jobs_capacity по отраслям ────
+        # Вес отрасли = её зарплата / сумма зарплат → более высокооплачиваемые
+        # отрасли имеют пропорционально большую долю рынка труда.
+        total_salary = sum(salary_by_ind.values()) if salary_by_ind else 1.0
+        industry_capacity = {}
+        if salary_by_ind:
+            for ind, sal in salary_by_ind.items():
+                share = sal / max(total_salary, 1.0)
+                industry_capacity[ind] = max(1, int(jobs_capacity * share))
+        else:
+            industry_capacity = {"Other": jobs_capacity}
 
         G.add_node(
             district,
@@ -156,11 +169,14 @@ def build_graph(
             avg_wage_base=float(avg_wage),
             housing_price_base=float(housing_m2),
             infrastructure_score=infrastructure_score,
-            salary_by_industry=salary_by_ind,             # <-- v8: отраслевые зарплаты
+            salary_by_industry=salary_by_ind,             # отраслевые зарплаты
+            industry_capacity=industry_capacity,          # отраслевая ёмкость (базовая)
+            business=business_data,                       # бизнес-статистика
             # Динамические (обновляются каждый тик)
             avg_wage=float(avg_wage),
             housing_price_m2=float(housing_m2),
             agent_count=0,
+            industry_pressure={},                         # давление по отраслям
         )
 
     # ── Рёбра ────────────────────────────────────────────────────────────────
@@ -197,21 +213,38 @@ def get_awareness_set(
     district: str,
     network_location: bool = False,
     perceived_control: float = 0.5,
+    info_quality: float = 0.5,
     max_candidates: int = 15,
+    mode: str = "work",  # "work" | "residence" | "satellite"
 ) -> list:
     """
     Формирует awareness_set — районы которые агент реально рассматривает.
 
       1. Соседи по commuting-графу в пределах time_limit
-         time_limit растёт с perceived_control: 0.3 → 45 мин, 0.7 → 120 мин
+         time_limit растёт с perceived_control и info_quality.
       2. Если network_location=True — региональные центры других краёв
+      3. Кандидаты сортируются по total_flow и обрезаются до max_candidates.
+
+    mode:
+      "work" — out-edges из residence (куда ездят работать)
+      "residence" — out-edges из residence (куда можно переехать)
+      "satellite" — in-edges в dst_work (откуда ездят работать — спутники)
     """
-    time_limit = 30.0 + 150.0 * perceived_control
+    # time_limit: perceived_control задаёт базовый радиус, info_quality расширяет
+    time_limit = 30.0 + 150.0 * perceived_control * (0.7 + 0.6 * info_quality)
 
     candidates = set()
-    for _, dst, attr in G.out_edges(district, data=True):
-        if attr.get("travel_time_min", 999) <= time_limit:
-            candidates.add(dst)
+
+    if mode == "satellite":
+        # Входящие потоки: кто ездит работать в этот район
+        for src, _, attr in G.in_edges(district, data=True):
+            if attr.get("travel_time_min", 999) <= time_limit:
+                candidates.add(src)
+    else:
+        # Исходящие потоки: куда ездят из этого района
+        for _, dst, attr in G.out_edges(district, data=True):
+            if attr.get("travel_time_min", 999) <= time_limit:
+                candidates.add(dst)
 
     if network_location:
         current_region = G.nodes[district].get("region", "XX")
@@ -221,14 +254,19 @@ def get_awareness_set(
 
     candidates.discard(district)
 
-    if len(candidates) > max_candidates:
-        def _weight(d):
-            return G[district][d].get("flow_weight", 0) if G.has_edge(district, d) else 0
-        candidates = sorted(candidates, key=_weight, reverse=True)[:max_candidates]
-    else:
-        candidates = list(candidates)
+    # Сортировка по total_flow (убывание) и обрезка
+    def _flow_weight(d):
+        if G.has_edge(district, d):
+            return G[district][d].get("total_flow", 0)
+        elif G.has_edge(d, district):
+            return G[d][district].get("total_flow", 0)
+        return 0
 
-    return candidates
+    sorted_candidates = sorted(candidates, key=_flow_weight, reverse=True)
+    if len(sorted_candidates) > max_candidates:
+        sorted_candidates = sorted_candidates[:max_candidates]
+
+    return sorted_candidates
 
 
 def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
@@ -271,6 +309,30 @@ def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
         G.nodes[district]["housing_price_m2"] = round(new_housing, 0)
         G.nodes[district]["avg_wage"]          = round(new_wage, 0)
         G.nodes[district]["agent_count"]        = current_agents
+
+
+def update_industry_pressure(G: nx.DiGraph, df):
+    """
+    Вычисляет отраслевое давление (industry_pressure) для каждого узла графа.
+
+    industry_pressure[district][industry] = занятые_агенты / industry_capacity.
+    Значение > 1.0 означает перегрузку отрасли в районе.
+    Вызывается каждый тик из engine.tick().
+    """
+    # Подсчитываем занятых агентов по (workplace_district, industry)
+    employed = df[df["is_employed"]]
+    wp_ind_counts = (employed
+                     .groupby(["workplace_district", "industry"])["id"]
+                     .count()
+                     .to_dict())
+
+    for district in G.nodes:
+        cap = G.nodes[district].get("industry_capacity", {})
+        pressure = {}
+        for ind, capacity in cap.items():
+            cnt = wp_ind_counts.get((district, ind), 0)
+            pressure[ind] = round(cnt / max(capacity, 1), 3)
+        G.nodes[district]["industry_pressure"] = pressure
 
 
 def print_graph_summary(G: nx.DiGraph):
