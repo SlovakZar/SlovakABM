@@ -650,6 +650,318 @@ def compare_snapshots(
 # 5. SUMMARY REPORT — обёртка для полного отчёта
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 5. AGENT PARAMETERS TABLE — матрица параметров агентов с динамикой
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Константы для вычисления capabilities (синхронизированы с engine.py)
+_NATIONAL_AVG_WAGE = 1614.0
+_EDU_MAP = {"low": 0.25, "medium": 0.55, "high": 0.85}
+
+
+def _compute_capabilities(agent_row) -> float:
+    """Вычисляет capabilities = (income_index + education_index + weak_ties) / 3."""
+    wage = float(agent_row.get("wage", 0))
+    income_index = min(wage / (1.5 * _NATIONAL_AVG_WAGE), 1.0)
+    edu = str(agent_row.get("education", "medium"))
+    education_index = _EDU_MAP.get(edu, 0.55)
+    weak_ties = float(agent_row.get("weak_ties_utility", 0.0))
+    return round((income_index + education_index + weak_ties) / 3.0, 4)
+
+
+def _compute_dynamic_inertia(agent_row) -> float:
+    """Динамическая инерция = inertia × max(0.3, 1 − signal_reduction)."""
+    inertia = float(agent_row.get("inertia", 0.5))
+    signal_red = float(agent_row.get("signal_reduction", 0.0))
+    return round(inertia * max(0.3, 1.0 - signal_red), 4)
+
+
+def _fmt_arrow(v0, v6, fmt_spec=".3f", width=10) -> str:
+    """Форматирует значение tick0→tick6 с выравниванием."""
+    s0 = f"{v0:{fmt_spec}}"
+    s6 = f"{v6:{fmt_spec}}"
+    arrow = f"{s0}→{s6}"
+    return f"{arrow:>{width}}"
+
+
+def _fmt_bool_arrow(v0, v6, width=8) -> str:
+    """Форматирует булево значение ✓/✗."""
+    s0 = "✓" if v0 else "✗"
+    s6 = "✓" if v6 else "✗"
+    arrow = f"{s0}→{s6}"
+    return f"{arrow:>{width}}"
+
+
+def agent_parameters_table(
+    snapshots: dict,
+    n_show: int = 20,
+    tick_a: int = 0,
+    tick_b: int = 6,
+    seed: int = 42,
+) -> str:
+    """
+    Матрица параметров агентов: aspirations, capabilities, inertia,
+    dynamic_inertia, TPB (active/delay), internal_mig_thr, signal_reduction.
+
+    Сравнивает tick_a (начало) и tick_b (после N тиков) для одних и тех же агентов.
+    Показывает динамику изменений в формате «значение_0 → значение_N».
+
+    Параметры:
+      snapshots — словарь {tick: DataFrame}
+      n_show    — сколько агентов показать (default 20)
+      tick_a    — начальный тик (default 0)
+      tick_b    — конечный тик (default 6)
+      seed      — для воспроизводимой выборки
+    """
+    lines = []
+
+    # Проверяем наличие снимков
+    if tick_a not in snapshots:
+        return f"\n  [agent_parameters_table] Снимок для тика {tick_a} отсутствует."
+    if tick_b not in snapshots:
+        return f"\n  [agent_parameters_table] Снимок для тика {tick_b} отсутствует."
+
+    df_a = snapshots[tick_a]
+    df_b = snapshots[tick_b]
+
+    # Находим общих агентов по ID
+    ids_a = set(df_a["id"].values)
+    ids_b = set(df_b["id"].values)
+    common_ids = sorted(ids_a & ids_b)
+
+    if len(common_ids) == 0:
+        return "\n  [agent_parameters_table] Нет общих агентов между снимками."
+
+    # Выборка агентов
+    rng = np.random.default_rng(seed)
+    n_sample = min(n_show, len(common_ids))
+    sampled_ids = sorted(rng.choice(list(common_ids), n_sample, replace=False))
+
+    # Готовим отсортированные выборки для per-agent цикла и статистики
+    sampled_df_a = df_a[df_a["id"].isin(sampled_ids)].sort_values("id").reset_index(drop=True)
+    sampled_df_b = df_b[df_b["id"].isin(sampled_ids)].sort_values("id").reset_index(drop=True)
+
+    # ── Заголовок ────────────────────────────────────────────────────────
+    header = "═" * 130
+    title = f"  МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ: Динамика Тик {tick_a} → Тик {tick_b} (n={n_sample})"
+    lines += [header, title, header]
+
+    # ── Легенда ──────────────────────────────────────────────────────────
+    lines.append(
+        "  Aspirations  — EWMA-накопление неудовлетворённости (Барьер 1: потенциал миграции)"
+    )
+    lines.append(
+        "  Capabilities — (income_index + education_index + weak_ties) / 3"
+    )
+    lines.append(
+        "  Inertia      — базовая инерция агента"
+    )
+    lines.append(
+        "  DynInert     — динамическая инерция = inertia × max(0.3, 1 − signal_reduction)"
+    )
+    lines.append(
+        "  TPB          — флаг активности / счётчик задержки намерения (Барьер 2)"
+    )
+    lines.append(
+        "  Thr_mig      — internal_mig_threshold (порог срабатывания TPB-намерения)"
+    )
+    lines.append(
+        "  SignRed      — signal_reduction (накопленный эффект сигналов, снижающий инерцию)"
+    )
+    lines.append(
+        "  IntState     — intention_state (none | seeking_work | seeking_residence)"
+    )
+
+    # ── Шапка таблицы ────────────────────────────────────────────────────
+    lines.append("")
+    lines.append(
+        f"  {'ID':>5}  {'Тип':<11}  {'Статус':<17}  "
+        f"{'Aspirations':>13}  {'Capabilities':>13}  {'Inertia':>13}  "
+        f"{'DynInert':>13}  {'TPB(акт/зад)':>14}  {'Thr_mig':>8}  "
+        f"{'SignRed':>13}  {'IntState':<18}"
+    )
+    lines.append("  " + "─" * 128)
+
+    # ── Строки агентов ──────────────────────────────────────────────────
+    for i in range(len(sampled_df_a)):
+        ra = sampled_df_a.iloc[i]
+        rb = sampled_df_b.iloc[i]
+        agent_id = int(ra["id"])
+
+        def _get(row, col, default=""):
+            try:
+                return row[col]
+            except (KeyError, TypeError):
+                return default
+
+        # Базовые поля
+        agent_type = str(_get(ra, "agent_type", "?"))[:11]
+        status_a   = str(_get(ra, "status", "?"))
+        status_b   = str(_get(rb, "status", "?"))
+
+        # Параметры с динамикой
+        aspirations_a = float(_get(ra, "aspirations", 0))
+        aspirations_b = float(_get(rb, "aspirations", 0))
+
+        capabilities_a = _compute_capabilities(ra)
+        capabilities_b = _compute_capabilities(rb)
+
+        inertia_a = float(_get(ra, "inertia", 0))
+        inertia_b = float(_get(rb, "inertia", 0))
+
+        dyn_inertia_a = _compute_dynamic_inertia(ra)
+        dyn_inertia_b = _compute_dynamic_inertia(rb)
+
+        tpb_active_a = bool(_get(ra, "tpb_active", False))
+        tpb_active_b = bool(_get(rb, "tpb_active", False))
+        tpb_delay_a  = int(_get(ra, "intention_delay", 0))
+        tpb_delay_b  = int(_get(rb, "intention_delay", 0))
+
+        thr_mig_a = float(_get(ra, "internal_mig_thr", 0))
+        thr_mig_b = float(_get(rb, "internal_mig_thr", 0))
+
+        sign_red_a = float(_get(ra, "signal_reduction", 0))
+        sign_red_b = float(_get(rb, "signal_reduction", 0))
+
+        int_state_a = str(_get(ra, "intention_state", "none"))
+        int_state_b = str(_get(rb, "intention_state", "none"))
+
+        # Форматирование
+        id_str       = f"{agent_id:>5}"
+        type_str     = f"{agent_type:<11}"
+        status_str   = f"{status_a} → {status_b}"
+        status_str   = f"{status_str:<17}"
+
+        aspir_str    = _fmt_arrow(aspirations_a, aspirations_b, ".3f", 13)
+        capab_str    = _fmt_arrow(capabilities_a, capabilities_b, ".3f", 13)
+        inertia_str  = _fmt_arrow(inertia_a, inertia_b, ".3f", 13)
+        dyn_str      = _fmt_arrow(dyn_inertia_a, dyn_inertia_b, ".3f", 13)
+
+        tpb_str      = f"{_fmt_bool_arrow(tpb_active_a, tpb_active_b, 6)} {tpb_delay_a}→{tpb_delay_b}"
+        tpb_str      = f"{tpb_str:>14}"
+
+        thr_str      = _fmt_arrow(thr_mig_a, thr_mig_b, ".3f", 8)
+        sign_str     = _fmt_arrow(sign_red_a, sign_red_b, ".3f", 13)
+        int_state_s  = f"{int_state_a} → {int_state_b}"
+        int_state_s  = f"{int_state_s:<18}"
+
+        lines.append(
+            f"  {id_str}  {type_str}  {status_str}  "
+            f"{aspir_str}  {capab_str}  {inertia_str}  "
+            f"{dyn_str}  {tpb_str}  {thr_str}  "
+            f"{sign_str}  {int_state_s}"
+        )
+
+    # ── Сводная статистика по выборке ────────────────────────────────────
+    lines.append("  " + "─" * 128)
+
+    def _col_mean(df_sub, col):
+        if col not in df_sub.columns:
+            return 0.0
+        return float(df_sub[col].mean())
+
+    lines.append("  СВОДКА ПО ВЫБОРКЕ (средние):")
+    lines.append(
+        f"  {'':>5}  {'':11}  {'':17}  "
+        f"{'Aspirations':>13}  {'Capabilities':>13}  {'Inertia':>13}  "
+        f"{'DynInert':>13}  {'TPB(акт/зад)':>14}  {'Thr_mig':>8}  "
+        f"{'SignRed':>13}  {'IntState':<18}"
+    )
+
+    m_asp_a = _col_mean(sampled_df_a, "aspirations")
+    m_asp_b = _col_mean(sampled_df_b, "aspirations")
+    m_in_a  = _col_mean(sampled_df_a, "inertia")
+    m_in_b  = _col_mean(sampled_df_b, "inertia")
+    m_sr_a  = _col_mean(sampled_df_a, "signal_reduction")
+    m_sr_b  = _col_mean(sampled_df_b, "signal_reduction")
+    m_th_a  = _col_mean(sampled_df_a, "internal_mig_thr")
+    m_th_b  = _col_mean(sampled_df_b, "internal_mig_thr")
+    m_tpb_a = _col_mean(sampled_df_a, "tpb_active")
+    m_tpb_b = _col_mean(sampled_df_b, "tpb_active")
+    m_del_a = _col_mean(sampled_df_a, "intention_delay")
+    m_del_b = _col_mean(sampled_df_b, "intention_delay")
+
+    # Capabilities вычисляем
+    caps_a_vals = [_compute_capabilities(sampled_df_a.iloc[i]) for i in range(len(sampled_df_a))]
+    caps_b_vals = [_compute_capabilities(sampled_df_b.iloc[i]) for i in range(len(sampled_df_b))]
+    m_cap_a = np.mean(caps_a_vals) if caps_a_vals else 0.0
+    m_cap_b = np.mean(caps_b_vals) if caps_b_vals else 0.0
+
+    # Dynamic inertia
+    dyn_a_vals = [_compute_dynamic_inertia(sampled_df_a.iloc[i]) for i in range(len(sampled_df_a))]
+    dyn_b_vals = [_compute_dynamic_inertia(sampled_df_b.iloc[i]) for i in range(len(sampled_df_b))]
+    m_dyn_a = np.mean(dyn_a_vals) if dyn_a_vals else 0.0
+    m_dyn_b = np.mean(dyn_b_vals) if dyn_b_vals else 0.0
+
+    m_asp_str   = _fmt_arrow(m_asp_a, m_asp_b, ".3f", 13)
+    m_cap_str   = _fmt_arrow(m_cap_a, m_cap_b, ".3f", 13)
+    m_in_str    = _fmt_arrow(m_in_a, m_in_b, ".3f", 13)
+    m_dyn_str   = _fmt_arrow(m_dyn_a, m_dyn_b, ".3f", 13)
+    m_tpb_s     = f"{_fmt_bool_arrow(m_tpb_a > 0.5, m_tpb_b > 0.5, 6)} {m_del_a:.1f}→{m_del_b:.1f}"
+    m_tpb_s     = f"{m_tpb_s:>14}"
+    m_th_str    = _fmt_arrow(m_th_a, m_th_b, ".3f", 8)
+    m_sr_str    = _fmt_arrow(m_sr_a, m_sr_b, ".3f", 13)
+
+    # Статусы
+    st_a_counts = sampled_df_a["status"].value_counts().to_dict() if "status" in sampled_df_a.columns else {}
+    st_b_counts = sampled_df_b["status"].value_counts().to_dict() if "status" in sampled_df_b.columns else {}
+    st_a_top = max(st_a_counts, key=st_a_counts.get) if st_a_counts else "?"
+    st_b_top = max(st_b_counts, key=st_b_counts.get) if st_b_counts else "?"
+    m_st_str = f"{'СРЕДНЕЕ':>5}  {'—':11}  {st_a_top+'→'+st_b_top:<17}"
+
+    # Intention states
+    is_a_counts = sampled_df_a["intention_state"].value_counts().to_dict() if "intention_state" in sampled_df_a.columns else {}
+    is_b_counts = sampled_df_b["intention_state"].value_counts().to_dict() if "intention_state" in sampled_df_b.columns else {}
+    is_a_top = max(is_a_counts, key=is_a_counts.get) if is_a_counts else "none"
+    is_b_top = max(is_b_counts, key=is_b_counts.get) if is_b_counts else "none"
+    m_is_str = f"{is_a_top}→{is_b_top}"
+
+    lines.append(
+        f"  {m_st_str}  "
+        f"{m_asp_str}  {m_cap_str}  {m_in_str}  "
+        f"{m_dyn_str}  {m_tpb_s}  {m_th_str}  "
+        f"{m_sr_str}  {m_is_str}"
+    )
+
+    # ── Анализ изменений ─────────────────────────────────────────────────
+    lines.append("")
+    lines.append("  АНАЛИЗ ДИНАМИКИ:")
+
+    # Используем уже отфильтрованные sampled_df
+    n_asp_up = int(
+        (sampled_df_b["aspirations"].values > sampled_df_a["aspirations"].values).sum()
+    ) if "aspirations" in sampled_df_a.columns else 0
+
+    tpb_a = sampled_df_a["tpb_active"].values.astype(bool) if "tpb_active" in sampled_df_a.columns else np.zeros(n_sample, dtype=bool)
+    tpb_b = sampled_df_b["tpb_active"].values.astype(bool) if "tpb_active" in sampled_df_b.columns else np.zeros(n_sample, dtype=bool)
+    n_tpb_new = int((~tpb_a & tpb_b).sum())
+
+    is_a = sampled_df_a["intention_state"].values if "intention_state" in sampled_df_a.columns else np.full(n_sample, "none")
+    is_b = sampled_df_b["intention_state"].values if "intention_state" in sampled_df_b.columns else np.full(n_sample, "none")
+    n_state_changed = int((is_a != is_b).sum())
+
+    st_a = sampled_df_a["status"].values if "status" in sampled_df_a.columns else np.full(n_sample, "?")
+    st_b = sampled_df_b["status"].values if "status" in sampled_df_b.columns else np.full(n_sample, "?")
+    n_status_changed = int((st_a != st_b).sum())
+
+    lines.append(f"  Агентов с ростом aspirations:              {n_asp_up}/{n_sample}")
+    lines.append(f"  Новых TPB-активаций:                        {n_tpb_new}/{n_sample}")
+    lines.append(f"  Изменивших intention_state:                 {n_state_changed}/{n_sample}")
+    lines.append(f"  Изменивших статус занятости:                {n_status_changed}/{n_sample}")
+
+    # Распределение типов в выборке
+    type_dist = sampled_df_a["agent_type"].value_counts().to_dict() if "agent_type" in sampled_df_a.columns else {}
+    type_str = ", ".join(f"{k}: {v}" for k, v in sorted(type_dist.items()))
+    lines.append(f"  Типы агентов в выборке:                     {type_str}")
+
+    lines.append("═" * 130)
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 6. SUMMARY REPORT — обёртка для полного отчёта
+# ══════════════════════════════════════════════════════════════════════════════
+
 def summary_report(
     df_final: pd.DataFrame,
     tick_stats: list,
@@ -666,6 +978,10 @@ def summary_report(
       detail=True — полный отчёт с аудитом и дополнительными метриками.
     """
     parts = []
+
+    # 0. МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ (если есть снимки с тиками 0 и 6)
+    if snapshots and 0 in snapshots and 6 in snapshots:
+        parts.append(agent_parameters_table(snapshots, n_show=20, tick_a=0, tick_b=6))
 
     # 1. Демографический портрет финального состояния
     parts.append(demographic_portrait(

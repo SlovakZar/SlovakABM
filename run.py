@@ -23,7 +23,7 @@ sys.path.insert(0, str(SIM_DIR))
 from graph   import build_graph, print_graph_summary
 from agents  import create_agents, JOBS_CAPACITY
 from engine  import run_simulation
-from report  import demographic_portrait, compare_snapshots, summary_report
+from report  import demographic_portrait, compare_snapshots, summary_report, agent_parameters_table
 
 
 def run(
@@ -63,7 +63,7 @@ def run(
     with open(dist_path, encoding="utf-8") as f:
         init_dists = json.load(f).get("districts", {})
 
-    snapshot_ticks = [0, n_ticks // 4, n_ticks // 2, n_ticks]
+    snapshot_ticks = [0, 6, n_ticks // 4, n_ticks // 2, n_ticks]
 
     if verbose:
         print(f"\n[3/4] Запуск симуляции ({n_ticks} тиков = {n_ticks//12} лет {n_ticks%12} мес)...")
@@ -82,6 +82,11 @@ def run(
 
     # Снимки по тикам (демографические портреты)
     report_parts = []
+
+    # ═══ МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ: Тик 0 → Тик 6 ═══
+    agent_table = agent_parameters_table(snapshots, n_show=20, tick_a=0, tick_b=6, seed=seed)
+    report_parts.append(agent_table)
+
     for t in sorted(snapshots.keys()):
         label = {0: "НАЧАЛО"}.get(t, f"Тик {t}")
         portrait = demographic_portrait(snapshots[t], label=label, tick_num=t, detail=detail)
