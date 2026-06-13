@@ -820,6 +820,7 @@ def create_agents(
                 "internal_mig_thr":    round(internal_mig_thr, 4),
                 "external_mig_thr":    round(external_mig_thr, 4),
                 "job_flexibility":     round(job_flexibility, 4),
+                "family_weight_mod":   round(family_modifier, 4),
 
                 # ── Инерционные параметры ────────────────────────────────────
                 "shock_sensitivity":   round(shock_sensitivity, 4),
