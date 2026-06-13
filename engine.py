@@ -261,6 +261,7 @@ def _compute_d_instant(
     domain_future_place: float,
     w_econ: float,
     w_future: float,
+    place_deficit_penalty: float = 0.0,
 ) -> tuple[float, float, float]:
     """
     Вычисляет мгновенную неудовлетворённость D_instant.
@@ -269,7 +270,7 @@ def _compute_d_instant(
     """
     # Экономическая компонента
     if agent_wage > 0 and industry_avg_wage_wp > 0:
-        wage_pressure = max(0.0, 1.0 - agent_wage / industry_avg_wage_wp)
+        wage_pressure = 1.0 - agent_wage / (agent_wage + industry_avg_wage_wp)
     else:
         wage_pressure = 1.0  # безработный — максимальное давление
     D_econ = w_econ * wage_pressure * econ_gap * (1.0 - job_flexibility)
@@ -279,7 +280,11 @@ def _compute_d_instant(
     burden = monthly_cost / max(agent_wage, 1.0)
     affordability = max(0.0, 1.0 - burden / 0.35)
     place_reality = 0.6 * affordability + 0.4 * infrastructure_score
-    D_place = w_future * max(0.0, domain_future_place - place_reality)
+
+    gap = max(0.0, domain_future_place - place_reality)
+    place_ratio = domain_future_place / max(place_reality, 0.001)
+    amplifier = max(1.0, place_ratio)
+    D_place = w_future * gap * amplifier * (1.0 + place_deficit_penalty)
 
     D_instant = D_econ + D_place
     return float(np.clip(D_instant, 0.0, 1.0)), float(D_econ), float(D_place)
@@ -377,6 +382,8 @@ def _two_barrier_activation(
         housing_price   = res_attr.get("housing_price_m2", 1800.0)
         infra_score     = res_attr.get("infrastructure_score", 0.5)
 
+        place_penalty = df["place_deficit_penalty"].values[i]
+
         # ── Вычисляем D_instant ───────────────────────────────────────────
         D_inst, D_econ, D_place = _compute_d_instant(
             agent_wage=wages[i],
@@ -388,6 +395,7 @@ def _two_barrier_activation(
             domain_future_place=domain_future[i],
             w_econ=w_econs[i],
             w_future=w_futures[i],
+            place_deficit_penalty=place_penalty,
         )
 
         # ── Обновление aspirations (EWMA, с холодным стартом) ────────────
@@ -491,6 +499,7 @@ def _execute_commute(
 
     # Сброс aspirations — агент удовлетворил потребность, EWMA обнуляется
     df.at[idx, "aspirations"] = 0.0
+    df.at[idx, "place_deficit_penalty"] = 0.0
 
     # v8: отраслевая зарплата в новом районе работы
     agent_industry = str(df.at[idx, "industry"])
@@ -536,6 +545,7 @@ def _execute_move(
 
     # Сброс aspirations — агент переехал, EWMA обнуляется
     df.at[idx, "aspirations"] = 0.0
+    df.at[idx, "place_deficit_penalty"] = 0.0
 
     # Сброс части слабых связей при переезде
     df.at[idx, "weak_ties_utility"] = float(np.clip(
@@ -601,6 +611,7 @@ def _execute_adapt(df: pd.DataFrame, idx: int, domain: str = "economic"):
 
     # Сброс aspirations — агент адаптировался, EWMA обнуляется
     df.at[idx, "aspirations"] = 0.0
+    df.at[idx, "place_deficit_penalty"] = 0.0
 
 
 # ── Унифицированный эвристический поиск ──────────────────────────────────────
@@ -1231,28 +1242,32 @@ def tick(
     )
     df["econ_gap"] = new_econ_gaps
 
-    # ── domain_future_place: адаптация ожиданий места ─────────────────────
-    # Векторизовано: собираем атрибуты района проживания для всех агентов
+    # ── place_deficit_penalty: накопление штрафа за неудовлетворённость местом ─
     res_districts = df["district"].values
-    old_dfps = df["domain_future_place"].values
+    agent_wages = df["wage"].values
 
-    housing_prices = np.full(n, 1800.0, dtype=float)
-    infra_scores = np.full(n, 0.5, dtype=float)
+    old_penalties = df["place_deficit_penalty"].values
+    new_penalties = old_penalties.copy()
+
     for i in range(n):
         res_attr = G.nodes.get(res_districts[i], {})
-        housing_prices[i] = res_attr.get("housing_price_m2", 1800.0)
-        infra_scores[i] = res_attr.get("infrastructure_score", 0.5)
+        housing_price = res_attr.get("housing_price_m2", 1800.0)
+        infra_score = res_attr.get("infrastructure_score", 0.5)
 
-    monthly_costs = housing_prices * 50 * 0.004
-    burdens = monthly_costs / np.maximum(agent_wages, 1.0)
-    affordabilities = np.maximum(0.0, 1.0 - burdens / 0.35)
-    place_realities = 0.6 * affordabilities + 0.4 * infra_scores
+        monthly_cost = housing_price * 50 * 0.004
+        burden = monthly_cost / max(agent_wages[i], 1.0)
+        affordability = max(0.0, 1.0 - burden / 0.35)
+        place_reality = 0.6 * affordability + 0.4 * infra_score
 
-    new_dfps = np.clip(
-        (1.0 - GAP_ADAPT_LAMBDA) * old_dfps + GAP_ADAPT_LAMBDA * place_realities,
-        0.0, 1.0
-    )
-    df["domain_future_place"] = new_dfps
+        dfp = df.at[i, "domain_future_place"]
+        if dfp > place_reality:
+            gap_pct = (dfp - place_reality) / max(place_reality, 0.001)
+            new_penalties[i] = np.clip(old_penalties[i] + gap_pct * 0.02, 0.0, 5.0)
+        else:
+            # Затухание если место устраивает
+            new_penalties[i] = max(0.0, old_penalties[i] - 0.01)
+
+    df["place_deficit_penalty"] = new_penalties
 
     # 2. Давление рынка труда
     jobs_pressure = _compute_jobs_pressure(df, jobs_capacity)

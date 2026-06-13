@@ -842,6 +842,7 @@ def create_agents(
                 # ── Двухбарьерная модель (Aspirations×Capabilities → TPB) ────
                 "aspirations":         0.0,          # EWMA-накопление D_instant (обновляется в engine.tick)
                 "signal_reduction":    0.0,          # накопленный эффект соц. сигналов, снижающий инерцию
+                "place_deficit_penalty": 0.0,        # накопленный штраф за неудовлетворённость местом
                 "tpb_active":          False,        # флаг фазы TPB
                 "intention_delay":     0,            # счётчик тиков задержки после превышения порога намерения
                 "econ_gap":            round(float(d_econ_gap), 4),  # адаптивное восприятие econ-разрыва

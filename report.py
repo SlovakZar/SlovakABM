@@ -709,7 +709,7 @@ def _compute_d_components(agent_row, G=None) -> dict:
     # wage_pressure: насколько зарплата агента отстаёт от отраслевой в районе работы
     industry_avg_wp = _industry_wage_in_district_report(G, workplace, industry)
     if wage > 0 and industry_avg_wp > 0:
-        wage_pressure = max(0.0, 1.0 - wage / industry_avg_wp)
+        wage_pressure = 1.0 - wage / (wage + industry_avg_wp)
     else:
         wage_pressure = 1.0  # безработный → максимальное давление
 
@@ -727,7 +727,12 @@ def _compute_d_components(agent_row, G=None) -> dict:
         infra = 0.5
 
     place_reality = 0.6 * affordability + 0.4 * infra
-    D_place = w_future * max(0.0, domain_future_place - place_reality)
+
+    gap = max(0.0, domain_future_place - place_reality)
+    place_ratio = domain_future_place / max(place_reality, 0.001)
+    amplifier = max(1.0, place_ratio)
+    place_penalty = float(agent_row.get("place_deficit_penalty", 0.0))
+    D_place = w_future * gap * amplifier * (1.0 + place_penalty)
     D_instant = float(np.clip(D_econ + D_place, 0.0, 1.0))
 
     return {
@@ -822,8 +827,9 @@ def agent_parameters_table(
     lines.append("  Aspirations — EWMA-накопление D_instant. Старт=0 (холодный), на тике 1 = D_instant.")
     lines.append("  D_econ      — экономическая неудовлетворённость: w_econ × wage_pressure × econ_gap × (1−job_flex)")
     lines.append("  wage_pr     — wage_pressure: отставание зарплаты от отраслевой в районе работы (0–1)")
-    lines.append("  D_place     — жилищная неудовлетворённость: w_future × max(0, domain_future_place − place_reality)")
+    lines.append("  D_place     — жилищная неудовлетворённость: w_future × gap × (dfp/pr) × (1+penalty)")
     lines.append("  place_r     — place_reality: 0.6×affordability + 0.4×infrastructure_score")
+    lines.append("  PlacePen    — place_deficit_penalty (накопленный штраф)")
     lines.append("  Capab.      — capabilities: (income_index + education_index + weak_ties) / 3")
     lines.append("  Inertia     — базовая инерция агента")
     lines.append("  DynInert    — динамическая инерция = inertia × max(0.3, 1 − signal_reduction)")
@@ -837,7 +843,7 @@ def agent_parameters_table(
     lines.append("")
     lines.append(
         f"  {'ID':>5} {'Тип':<11} {'Статус':<17} "
-        f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} "
+        f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} {'PlacePen':>9} "
         f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} "
         f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
@@ -903,6 +909,9 @@ def agent_parameters_table(
         wp_str      = _fmt_arrow(d_a["wage_pressure"], d_b["wage_pressure"], ".3f", 8)
         d_place_str = _fmt_arrow(d_a["D_place"], d_b["D_place"], ".3f", 10)
         pr_str      = _fmt_arrow(d_a["place_reality"], d_b["place_reality"], ".3f", 8)
+        place_pen_a = float(_get(ra, "place_deficit_penalty", 0.0))
+        place_pen_b = float(_get(rb, "place_deficit_penalty", 0.0))
+        pp_str      = _fmt_arrow(place_pen_a, place_pen_b, ".2f", 9)
         capab_str   = _fmt_arrow(capabilities_a, capabilities_b, ".3f", 10)
         inertia_str = _fmt_arrow(inertia_a, inertia_b, ".3f", 13)
         dyn_str     = _fmt_arrow(dyn_inertia_a, dyn_inertia_b, ".3f", 13)
@@ -917,7 +926,7 @@ def agent_parameters_table(
 
         lines.append(
             f"  {id_str} {type_str} {status_str} "
-            f"{aspir_str} {d_econ_str} {wp_str} {d_place_str} {pr_str} "
+            f"{aspir_str} {d_econ_str} {wp_str} {d_place_str} {pr_str} {pp_str} "
             f"{capab_str} {inertia_str} {dyn_str} "
             f"{tpb_str} {thr_str} {sign_str} {int_state_s}"
         )
