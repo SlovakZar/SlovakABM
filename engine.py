@@ -36,19 +36,12 @@ from graph import update_graph, get_awareness_set, update_industry_pressure
 
 # ── Константы ─────────────────────────────────────────────────────────────────
 
-# Фильтр 1
-MIN_ECON_PC_TO_ACTIVATE  = 0.40   # минимальный econ_perceived_control для активации
-ACTIVATION_THRESHOLD     = 0.20   # минимальный gap домена для активации (0–1)
-
 # Фильтр 2 — дерево занятости
 MAX_JOBS_PRESSURE        = 1.20   # район считается перегруженным выше этого порога
 MAX_WORK_CANDIDATES      = 12     # максимум районов для скрининга
 
-# Фильтр 3 — дерево локации
-SATELLITE_SEARCH_RADIUS  = 90.0   # мин. — радиус поиска района-спутника от dst_work
 HOUSING_BUDGET_RATIO     = 0.35   # жильё не должно превышать X доли зарплаты (×100м²)
 MOVE_STRESS_FACTOR       = 0.80   # satisfaction после переезда × этот множитель
-PLACE_DRIVEN_TRAVEL_BUF  = 1.40   # множитель к commuter_threshold для place-driven поиска
 
 # Adapt
 ADAPT_FLEX_THRESHOLD     = 0.65   # минимальная job_flexibility для адаптации
@@ -134,6 +127,7 @@ def update_domain_satisfaction(
     statuses   = df["status"].values
     workplaces = df["workplace_district"].values
     residences = df["district"].values   # residence
+    industries = df["industry"].values
 
     for i in range(len(df)):
         wp = workplaces[i]
@@ -142,7 +136,8 @@ def update_domain_satisfaction(
         wp_attr  = G.nodes.get(wp, {})
         res_attr = G.nodes.get(res, {})
 
-        avg_wage_wp  = wp_attr.get("avg_wage", NATIONAL_AVG_WAGE)
+        # Отраслевая зарплата в районе работы (вместо средней по больнице)
+        ind_wage_wp = _industry_wage_in_district(G, wp, industries[i])
         housing_res  = res_attr.get("housing_price_m2", 1800)
         infra_res    = res_attr.get("infrastructure_score", 0.5)
         pressure_wp  = jobs_pressure.get(wp, 1.0)
@@ -160,7 +155,7 @@ def update_domain_satisfaction(
                 0.0, 1.0
             ))
         else:
-            q_wage    = (w - avg_wage_wp) / max(avg_wage_wp, 1)
+            q_wage    = (w - ind_wage_wp) / max(ind_wage_wp, 1)
             # Давление рынка труда: перегруженный рынок → сложнее найти работу
             q_employ  = float(np.clip(1.0 - (pressure_wp - 1.0), -0.5, 0.5))
             raw_econ  = 0.65 * q_wage + 0.35 * q_employ
@@ -378,7 +373,7 @@ def _two_barrier_activation(
         wp_attr  = G.nodes.get(wp, {})
         res_attr = G.nodes.get(res, {})
 
-        industry_avg_wp = wp_attr.get("avg_wage", NATIONAL_AVG_WAGE)
+        industry_avg_wp = _industry_wage_in_district(G, wp, industries[i])
         housing_price   = res_attr.get("housing_price_m2", 1800.0)
         infra_score     = res_attr.get("infrastructure_score", 0.5)
 
@@ -425,7 +420,7 @@ def _two_barrier_activation(
                     activation_domains[i] = "place"
 
                 # Attitude = D_econ + D_place (мгновенные)
-                attitude = D_econ + D_place
+                attitude = (D_econ + D_place) / 2.0
 
                 # Subjective norm
                 social_pressure = net_susc[i] * social_boosts[i]
@@ -475,348 +470,6 @@ def _two_barrier_activation(
     return df
 
 
-# ── FFT: Фильтр 1 — Страж ворот (DEPRECATED — заменён на _two_barrier_activation) ──
-
-def _fft_filter1(
-    df: pd.DataFrame,
-    dissatisfaction: np.ndarray,
-) -> tuple[pd.DataFrame, np.ndarray]:
-    """
-    Фильтр 1 — активация по ведущему (доминантному) домену.
-
-    Для каждого агента вычисляется относительный дефицит по 4 доменам:
-      gap = (thr - sat) / max(thr, 0.01), только положительные.
-    dominant_domain = argmax(gap).
-
-    Активация: max_gap > ACTIVATION_THRESHOLD (и базовые проверки пройдены).
-
-    Назначение intention_state по доминантному домену:
-      "economic" → "seeking_work"
-      "place"    → "seeking_residence"
-      "social" / "family" → пока "none" (зарезервировано)
-
-    Inertia-задержка и activation_timer — без изменений, общие для всех доменов.
-    """
-    df = df.copy()
-    n = len(df)
-
-    # ── Вычисляем gap для каждого домена ──────────────────────────────────
-    domain_specs = [
-        ("economic", "sat_economic", "thr_economic"),
-        ("social",   "sat_social",   "thr_social"),
-        ("family",   "sat_family",   "thr_family"),
-        ("place",    "sat_place",    "thr_place"),
-    ]
-    gaps = np.zeros((n, 4))
-    for j, (_, sat_col, thr_col) in enumerate(domain_specs):
-        sat = df[sat_col].values
-        thr = df[thr_col].values
-        gaps[:, j] = np.maximum(0, thr - sat) / np.maximum(thr, 0.01)
-
-    max_gap = gaps.max(axis=1)
-    dominant_idx = gaps.argmax(axis=1)  # 0=economic, 1=social, 2=family, 3=place
-    domain_names = np.array(["economic", "social", "family", "place"])
-    dominant_domain = domain_names[dominant_idx]
-    df["activation_domain"] = dominant_domain
-
-    # Базовые маски
-    none_mask    = df["intention_state"].values == "none"
-    age_mask     = (df["age"].values >= 18) & (df["age"].values <= 62)
-    moved_mask   = df["moved_ticks"].values >= 9
-    econ_pc_mask = df["econ_perceived_control"].values > MIN_ECON_PC_TO_ACTIVATE
-    unemployed   = df["status"].values == "unemployed"
-    student_mask = df["status"].values == "student"
-
-    # Агент под давлением: max_gap > порог ИЛИ безработный
-    under_pressure = (max_gap > ACTIVATION_THRESHOLD) | (unemployed & econ_pc_mask)
-
-    # ── Обновляем activation_timer ────────────────────────────────────────────
-    timers    = df["activation_timer"].values.copy()
-    inertia   = df["inertia"].values
-    shock_sens = df["shock_sensitivity"].values
-
-    eligible = none_mask & age_mask & moved_mask & econ_pc_mask & ~student_mask
-    timers = np.where(eligible & under_pressure, timers + 1, timers)
-    timers = np.where(eligible & ~under_pressure, 0, timers)
-
-    df["activation_timer"] = timers
-
-    # ── Вычисляем задержку и активируем ──────────────────────────────────────
-    delay = np.clip((inertia * 12.0).astype(int), 1, 11)
-    delay = np.maximum(1, delay - (shock_sens * 6.0).astype(int))
-
-    ready = timers >= delay
-    activated = eligible & ready
-
-    # ── Назначаем intention_state по доминантному домену ─────────────────────
-    # Делаем это для ВСЕХ агентов под давлением (не только активированных),
-    # чтобы dominant_domain был актуален на момент срабатывания таймера.
-    # Но intention_state меняем только у активированных.
-    if activated.any():
-        act_idx = np.where(activated)[0]
-        for idx in act_idx:
-            dom = dominant_domain[idx]
-            if dom == "economic":
-                df.at[idx, "intention_state"] = "seeking_work"
-            elif dom == "place":
-                df.at[idx, "intention_state"] = "seeking_residence"
-            else:
-                # social / family — пока оставляем none
-                df.at[idx, "intention_state"] = "none"
-            df.at[idx, "activation_timer"] = 0
-
-    return df, activated
-
-
-# ── FFT: Фильтр 2 — Дерево занятости ─────────────────────────────────────────
-
-def _fft_filter2_find_work(
-    district: str,
-    agent_wage: float,
-    agent_industry: str,
-    econ_perceived_control: float,
-    sat_economic: float,
-    thr_economic: float,
-    G: nx.DiGraph,
-    jobs_pressure: dict,
-    network_location: bool,
-    perceived_control: float,
-    rng: np.random.Generator,
-) -> Optional[str]:
-    """
-    Ищет dst_work — район где агент может найти работу лучше текущей.
-
-    v8: зарплатные ожидания привязаны к ОТРАСЛИ агента.
-      - Для занятых: target_wage = agent_wage × (1 + desired_raise)
-      - Для безработных: ориентир = отраслевая зарплата дома × 0.85 × (1 + desired_raise)
-      - При скрининге кандидатов используется отраслевая зарплата dst_района.
-
-    Целевая зарплата — поведенческая эвристика:
-      base_appetite = BASE_APPETITE_MIN + econ_perceived_control × BASE_APPETITE_MAX
-      desperation   = clamp((thr_economic - sat_economic) / thr_economic, 0, 1)
-      desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) × (1 - desperation)
-
-    Приоритет домашнего района: если residence_district проходит оба аспекта —
-    сразу возвращаем его без перебора awareness_set.
-
-    Скрининг (Elimination by Aspects):
-      Аспект А: отраслевая_зарплата[dst] > target_wage
-      Аспект Б: jobs_pressure[dst] < MAX_JOBS_PRESSURE
-
-    Satisficing: после shuffle берём первый прошедший оба фильтра.
-    awareness_set расширяется через network_location и perceived_control.
-    """
-    # ── Вспомогательная: отраслевая зарплата в районе ────────────────────
-    def _industry_wage(node_attr: dict, industry: str) -> float:
-        """Отраслевая зарплата в узле; fallback → avg_wage → NATIONAL_AVG_WAGE."""
-        sal = node_attr.get("salary_by_industry", {})
-        if sal:
-            return float(sal.get(industry, node_attr.get("avg_wage", NATIONAL_AVG_WAGE)))
-        return float(node_attr.get("avg_wage", NATIONAL_AVG_WAGE))
-
-    # ── Расчёт целевой зарплаты ──────────────────────────────────────────
-    if agent_wage > 0:
-        # Занятый: целевая зарплата = текущая × (1 + желаемая надбавка)
-        base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
-        thr = max(thr_economic, 0.01)
-        desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
-        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) * (1.0 - desperation)
-        target_wage = agent_wage * (1.0 + desired_raise)
-    else:
-        # Безработный: ориентируется на отраслевую зарплату в районе проживания
-        home_attr = G.nodes.get(district, {})
-        home_ind_wage = _industry_wage(home_attr, agent_industry)
-        # Дисконт 0.85 — безработный готов на меньшее
-        base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
-        thr = max(thr_economic, 0.01)
-        desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
-        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) * (1.0 - desperation)
-        target_wage = (home_ind_wage * 0.85) * (1.0 + desired_raise)
-
-    # ── Приоритет домашнего района (с отраслевой зарплатой) ──────────────
-    home_attr = G.nodes.get(district, {})
-    home_wage = _industry_wage(home_attr, agent_industry)
-    home_pressure = jobs_pressure.get(district, 0)
-    if home_wage >= target_wage and home_pressure < MAX_JOBS_PRESSURE:
-        return district
-
-    # ── Кандидаты из awareness_set ────────────────────────────────────────
-    candidates = get_awareness_set(
-        G, district,
-        network_location=network_location,
-        perceived_control=perceived_control,
-        max_candidates=MAX_WORK_CANDIDATES,
-    )
-    # Включаем текущий район — может зарплата там уже поднялась
-    candidates = list(set(candidates) | {district})
-
-    rng.shuffle(candidates)
-
-    for dst in candidates:
-        dst_attr = G.nodes.get(dst, {})
-        dst_wage = _industry_wage(dst_attr, agent_industry)
-
-        # Аспект А: отраслевая зарплата
-        if dst_wage < target_wage:
-            continue
-
-        # Аспект Б: рынок труда не перегружен
-        if jobs_pressure.get(dst, 0) >= MAX_JOBS_PRESSURE:
-            continue
-
-        return dst
-
-    return None  # Не нашёл подходящего района
-
-
-# ── Place-driven search: поиск жилья при доминанте place ───────────────────
-
-def _place_driven_search(
-    residence: str,
-    workplace: str,
-    agent_wage: float,
-    G: nx.DiGraph,
-    network_location: bool,
-    perceived_control: float,
-    commuter_threshold_min: float,
-    rng: np.random.Generator,
-) -> Optional[str]:
-    """
-    Ищет новый район проживания, сохраняя текущее место работы.
-
-    Скрининг кандидатов из awareness_set вокруг workplace:
-      1. Доступность жилья: _housing_affordable(agent_wage, housing_price)
-      2. Время в пути до workplace ≤ commuter_threshold_min × PLACE_DRIVEN_TRAVEL_BUF
-         (расширенный порог — мотивация места высока)
-      3. target_place нового района строго лучше текущего (зазор > 2%)
-
-    Satisficing: первый подходящий после shuffle.
-    Возвращает new_residence или None.
-    """
-    # Расширенный порог: place-мотивация допускает более долгий commute
-    expanded_threshold = commuter_threshold_min * PLACE_DRIVEN_TRAVEL_BUF
-
-    # Текущий target_place — опорная точка для сравнения
-    current_attr = G.nodes.get(residence, {})
-    cur_h = current_attr.get("housing_price_m2", 1800)
-    cur_i = current_attr.get("infrastructure_score", 0.5)
-    cur_target = _sigmoid(0.5 * (1800 - cur_h) / 1800 + 0.5 * (cur_i - 0.5))
-
-    # Кандидаты из awareness_set вокруг workplace
-    candidates = get_awareness_set(
-        G, workplace,
-        network_location=network_location,
-        perceived_control=perceived_control,
-        max_candidates=MAX_WORK_CANDIDATES,
-    )
-    # Включаем текущий residence и workplace
-    candidates = list(set(candidates) | {residence, workplace})
-
-    rng.shuffle(candidates)
-
-    for dst in candidates:
-        if dst == residence:
-            continue  # нет смысла переезжать туда же
-
-        dst_attr = G.nodes.get(dst, {})
-        housing_price = dst_attr.get("housing_price_m2", 9999)
-
-        # Критерий 1: доступность жилья
-        if not _housing_affordable(agent_wage, housing_price):
-            continue
-
-        # Критерий 2: время в пути до текущей работы
-        if G.has_edge(dst, workplace):
-            tt = G[dst][workplace].get("travel_time_min", 999)
-            if tt > expanded_threshold:
-                continue
-        else:
-            continue  # нет прямого пути — пропускаем
-
-        # Критерий 3: target_place строго лучше текущего (зазор 2% против джиттера)
-        dst_infra = dst_attr.get("infrastructure_score", 0.5)
-        dst_target = _sigmoid(0.5 * (1800 - housing_price) / 1800 + 0.5 * (dst_infra - 0.5))
-        if dst_target <= cur_target + 0.02:
-            continue
-
-        return dst
-
-    return None
-
-
-# ── FFT: Фильтр 3 — Дерево локации ───────────────────────────────────────────
-
-def _fft_filter3_find_residence(
-    residence: str,
-    dst_work: str,
-    agent_wage: float,
-    G: nx.DiGraph,
-    rng: np.random.Generator,
-    commuter_threshold_min: float,
-    sat_place: float,
-    thr_place: float,
-):
-    """
-    Возвращает (new_residence, outcome):
-      outcome: "commute" | "move" | "satellite_move" | "none"
-
-    Путь А — COMMUTE:
-      travel_time[residence → dst_work] ≤ commuter_threshold_min
-      И sat_place ≥ thr_place × 0.8 (место не слишком давит)
-
-    Путь Б — MOVE (прямой):
-      Жильё в dst_work доступно по бюджету → переезд.
-
-    Путь В — SATELLITE MOVE:
-      Жильё в dst_work не доступно.
-      Ищем район-спутник в радиусе SATELLITE_SEARCH_RADIUS от dst_work,
-      с доступным жильём и временем езды ≤ commuter_threshold_min до dst_work.
-      → переезд в спутник + commute в dst_work.
-
-    Путь Г — none:
-      Ничего не подошло.
-    """
-    # Путь А: commute из текущего места жительства
-    if G.has_edge(residence, dst_work):
-        tt = G[residence][dst_work].get("travel_time_min", 999)
-    else:
-        tt = 999
-
-    # Commute разрешён только если travel_time в норме И sat_place не слишком низкий
-    place_ok = sat_place >= thr_place * 0.80
-    if tt <= commuter_threshold_min and place_ok:
-        return residence, "commute"
-
-    # Путь Б: прямой переезд в dst_work
-    dst_attr = G.nodes.get(dst_work, {})
-    housing_dst = dst_attr.get("housing_price_m2", 9999)
-    if _housing_affordable(agent_wage, housing_dst):
-        return dst_work, "move"
-
-    # Путь В: поиск района-спутника
-    # Ищем соседей dst_work в радиусе SATELLITE_SEARCH_RADIUS
-    satellites = []
-    for _, neighbor, attr in G.out_edges(dst_work, data=True):
-        if neighbor == dst_work:
-            continue
-        tt_to_work = attr.get("travel_time_min", 999)
-        if tt_to_work > commuter_threshold_min:
-            continue
-        neighbor_attr = G.nodes.get(neighbor, {})
-        housing_neighbor = neighbor_attr.get("housing_price_m2", 9999)
-        if _housing_affordable(agent_wage, housing_neighbor):
-            satellites.append((neighbor, tt_to_work, housing_neighbor))
-
-    if satellites:
-        # Выбираем спутник: сначала по доступности жилья, потом по времени
-        satellites.sort(key=lambda x: (x[2], x[1]))
-        best_satellite = satellites[0][0]
-        return best_satellite, "satellite_move"
-
-    # Путь Г: ничего не нашли
-    return residence, "none"
-
-
 # ── Исполнение решений ────────────────────────────────────────────────────────
 
 def _execute_commute(
@@ -835,6 +488,9 @@ def _execute_commute(
     df.at[idx, "moved_ticks"]        = 0
     df.at[idx, "tpb_active"]         = False
     df.at[idx, "intention_delay"]    = 0
+
+    # Сброс aspirations — агент удовлетворил потребность, EWMA обнуляется
+    df.at[idx, "aspirations"] = 0.0
 
     # v8: отраслевая зарплата в новом районе работы
     agent_industry = str(df.at[idx, "industry"])
@@ -877,6 +533,9 @@ def _execute_move(
     df.at[idx, "tenure"]          = 0
     df.at[idx, "tpb_active"]      = False
     df.at[idx, "intention_delay"] = 0
+
+    # Сброс aspirations — агент переехал, EWMA обнуляется
+    df.at[idx, "aspirations"] = 0.0
 
     # Сброс части слабых связей при переезде
     df.at[idx, "weak_ties_utility"] = float(np.clip(
@@ -939,6 +598,9 @@ def _execute_adapt(df: pd.DataFrame, idx: int, domain: str = "economic"):
     df.at[idx, "dst_work"]        = ""
     df.at[idx, "tpb_active"]      = False
     df.at[idx, "intention_delay"] = 0
+
+    # Сброс aspirations — агент адаптировался, EWMA обнуляется
+    df.at[idx, "aspirations"] = 0.0
 
 
 # ── Унифицированный эвристический поиск ──────────────────────────────────────
@@ -1007,7 +669,19 @@ def _form_work_candidates(
             continue
         filtered.append(dst)
 
-    rng.shuffle(filtered)
+    # Взвешенная стохастическая сортировка: кандидаты с более высокой
+    # отраслевой зарплатой имеют больше шансов оказаться в начале списка.
+    if len(filtered) > 1:
+        scores = np.array([
+            _industry_wage_in_district(G, d, agent_industry) / max(target_wage, 1.0)
+            for d in filtered
+        ])
+        weights = np.exp(np.clip(scores - 1.0, -2.0, 2.0) * 3.0)
+        weights /= weights.sum()
+        noisy_keys = -np.log(np.maximum(rng.random(len(filtered)), 1e-9)) / np.maximum(weights, 1e-9)
+        order = np.argsort(noisy_keys)
+        filtered = [filtered[o] for o in order]
+
     return filtered
 
 
@@ -1063,7 +737,21 @@ def _form_residence_candidates(
             continue
         filtered.append(dst)
 
-    rng.shuffle(filtered)
+    # Взвешенная стохастическая сортировка: кандидаты с лучшим place_reality
+    # имеют больше шансов оказаться в начале списка.
+    if len(filtered) > 1:
+        scores = np.array([
+            (G.nodes.get(d, {}).get("infrastructure_score", 0.5) +
+             max(0.0, 1.0 - (G.nodes.get(d, {}).get("housing_price_m2", 9999.0) * 50 * 0.004)
+                 / max(agent_wage, 1.0) / 0.35)) / 2.0
+            for d in filtered
+        ])
+        weights = np.exp(np.clip(scores - np.mean(scores), -2.0, 2.0) * 2.0)
+        weights /= weights.sum()
+        noisy_keys = -np.log(np.maximum(rng.random(len(filtered)), 1e-9)) / np.maximum(weights, 1e-9)
+        order = np.argsort(noisy_keys)
+        filtered = [filtered[o] for o in order]
+
     return filtered
 
 
@@ -1098,7 +786,18 @@ def _find_job_near(
         max_candidates=MAX_WORK_CANDIDATES,
         mode="work",
     )
-    rng.shuffle(candidates)
+    # Взвешенная стохастическая сортировка: кандидаты ближе по commute
+    # и с более высокой отраслевой зарплатой — в начале.
+    if len(candidates) > 1:
+        scores = np.array([
+            _industry_wage_in_district(G, d, agent_industry) / max(target_wage, 1.0)
+            for d in candidates
+        ])
+        weights = np.exp(np.clip(scores - 1.0, -2.0, 2.0) * 2.0)
+        weights /= weights.sum()
+        noisy_keys = -np.log(np.maximum(rng.random(len(candidates)), 1e-9)) / np.maximum(weights, 1e-9)
+        order = np.argsort(noisy_keys)
+        candidates = [candidates[o] for o in order]
 
     for dst in candidates:
         dst_attr = G.nodes.get(dst, {})
@@ -1213,7 +912,16 @@ def _unified_heuristic_search(
                 max_candidates=MAX_WORK_CANDIDATES,
                 mode="satellite",
             )
-            rng.shuffle(satellites)
+            # Взвешенная сортировка спутников: дешевле жильё = выше в списке
+            if len(satellites) > 1:
+                sat_scores = np.array([
+                    1.0 / max(G.nodes.get(s, {}).get("housing_price_m2", 9999.0), 100.0)
+                    for s in satellites
+                ])
+                sat_weights = np.exp(np.clip(sat_scores / max(sat_scores.max(), 1e-9) - 0.5, -2.0, 2.0) * 3.0)
+                sat_weights /= sat_weights.sum()
+                sat_noisy = -np.log(np.maximum(rng.random(len(satellites)), 1e-9)) / np.maximum(sat_weights, 1e-9)
+                satellites = [satellites[o] for o in np.argsort(sat_noisy)]
             for sat in satellites:
                 if sat == residence or sat == dst_work:
                     continue
@@ -1271,7 +979,16 @@ def _unified_heuristic_search(
                 max_candidates=MAX_WORK_CANDIDATES,
                 mode="work",
             )
-            rng.shuffle(sat_work_candidates)
+            # Взвешенная сортировка: кандидаты с более высокой отраслевой зарплатой — в начале
+            if len(sat_work_candidates) > 1:
+                sw_scores = np.array([
+                    _industry_wage_in_district(G, d, agent_ind) / max(target_wage, 1.0)
+                    for d in sat_work_candidates
+                ])
+                sw_weights = np.exp(np.clip(sw_scores - 1.0, -2.0, 2.0) * 2.0)
+                sw_weights /= sw_weights.sum()
+                sw_noisy = -np.log(np.maximum(rng.random(len(sat_work_candidates)), 1e-9)) / np.maximum(sw_weights, 1e-9)
+                sat_work_candidates = [sat_work_candidates[o] for o in np.argsort(sw_noisy)]
             for sat_work in sat_work_candidates:
                 sat_attr = G.nodes.get(sat_work, {})
                 sat_ind_wage = _industry_wage_in_district(G, sat_work, agent_ind)
@@ -1488,38 +1205,54 @@ def tick(
             df.loc[hub_mask, "weak_ties_utility"] + HUB_WEAK_TIES_BONUS, 0.0, 1.0
         )
 
-    # ── econ_gap: адаптация восприятия к реальности ──────────────────────
-    for i in range(len(df)):
-        wp = df.at[i, "workplace_district"]
-        wp_attr = G.nodes.get(wp, {})
-        industry_avg_wp = wp_attr.get("avg_wage", NATIONAL_AVG_WAGE)
-        w = df.at[i, "wage"]
-        if w > 0 and industry_avg_wp > 0:
-            target_econ_gap = max(0.0, 1.0 - w / industry_avg_wp)
-        else:
-            target_econ_gap = 1.0
-        old_gap = df.at[i, "econ_gap"]
-        df.at[i, "econ_gap"] = float(np.clip(
-            (1.0 - GAP_ADAPT_LAMBDA) * old_gap + GAP_ADAPT_LAMBDA * target_econ_gap,
-            0.0, 1.0
-        ))
+    # ── econ_gap: адаптация восприятия к реальности (отраслевая зарплата) ─
+    # Векторизовано: собираем отраслевые зарплаты для workplace каждого агента
+    n = len(df)
+    wp_districts = df["workplace_district"].values
+    agent_wages = df["wage"].values
+    agent_inds = df["industry"].values
+    old_econ_gaps = df["econ_gap"].values
+
+    # Build mapping: district → {industry: wage}
+    # Pre-compute per-agent industry wage in their workplace
+    industry_wages_wp = np.full(n, NATIONAL_AVG_WAGE, dtype=float)
+    for i in range(n):
+        wp = wp_districts[i]
+        industry_wages_wp[i] = _industry_wage_in_district(G, wp, agent_inds[i])
+
+    target_econ_gap = np.where(
+        (agent_wages > 0) & (industry_wages_wp > 0),
+        np.maximum(0.0, 1.0 - agent_wages / industry_wages_wp),
+        1.0
+    )
+    new_econ_gaps = np.clip(
+        (1.0 - GAP_ADAPT_LAMBDA) * old_econ_gaps + GAP_ADAPT_LAMBDA * target_econ_gap,
+        0.0, 1.0
+    )
+    df["econ_gap"] = new_econ_gaps
 
     # ── domain_future_place: адаптация ожиданий места ─────────────────────
-    for i in range(len(df)):
-        res = df.at[i, "district"]
-        res_attr = G.nodes.get(res, {})
-        housing_price = res_attr.get("housing_price_m2", 1800.0)
-        infra_score   = res_attr.get("infrastructure_score", 0.5)
-        w = df.at[i, "wage"]
-        monthly_cost = housing_price * 50 * 0.004
-        burden = monthly_cost / max(w, 1.0)
-        affordability = max(0.0, 1.0 - burden / 0.35)
-        place_reality = 0.6 * affordability + 0.4 * infra_score
-        old_dfp = df.at[i, "domain_future_place"]
-        df.at[i, "domain_future_place"] = float(np.clip(
-            (1.0 - GAP_ADAPT_LAMBDA) * old_dfp + GAP_ADAPT_LAMBDA * place_reality,
-            0.0, 1.0
-        ))
+    # Векторизовано: собираем атрибуты района проживания для всех агентов
+    res_districts = df["district"].values
+    old_dfps = df["domain_future_place"].values
+
+    housing_prices = np.full(n, 1800.0, dtype=float)
+    infra_scores = np.full(n, 0.5, dtype=float)
+    for i in range(n):
+        res_attr = G.nodes.get(res_districts[i], {})
+        housing_prices[i] = res_attr.get("housing_price_m2", 1800.0)
+        infra_scores[i] = res_attr.get("infrastructure_score", 0.5)
+
+    monthly_costs = housing_prices * 50 * 0.004
+    burdens = monthly_costs / np.maximum(agent_wages, 1.0)
+    affordabilities = np.maximum(0.0, 1.0 - burdens / 0.35)
+    place_realities = 0.6 * affordabilities + 0.4 * infra_scores
+
+    new_dfps = np.clip(
+        (1.0 - GAP_ADAPT_LAMBDA) * old_dfps + GAP_ADAPT_LAMBDA * place_realities,
+        0.0, 1.0
+    )
+    df["domain_future_place"] = new_dfps
 
     # 2. Давление рынка труда
     jobs_pressure = _compute_jobs_pressure(df, jobs_capacity)
