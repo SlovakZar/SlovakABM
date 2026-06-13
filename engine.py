@@ -279,7 +279,7 @@ def _compute_d_instant(
     monthly_cost = housing_price_m2 * 50 * 0.004
     burden = monthly_cost / max(agent_wage, 1.0)
     affordability = max(0.0, 1.0 - burden / 0.35)
-    place_reality = 0.6 * affordability + 0.4 * infrastructure_score
+    place_reality = 0.7 * affordability + 0.3 * infrastructure_score
 
     gap = max(0.0, domain_future_place - place_reality)
     place_ratio = domain_future_place / max(place_reality, 0.001)
