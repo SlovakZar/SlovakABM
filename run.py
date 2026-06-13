@@ -84,7 +84,7 @@ def run(
     report_parts = []
 
     # ═══ МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ: Тик 0 → Тик 6 ═══
-    agent_table = agent_parameters_table(snapshots, n_show=20, tick_a=0, tick_b=6, seed=seed)
+    agent_table = agent_parameters_table(snapshots, G=G, n_show=20, tick_a=0, tick_b=6, seed=seed)
     report_parts.append(agent_table)
 
     for t in sorted(snapshots.keys()):
@@ -93,7 +93,7 @@ def run(
         report_parts.append(portrait)
 
     # Итоговая сводка
-    final_summary = summary_report(df_final, tick_stats, all_action_log, snapshots, detail=detail)
+    final_summary = summary_report(df_final, tick_stats, all_action_log, snapshots, detail=detail, G=G)
     report_parts.append(final_summary)
     # Также межрегиональный баланс (compare_snapshots)
     comparison = compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail)
