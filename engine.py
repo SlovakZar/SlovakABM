@@ -1262,7 +1262,7 @@ def tick(
         dfp = df.at[i, "domain_future_place"]
         if dfp > place_reality:
             gap_pct = (dfp - place_reality) / max(place_reality, 0.001)
-            new_penalties[i] = np.clip(old_penalties[i] + gap_pct * 0.02, 0.0, 5.0)
+            new_penalties[i] = np.clip(old_penalties[i] + gap_pct * 0.02 / 6.0, 0.0, 5.0)
         else:
             # Затухание если место устраивает
             new_penalties[i] = max(0.0, old_penalties[i] - 0.01)
