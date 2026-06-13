@@ -270,10 +270,10 @@ def _compute_d_instant(
     """
     # Экономическая компонента
     if agent_wage > 0 and industry_avg_wage_wp > 0:
-        wage_pressure = 1.0 - agent_wage / (agent_wage + industry_avg_wage_wp)
+        wage_pressure = industry_avg_wage_wp / agent_wage
     else:
         wage_pressure = 1.0  # безработный — максимальное давление
-    D_econ = w_econ * wage_pressure * econ_gap * (1.0 - job_flexibility)
+    D_econ = w_econ * wage_pressure * (econ_gap / max(job_flexibility, 0.01))
 
     # Жилищная компонента
     monthly_cost = housing_price_m2 * 50 * 0.004
