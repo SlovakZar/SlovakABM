@@ -23,6 +23,8 @@ sys.path.insert(0, str(SIM_DIR))
 from graph   import build_graph, print_graph_summary
 from agents  import create_agents, JOBS_CAPACITY
 from engine  import run_simulation
+from signals import EventBus, create_default_dispatcher
+from scenario import Scenario
 from report  import demographic_portrait, compare_snapshots, summary_report, agent_parameters_table
 
 
@@ -67,6 +69,13 @@ def run(
 
     if verbose:
         print(f"\n[3/4] Запуск симуляции ({n_ticks} тиков = {n_ticks//12} лет {n_ticks%12} мес)...")
+
+    # Создаём сигнальную шину
+    bus = EventBus(dispatcher=create_default_dispatcher())
+
+    # Загружаем сценарий (если файл существует)
+    scenario = Scenario.from_json("scenario.json")
+
     df_final, snapshots, tick_stats, all_action_log = run_simulation(
         df, G,
         n_ticks=n_ticks,
@@ -75,6 +84,8 @@ def run(
         verbose=verbose,
         jobs_capacity=JOBS_CAPACITY,
         init_dists=init_dists,
+        bus=bus,
+        scenario=scenario,
     )
 
     if verbose:
