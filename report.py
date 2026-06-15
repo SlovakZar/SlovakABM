@@ -48,6 +48,58 @@ def _bar(value, max_value, width=18) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _append_dynamic_vars_section(lines: list, df: pd.DataFrame) -> None:
+    """v2: Добавляет секцию динамических переменных сигнальной системы."""
+    dyn_vars = [
+        ("econ_penalty",             "Econ Penalty",           "штраф к D_econ"),
+        ("infra_bonus",              "Infra Bonus",            "бонус к инфраструктуре"),
+        ("inertia_mobility_penalty", "Inertia Mobility Penalty", "штраф к инерции от соседей"),
+        ("jobloss_econ_gap_bonus",   "Jobloss Econ Gap Bonus", "ramp-бонус к econ_gap от LOST_JOB"),
+    ]
+
+    available = []
+    for col, label, desc in dyn_vars:
+        if col in df.columns:
+            available.append((col, label, desc))
+
+    if not available:
+        return
+
+    lines.append(_section("ДИНАМИЧЕСКИЕ ПЕРЕМЕННЫЕ СИГНАЛЬНОЙ СИСТЕМЫ v2"))
+    lines.append(f"  {'Переменная':<28} {'Среднее':>10}  {'Медиана':>10}  {'Q75':>10}  {'Max':>10}  {'Доля>0':>8}")
+    lines.append("  " + _hline(82))
+
+    for col, label, desc in available:
+        vals = df[col].dropna()
+        if len(vals) == 0:
+            lines.append(f"  {label:<28} {'—':>10}  {'—':>10}  {'—':>10}  {'—':>10}  {'—':>8}")
+            continue
+        m = vals.mean()
+        med = vals.median()
+        q75 = vals.quantile(0.75)
+        vmax = vals.max()
+        pos_share = (vals > 0.001).mean()
+        lines.append(f"  {label:<28} {m:>10.4f}  {med:>10.4f}  {q75:>10.4f}  {vmax:>10.4f}  {pos_share:>7.1%}")
+
+    # Дополнительно: средние по статусам занятости для econ_penalty и jobloss_econ_gap_bonus
+    if "status" in df.columns:
+        statuses = ["stay", "commute", "unemployed"]
+        sl = {"stay": "Stay    ", "commute": "Commute ", "unemployed": "Unemp   "}
+        key_vars = [c for c, _, _ in available if c in ("econ_penalty", "jobloss_econ_gap_bonus")]
+        if key_vars:
+            lines.append(f"\n  ── По статусам занятости ──")
+            lines.append(f"  {'Статус':<10} " + " ".join(f"{col:>12}" for col in key_vars))
+            lines.append("  " + _hline(14 + len(key_vars) * 13))
+            for st in statuses:
+                sub = df[df["status"] == st]
+                if sub.empty:
+                    continue
+                row = f"  {sl.get(st, st):<10}"
+                for col in key_vars:
+                    row += f" {sub[col].mean():>11.4f}"
+                lines.append(row)
+
+
 def _hline(width=78, char="─") -> str:
     return char * width
 
@@ -245,6 +297,9 @@ def demographic_portrait(
         top_unemp = unemployed["industry"].value_counts().head(5)
         for ind, count in top_unemp.items():
             lines.append(f"  {str(ind)[:30]:<30} {count:>8,}")
+
+    # ═══ v2: ДИНАМИЧЕСКИЕ ПЕРЕМЕННЫЕ СИГНАЛЬНОЙ СИСТЕМЫ ═══════════════════
+    _append_dynamic_vars_section(lines, work_df)
 
     # ═══ ДОПОЛНИТЕЛЬНЫЕ МЕТРИКИ (detail=True) ═══════════════════════════════
     if detail:
@@ -690,7 +745,7 @@ def _industry_wage_in_district_report(G, district: str, industry: str) -> float:
 
 def _compute_d_components(agent_row, G=None) -> dict:
     """
-    Вычисляет компоненты D_instant (зеркало engine._compute_d_instant).
+    Вычисляет компоненты D_instant v2 (зеркало engine._compute_d_instant).
 
     Возвращает словарь:
       D_econ, wage_pressure, D_place, place_reality, affordability, D_instant
@@ -705,17 +760,20 @@ def _compute_d_components(agent_row, G=None) -> dict:
     domain_future_place = float(agent_row.get("domain_future_place", 0.3))
     w_econ = float(agent_row.get("w_economic", 0.3))
     w_future = float(agent_row.get("w_future", 0.3))
+    econ_penalty = float(agent_row.get("econ_penalty", 0.0))
+    infra_bonus = float(agent_row.get("infra_bonus", 0.0))
 
     # wage_pressure: насколько зарплата агента отстаёт от отраслевой в районе работы
     industry_avg_wp = _industry_wage_in_district_report(G, workplace, industry)
     if wage > 0 and industry_avg_wp > 0:
-        wage_pressure = 1.0 - wage / (wage + industry_avg_wp)
+        wage_pressure = industry_avg_wp / wage
     else:
         wage_pressure = 1.0  # безработный → максимальное давление
 
-    D_econ = w_econ * wage_pressure * econ_gap * (1.0 - job_flex)
+    # v2: econ_penalty добавляется к wage_pressure
+    D_econ = w_econ * (wage_pressure + econ_penalty) * (econ_gap / max(job_flex, 0.01))
 
-    # place_reality: качество жилья и инфраструктуры (0–1)
+    # place_reality: качество жилья и инфраструктуры (0–1) — v2
     monthly_cost = housing * 50 * 0.004
     burden = monthly_cost / max(wage, 1.0)
     affordability = max(0.0, 1.0 - burden / _HOUSING_BUDGET)
@@ -726,7 +784,9 @@ def _compute_d_components(agent_row, G=None) -> dict:
     else:
         infra = 0.5
 
-    place_reality = 0.6 * affordability + 0.4 * infra
+    # v2: infra_component = 0.3 * (1 - infra + infra_bonus)
+    infra_component = 0.3 * (1.0 - infra + infra_bonus)
+    place_reality = 0.7 * affordability + infra_component
 
     gap = max(0.0, domain_future_place - place_reality)
     place_ratio = domain_future_place / max(place_reality, 0.001)
@@ -830,6 +890,9 @@ def agent_parameters_table(
     lines.append("  D_place     — жилищная неудовлетворённость: w_future × gap × (dfp/pr) × (1+penalty)")
     lines.append("  place_r     — place_reality: 0.6×affordability + 0.4×infrastructure_score")
     lines.append("  PlacePen    — place_deficit_penalty (накопленный штраф)")
+    lines.append("  EPen/IBonus — v2: econ_penalty / infra_bonus (динамические сигнальные переменные)")
+    lines.append("  InMobPen    — v2: inertia_mobility_penalty (штраф к инерции от переездов соседей)")
+    lines.append("  JlBonus     — v2: jobloss_econ_gap_bonus (ramp-бонус от LOST_JOB)")
     lines.append("  Capab.      — capabilities: (income_index + education_index + weak_ties) / 3")
     lines.append("  Inertia     — базовая инерция агента")
     lines.append("  DynInert    — динамическая инерция = inertia × max(0.3, 1 − signal_reduction)")
@@ -844,6 +907,7 @@ def agent_parameters_table(
     lines.append(
         f"  {'ID':>5} {'Тип':<11} {'Статус':<17} "
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} {'PlacePen':>9} "
+        f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} "
         f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} "
         f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
@@ -912,6 +976,21 @@ def agent_parameters_table(
         place_pen_a = float(_get(ra, "place_deficit_penalty", 0.0))
         place_pen_b = float(_get(rb, "place_deficit_penalty", 0.0))
         pp_str      = _fmt_arrow(place_pen_a, place_pen_b, ".2f", 9)
+
+        # v2: динамические переменные
+        ep_a  = float(_get(ra, "econ_penalty", 0.0))
+        ep_b  = float(_get(rb, "econ_penalty", 0.0))
+        ib_a  = float(_get(ra, "infra_bonus", 0.0))
+        ib_b  = float(_get(rb, "infra_bonus", 0.0))
+        imp_a = float(_get(ra, "inertia_mobility_penalty", 0.0))
+        imp_b = float(_get(rb, "inertia_mobility_penalty", 0.0))
+        jlb_a = float(_get(ra, "jobloss_econ_gap_bonus", 0.0))
+        jlb_b = float(_get(rb, "jobloss_econ_gap_bonus", 0.0))
+        ep_str  = _fmt_arrow(ep_a, ep_b, ".3f", 8)
+        ib_str  = _fmt_arrow(ib_a, ib_b, ".3f", 8)
+        imp_str = _fmt_arrow(imp_a, imp_b, ".3f", 9)
+        jlb_str = _fmt_arrow(jlb_a, jlb_b, ".3f", 8)
+
         capab_str   = _fmt_arrow(capabilities_a, capabilities_b, ".3f", 10)
         inertia_str = _fmt_arrow(inertia_a, inertia_b, ".3f", 13)
         dyn_str     = _fmt_arrow(dyn_inertia_a, dyn_inertia_b, ".3f", 13)
@@ -927,6 +1006,7 @@ def agent_parameters_table(
         lines.append(
             f"  {id_str} {type_str} {status_str} "
             f"{aspir_str} {d_econ_str} {wp_str} {d_place_str} {pr_str} {pp_str} "
+            f"{ep_str} {ib_str} {imp_str} {jlb_str} "
             f"{capab_str} {inertia_str} {dyn_str} "
             f"{tpb_str} {thr_str} {sign_str} {int_state_s}"
         )
@@ -943,6 +1023,7 @@ def agent_parameters_table(
     lines.append(
         f"  {'':>5} {'':11} {'':17} "
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} "
+        f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} "
         f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} "
         f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
@@ -983,12 +1064,26 @@ def agent_parameters_table(
     m_dyn_a = np.mean(dyn_a_vals) if dyn_a_vals else 0.0
     m_dyn_b = np.mean(dyn_b_vals) if dyn_b_vals else 0.0
 
+    # v2: средние динамических переменных
+    m_ep_a  = _col_mean(sampled_df_a, "econ_penalty")
+    m_ep_b  = _col_mean(sampled_df_b, "econ_penalty")
+    m_ib_a  = _col_mean(sampled_df_a, "infra_bonus")
+    m_ib_b  = _col_mean(sampled_df_b, "infra_bonus")
+    m_imp_a = _col_mean(sampled_df_a, "inertia_mobility_penalty")
+    m_imp_b = _col_mean(sampled_df_b, "inertia_mobility_penalty")
+    m_jlb_a = _col_mean(sampled_df_a, "jobloss_econ_gap_bonus")
+    m_jlb_b = _col_mean(sampled_df_b, "jobloss_econ_gap_bonus")
+
     # Форматирование сводной строки
     m_asp_str = _fmt_arrow(m_asp_a, m_asp_b, ".3f", 13)
     m_de_str  = _fmt_arrow(m_de_a, m_de_b, ".3f", 10)
     m_wp_str  = _fmt_arrow(m_wp_a, m_wp_b, ".3f", 8)
     m_dp_str  = _fmt_arrow(m_dp_a, m_dp_b, ".3f", 10)
     m_pr_str  = _fmt_arrow(m_pr_a, m_pr_b, ".3f", 8)
+    m_ep_s    = _fmt_arrow(m_ep_a, m_ep_b, ".3f", 8)
+    m_ib_s    = _fmt_arrow(m_ib_a, m_ib_b, ".3f", 8)
+    m_imp_s   = _fmt_arrow(m_imp_a, m_imp_b, ".3f", 9)
+    m_jlb_s   = _fmt_arrow(m_jlb_a, m_jlb_b, ".3f", 8)
     m_cap_str = _fmt_arrow(m_cap_a, m_cap_b, ".3f", 10)
     m_in_str  = _fmt_arrow(m_in_a, m_in_b, ".3f", 13)
     m_dyn_s   = _fmt_arrow(m_dyn_a, m_dyn_b, ".3f", 13)
@@ -1016,6 +1111,7 @@ def agent_parameters_table(
     lines.append(
         f"  {m_st_str} "
         f"{m_asp_str} {m_de_str} {m_wp_str} {m_dp_str} {m_pr_str} "
+        f"{m_ep_s} {m_ib_s} {m_imp_s} {m_jlb_s} "
         f"{m_cap_str} {m_in_str} {m_dyn_s} "
         f"{m_tpb_s} {m_th_str} {m_sr_str} {m_is_str}"
     )
@@ -1056,6 +1152,12 @@ def agent_parameters_table(
     lines.append(f"  Среднее wage_pressure (тик {tick_b}):              {m_wp_b:.4f}")
     lines.append(f"  Среднее D_place (тик {tick_b}):                    {m_dp_b:.4f}")
     lines.append(f"  Среднее place_reality (тик {tick_b}):              {m_pr_b:.4f}")
+
+    # v2: динамические переменные
+    lines.append(f"  Среднее econ_penalty (тик {tick_b}):              {m_ep_b:.4f}")
+    lines.append(f"  Среднее infra_bonus (тик {tick_b}):               {m_ib_b:.4f}")
+    lines.append(f"  Среднее inertia_mobility_penalty (тик {tick_b}):  {m_imp_b:.4f}")
+    lines.append(f"  Среднее jobloss_econ_gap_bonus (тик {tick_b}):    {m_jlb_b:.4f}")
 
     # Распределение типов в выборке
     type_dist = sampled_df_a["agent_type"].value_counts().to_dict() if "agent_type" in sampled_df_a.columns else {}

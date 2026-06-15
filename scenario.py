@@ -38,6 +38,7 @@ class ScenarioEvent:
       industry          — отрасль (опционально)
       magnitude         — сила [0, 1]
       n_agents_affected — сколько агентов затронуть (для FACTORY_CLOSED и т.п.)
+      size              — размер работодателя: small/medium/big (для NEW_EMPLOYER/CLOSED_EMPLOYER)
     """
     tick: int
     event_type: str
@@ -45,6 +46,7 @@ class ScenarioEvent:
     industry: Optional[str] = None
     magnitude: float = 0.5
     n_agents_affected: int = 0
+    size: Optional[str] = None  # v2: small/medium/big
 
     def to_event(self, tick_num: int):
         """Конвертирует в signals.Event (ленивый импорт)."""
@@ -57,6 +59,7 @@ class ScenarioEvent:
             source_district=self.district,
             industry=self.industry,
             magnitude=self.magnitude,
+            size=self.size,
         )
 
 
@@ -101,6 +104,7 @@ class Scenario:
                 industry=item.get("industry"),
                 magnitude=item.get("magnitude", 0.5),
                 n_agents_affected=item.get("n_agents", 0),
+                size=item.get("size"),
             ))
         return Scenario(events)
 
@@ -116,6 +120,7 @@ class Scenario:
                 industry=item.get("industry"),
                 magnitude=item.get("magnitude", 0.5),
                 n_agents_affected=item.get("n_agents", 0),
+                size=item.get("size"),
             ))
         return scenario
 

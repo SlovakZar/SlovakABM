@@ -790,6 +790,7 @@ def create_agents(
                 "activation_timer":    0,     # Блок D: счётчик тиков ожидания (inertia-задержка)
                 "activation_domain":   "",    # доминантный домен при активации (economic/place/social/family)
                 "social_boost":        0.0,   # Блок B: временный буст social target от событий
+                "sb_pending":          "",    # v2: очередь активных decay-потоков social_boost ("M5,M3,C2" формат)
 
                 # ── Домены satisfaction ───────────────────────────────────────
                 "sat_economic":        round(econ_value, 4),
@@ -847,6 +848,12 @@ def create_agents(
                 "intention_delay":     0,            # счётчик тиков задержки после превышения порога намерения
                 "econ_gap":            round(float(d_econ_gap), 4),  # адаптивное восприятие econ-разрыва
                 "domain_future_place": round(float(d_future_place), 4),  # адаптивные ожидания места
+
+                # ── Динамические переменные сигнальной системы v2 ────────────
+                "econ_penalty":            0.0,   # динамический штраф к D_econ
+                "infra_bonus":             0.0,   # динамический бонус к инфраструктуре
+                "inertia_mobility_penalty": 0.0,  # динамический штраф к инерции от переездов соседей
+                "jobloss_econ_gap_bonus":  0.0,   # временный бонус к econ_gap от LOST_JOB
             })
             agent_id += 1
 

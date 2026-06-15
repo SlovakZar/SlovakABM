@@ -261,24 +261,29 @@ def _compute_d_instant(
     w_econ: float,
     w_future: float,
     place_deficit_penalty: float = 0.0,
+    econ_penalty: float = 0.0,
+    infra_bonus: float = 0.0,
 ) -> tuple[float, float, float]:
     """
     Вычисляет мгновенную неудовлетворённость D_instant.
 
+    v2: econ_penalty добавляется к wage_pressure; infra_bonus — к инфраструктуре.
+
     Returns (D_instant, D_econ, D_place).
     """
-    # Экономическая компонента
+    # Экономическая компонента (v2: + econ_penalty)
     if agent_wage > 0 and industry_avg_wage_wp > 0:
         wage_pressure = industry_avg_wage_wp / agent_wage
     else:
         wage_pressure = 1.0  # безработный — максимальное давление
-    D_econ = w_econ * wage_pressure * (econ_gap / max(job_flexibility, 0.01))
+    D_econ = w_econ * (wage_pressure + econ_penalty) * (econ_gap / max(job_flexibility, 0.01))
 
-    # Жилищная компонента
+    # Жилищная компонента (v2: infra_bonus в инфраструктурной части)
     monthly_cost = housing_price_m2 * 50 * 0.004
     burden = monthly_cost / max(agent_wage, 1.0)
     affordability = max(0.0, 1.0 - burden / 0.35)
-    place_reality = 0.7 * affordability + 0.3 * infrastructure_score
+    infra_component = 0.3 * (1.0 - infrastructure_score + infra_bonus)
+    place_reality = 0.7 * affordability + infra_component
 
     gap = max(0.0, domain_future_place - place_reality)
     place_ratio = domain_future_place / max(place_reality, 0.001)
@@ -395,6 +400,8 @@ def _two_barrier_activation(
             w_econ=w_econs[i],
             w_future=w_futures[i],
             place_deficit_penalty=place_penalty,
+            econ_penalty=float(df["econ_penalty"].values[i]),
+            infra_bonus=float(df["infra_bonus"].values[i]),
         )
 
         # ── Обновление aspirations (EWMA, с холодным стартом) ────────────
@@ -410,8 +417,9 @@ def _two_barrier_activation(
         education_index = edu_map.get(educations[i], 0.55)
         capabilities = (income_index + education_index + weak_ties[i]) / 3.0
 
-        # ── Динамическая инерция ──────────────────────────────────────────
-        dynamic_inertia = inertias[i] * max(0.3, 1.0 - signal_red[i])
+        # ── Динамическая инерция (v2: + inertia_mobility_penalty) ──────────
+        inertia_mob_pen = float(df["inertia_mobility_penalty"].values[i])
+        dynamic_inertia = (inertias[i] + inertia_mob_pen) * max(0.3, 1.0 - signal_red[i])
 
         # ── БАРЬЕР 1: Потенциал vs Инерция ───────────────────────────────
         if aspirations[i] * capabilities > dynamic_inertia:
@@ -429,10 +437,10 @@ def _two_barrier_activation(
                 # Attitude = D_econ + D_place (мгновенные)
                 attitude = (D_econ + D_place) / 2.0
 
-                # Subjective norm
+                # Subjective norm (v2: без нижней границы — сигналы могут пересилить)
                 social_pressure = net_susc[i] * social_boosts[i]
                 family_pressure_val = -family_mods[i] * (1.0 if maritals[i] == "married" else 0.5)
-                subjective_norm = float(np.clip(0.5 + social_pressure + family_pressure_val, 0.0, 1.0))
+                subjective_norm = float(min(0.5 + social_pressure + family_pressure_val, 1.0))
 
                 # Perceived behavioral control
                 pbc = (econ_percontrols[i] + percontrols[i]) / 2.0
@@ -500,6 +508,12 @@ def _execute_commute(
     df.at[idx, "aspirations"] = 0.0
     df.at[idx, "place_deficit_penalty"] = 0.0
 
+    # v2: сброс динамических переменных сигнальной системы
+    df.at[idx, "econ_penalty"] = 0.0
+    df.at[idx, "infra_bonus"] = 0.0
+    df.at[idx, "inertia_mobility_penalty"] = 0.0
+    df.at[idx, "jobloss_econ_gap_bonus"] = 0.0
+
     # v8: отраслевая зарплата в новом районе работы
     agent_industry = str(df.at[idx, "industry"])
     wp_attr = G.nodes.get(new_workplace, {})
@@ -545,6 +559,12 @@ def _execute_move(
     # Сброс aspirations — агент переехал, EWMA обнуляется
     df.at[idx, "aspirations"] = 0.0
     df.at[idx, "place_deficit_penalty"] = 0.0
+
+    # v2: сброс динамических переменных сигнальной системы
+    df.at[idx, "econ_penalty"] = 0.0
+    df.at[idx, "infra_bonus"] = 0.0
+    df.at[idx, "inertia_mobility_penalty"] = 0.0
+    df.at[idx, "jobloss_econ_gap_bonus"] = 0.0
 
     # Сброс части слабых связей при переезде
     df.at[idx, "weak_ties_utility"] = float(np.clip(
@@ -1198,11 +1218,13 @@ def _execute_factory_closed(
     scenario_event: "ScenarioEvent",
     G: nx.DiGraph,
     rng: np.random.Generator,
+    bus: "Optional[EventBus]" = None,
+    tick_num: int = 0,
 ) -> None:
     """
     Прямое исполнение FACTORY_CLOSED: выбирает n_agents_affected случайных
     занятых агентов в указанной отрасли и районе, устанавливает им статус
-    "unemployed" и эмитит JOB_LOST через шину (будет передано позже).
+    "unemployed" и эмитит LOST_JOB через шину.
     """
     import numpy as np
 
@@ -1225,12 +1247,201 @@ def _execute_factory_closed(
     chosen = rng.choice(candidates, size=n_actual, replace=False)
 
     for idx in chosen:
+        agent_id = int(df.at[idx, "id"])
+        residence = str(df.at[idx, "district"])
+
         df.at[idx, "status"] = "unemployed"
         df.at[idx, "is_employed"] = False
         df.at[idx, "intention_state"] = "seeking_work"
         df.at[idx, "tpb_active"] = False
         df.at[idx, "intention_delay"] = 0
         df.at[idx, "workplace_district"] = df.at[idx, "district"]
+
+        # v2: эмиссия LOST_JOB для сигнальной системы
+        if bus is not None:
+            bus.emit(Event(
+                event_type=EventType.LOST_JOB,
+                tick_emitted=tick_num,
+                source_agent_id=agent_id,
+                source_district=residence,
+                industry=industry,
+                magnitude=0.8,
+            ))
+            df.at[idx, "jobloss_econ_gap_bonus"] = 0.25
+
+
+# ── Главный tick ──────────────────────────────────────────────────────────────
+
+# v2: Константы decay
+SB_MOVE_DECAY_PER_TICK = 0.01     # затухание social_boost MOVE за тик
+SB_MOVE_TOTAL_TICKS    = 6        # длительность MOVE decay
+SB_COMMUTE_TOTAL_TICKS = 3        # длительность COMMUTE до сброса
+ECON_PENALTY_DECAY_PER_TICK = 0.01  # затухание econ_penalty за тик
+INERTIA_MOB_DECAY_PER_TICK = 0.01  # затухание inertia_mobility_penalty за тик
+JOBLOSS_RAMP_UP_TICKS   = 3       # тиков роста econ_gap после LOST_JOB
+JOBLOSS_RAMP_DOWN_TICKS = 3       # тиков возврата econ_gap
+JOBLOSS_RAMP_STEP       = 0.05    # шаг ramp
+
+
+def _process_sb_pending(df: pd.DataFrame) -> None:
+    """v2: Обрабатывает очередь sb_pending — затухание social_boost.
+
+    Формат sb_pending: "M5,M3,C2" — M= MOVE (remaining_ticks), C= COMMUTE (remaining_ticks).
+    M-decay: -0.01/тик на каждый активный M-поток.
+    C-decay: полный сброс +0.02 через 3 тика.
+    """
+    sb_pending = df["sb_pending"].values
+    sb = df["social_boost"].values.copy()
+
+    for i in range(len(df)):
+        val = str(sb_pending[i])
+        if not val or val == "nan" or val == "":
+            continue
+
+        parts = val.split(",")
+        new_parts = []
+
+        for p in parts:
+            if not p or len(p) < 2:
+                continue
+            typ = p[0]
+            try:
+                rem = int(p[1:])
+            except ValueError:
+                continue
+
+            if typ == 'M':
+                # Линейный спад: -0.01/тик
+                sb[i] = max(0.0, sb[i] - SB_MOVE_DECAY_PER_TICK)
+                if rem > 1:
+                    new_parts.append(f'M{rem - 1}')
+                # rem == 1: последний тик, decay применён, поток удаляется
+            elif typ == 'C':
+                if rem == 1:
+                    # Сброс всего буста через 3 тика
+                    sb[i] = max(0.0, sb[i] - 0.02)
+                    # поток удаляется
+                else:
+                    new_parts.append(f'C{rem - 1}')
+
+        df.at[i, "sb_pending"] = ",".join(new_parts) if new_parts else ""
+
+    df["social_boost"] = np.clip(sb, 0.0, 1.0)
+
+
+def _decay_dynamic_vars(df: pd.DataFrame) -> None:
+    """v2: Затухание динамических переменных сигнальной системы.
+
+    econ_penalty:     -0.01/тик (до 0)
+    infra_bonus:      без автоматического decay (управляется сигналами)
+    inertia_mobility_penalty: -0.01/тик (до 0)
+    jobloss_econ_gap_bonus: ramp up/down (обрабатывается в _process_jobloss_ramp)
+    """
+    n = len(df)
+
+    # econ_penalty: линейный спад к 0
+    ep = df["econ_penalty"].values.copy()
+    ep = np.maximum(0.0, ep - ECON_PENALTY_DECAY_PER_TICK)
+    df["econ_penalty"] = ep
+
+    # inertia_mobility_penalty: линейный спад к 0
+    imp = df["inertia_mobility_penalty"].values.copy()
+    imp = np.maximum(0.0, imp - INERTIA_MOB_DECAY_PER_TICK)
+    df["inertia_mobility_penalty"] = imp
+
+
+def _process_jobloss_ramp(df: pd.DataFrame) -> None:
+    """v2: Обрабатывает ramp econ_gap после LOST_JOB.
+
+    jobloss_econ_gap_bonus > 0 → фаза ramp-up (+0.05/тик × 3)
+    jobloss_econ_gap_bonus < 0 → фаза ramp-down (-0.05/тик × 3)
+    """
+    bonus = df["jobloss_econ_gap_bonus"].values
+    econ_gap = df["econ_gap"].values
+
+    for i in range(len(df)):
+        b = bonus[i]
+        if b > 0.001:
+            # Фаза ramp-up: econ_gap растёт
+            step = min(JOBLOSS_RAMP_STEP, b)
+            econ_gap[i] = min(1.0, econ_gap[i] + step)
+            bonus[i] = max(0.0, b - step)
+            # После исчерпания ramp-up переходим в ramp-down
+            if bonus[i] < 0.001:
+                bonus[i] = -JOBLOSS_RAMP_DOWN_TICKS * JOBLOSS_RAMP_STEP
+        elif b < -0.001:
+            # Фаза ramp-down: econ_gap возвращается
+            step = min(JOBLOSS_RAMP_STEP, -b)
+            econ_gap[i] = max(0.0, econ_gap[i] - step)
+            bonus[i] = min(0.0, b + step)
+            if bonus[i] > -0.001:
+                bonus[i] = 0.0
+
+    df["econ_gap"] = econ_gap
+    df["jobloss_econ_gap_bonus"] = bonus
+
+
+def _apply_employer_signal(df: pd.DataFrame, se, G, tick_num: int,
+                           bus: "Optional[EventBus]") -> None:
+    """v2: Прямая обработка NEW_EMPLOYER / CLOSED_EMPLOYER с условием wage_pressure > 1.
+
+    NEW_EMPLOYER:  econ_penalty += scaled_by_size, если wage_pressure > 1
+    CLOSED_EMPLOYER: econ_penalty = 0, если wage_pressure > 1
+    """
+    import numpy as np
+
+    district = se.district
+    industry = se.industry
+    size = getattr(se, 'size', None) or "small"
+
+    if industry is None:
+        return
+
+    # Размерный множитель
+    size_mult = {"small": 1.0, "medium": 2.0, "big": 3.0}
+    mult = size_mult.get(size, 1.0)
+    base_delta = 0.02 * mult
+
+    # Маска: агенты в той же отрасли + районе
+    mask = (
+        (df["workplace_district"].values == district) &
+        (df["industry"].values == industry) &
+        (df["status"].values != "student")
+    )
+    if not mask.any():
+        return
+
+    # Проверяем wage_pressure > 1 для каждого агента
+    for i in np.where(mask)[0]:
+        wp = df.at[i, "workplace_district"]
+        ind = df.at[i, "industry"]
+        w = df.at[i, "wage"]
+        ind_wage_wp = _industry_wage_in_district(G, wp, ind)
+        if w > 0 and ind_wage_wp > 0:
+            wage_pressure = ind_wage_wp / w
+        else:
+            wage_pressure = 1.0
+
+        if wage_pressure > 1.0:
+            if se.event_type == "NEW_EMPLOYER":
+                df.at[i, "econ_penalty"] = float(np.clip(
+                    df.at[i, "econ_penalty"] + base_delta, 0.0, 1.0
+                ))
+            elif se.event_type == "CLOSED_EMPLOYER":
+                df.at[i, "econ_penalty"] = 0.0
+
+    # Также эмитируем в шину для других эффектов (social_boost и т.д.)
+    if bus is not None:
+        event = se.to_event(tick_num)
+        event.size = size
+        bus.emit(event)
+
+
+def _apply_infra_signal(df: pd.DataFrame, se, G, tick_num: int,
+                        bus: "Optional[EventBus]") -> None:
+    """v2: Прямая обработка NEW_INFRA / CLOSED_INFRA."""
+    if bus is not None:
+        bus.emit(se.to_event(tick_num))
 
 
 # ── Главный tick ──────────────────────────────────────────────────────────────
@@ -1261,16 +1472,28 @@ def tick(
     # ── COLLECT: сценарные события ──────────────────────────────────────────
     if scenario is not None:
         for se in scenario.get_events(tick_num):
+            # v2: NEW_EMPLOYER / CLOSED_EMPLOYER — прямая обработка (условие wage_pressure>1)
+            if se.event_type in ("NEW_EMPLOYER", "CLOSED_EMPLOYER"):
+                _apply_employer_signal(df, se, G, tick_num, bus)
+                continue
+            # v2: NEW_INFRA / CLOSED_INFRA — прямая обработка
+            if se.event_type in ("NEW_INFRA", "CLOSED_INFRA"):
+                _apply_infra_signal(df, se, G, tick_num, bus)
+                continue
+
             # Эмиссия в шину для сигнальной обработки
             if bus is not None:
                 bus.emit(se.to_event(tick_num))
 
             # Прямое исполнение для FACTORY_CLOSED: увольнение агентов
             if se.event_type == "FACTORY_CLOSED" and se.n_agents_affected > 0:
-                _execute_factory_closed(df, se, G, rng)
+                _execute_factory_closed(df, se, G, rng, bus=bus, tick_num=tick_num)
 
-    # 0. Блок B: затухание social_boost (×0.8 каждый тик)
-    df["social_boost"] = df["social_boost"].values * SOCIAL_BOOST_DECAY
+    # 0. v2: Обработка sb_pending — затухание social_boost по новой схеме
+    _process_sb_pending(df)
+
+    # 0b. v2: Затухание динамических переменных сигнальной системы
+    _decay_dynamic_vars(df)
 
     # 1. Время
     df["age"]         = df["age"] + 1 / 12
@@ -1326,13 +1549,15 @@ def tick(
                         magnitude=0.8,
                     ))
                     bus.emit(Event(
-                        event_type=EventType.JOB_LOST,
+                        event_type=EventType.LOST_JOB,
                         tick_emitted=tick_num,
                         source_agent_id=agent_id,
                         source_district=residence,
                         industry=industry,
                         magnitude=0.7,
                     ))
+                    # v2: устанавливаем jobloss_econ_gap_bonus для ramp
+                    df.at[idx, "jobloss_econ_gap_bonus"] = 0.25
             n_grad = int(graduating.sum())
             if n_grad > 0:
                 print(f"  [tick {tick_num}] Выпустилось студентов: {n_grad}")
@@ -1379,6 +1604,9 @@ def tick(
         0.0, 1.0
     )
     df["econ_gap"] = new_econ_gaps
+
+    # v2: Обработка LOST_JOB ramp (econ_gap + jobloss_econ_gap_bonus)
+    _process_jobloss_ramp(df)
 
     # ── place_deficit_penalty: накопление штрафа за неудовлетворённость местом ─
     res_districts = df["district"].values
