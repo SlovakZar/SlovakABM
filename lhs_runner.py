@@ -342,7 +342,7 @@ def collect_metrics(df_final: pd.DataFrame, snapshots: Dict,
     if "region" in df.columns:
         region_counts = df["region"].value_counts(normalize=True)
         metrics["regional_population_gini"] = float(
-            1.0 - sum((region_counts ** 2).sum(), 0.0)  # упрощённый Simpson
+            1.0 - (region_counts ** 2).sum()  # упрощённый Simpson = 1 - Σ(pᵢ²)
         )
         if "wage" in df.columns:
             region_wages = df[df["wage"] > 0].groupby("region")["wage"].mean()
