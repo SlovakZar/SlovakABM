@@ -108,6 +108,101 @@ def _section(title: str, width=78) -> str:
     return f"\n{'─' * width}\n  {title}\n{'─' * width}"
 
 
+def industry_jobs_snapshot(G, df=None, top_n: int = 12) -> str:
+    """
+    v3: Снимок industry_jobs — занятые и вакантные места по отраслям.
+
+    Показывает для топ-N районов (по общей ёмкости) разбивку:
+      occupied — занятые места (агенты с workplace=district)
+      vacant   — открытые вакансии
+      pressure — occupied / (occupied + vacant)
+
+    Если передан df, то occupied считается по фактическим агентам.
+    """
+    lines = []
+    lines.append(_section("INDUSTRY JOBS: ЗАНЯТЫЕ И ВАКАНТНЫЕ МЕСТА ПО ОТРАСЛЯМ (v3)"))
+
+    if G is None:
+        lines.append("  [Граф не передан]")
+        return "\n".join(lines)
+
+    # Собираем статистику по районам
+    district_stats = []
+    for district in G.nodes:
+        ind_jobs = G.nodes[district].get("industry_jobs", {})
+        if not ind_jobs:
+            continue
+        total_occ = sum(v["occupied"] for v in ind_jobs.values())
+        total_vac = sum(v["vacant"] for v in ind_jobs.values())
+        total_cap = total_occ + total_vac
+        if total_cap == 0:
+            continue
+        # Фактическое число занятых агентов (если df передан)
+        actual_occ = total_occ
+        if df is not None:
+            actual_occ = int(
+                (df["workplace_district"] == district).sum()
+                if "workplace_district" in df.columns
+                else total_occ
+            )
+        district_stats.append((
+            district, total_occ, total_vac, total_cap,
+            actual_occ / max(total_cap, 1)
+        ))
+
+    if not district_stats:
+        lines.append("  [Нет данных industry_jobs в графе]")
+        return "\n".join(lines)
+
+    # Сортируем по общей ёмкости
+    district_stats.sort(key=lambda x: -x[3])
+    district_stats = district_stats[:top_n]
+
+    lines.append(f"  {'Район':<30} {'Occupied':>10} {'Vacant':>10} "
+                 f"{'Всего':>10} {'Pressure':>9}")
+    lines.append("  " + _hline(75))
+
+    for d, occ, vac, cap, press in district_stats:
+        name = d.replace("District of ", "")[:28]
+        lines.append(f"  {name:<30} {occ:>10,} {vac:>10,} {cap:>10,} {press:>8.3f}")
+
+    # ── Детально по отраслям для топ-3 районов ──────────────────────────
+    lines.append(f"\n  ДЕТАЛЬНО ПО ОТРАСЛЯМ (топ-3 района):")
+    for d, _, _, _, _ in district_stats[:3]:
+        name = d.replace("District of ", "")
+        ind_jobs = G.nodes[d].get("industry_jobs", {})
+        if not ind_jobs:
+            continue
+
+        # Считаем фактически занятых агентов по отраслям
+        actual_by_ind = {}
+        if df is not None and "workplace_district" in df.columns and "industry" in df.columns:
+            sub = df[df["workplace_district"] == d]
+            actual_by_ind = sub.groupby("industry")["id"].count().to_dict()
+
+        lines.append(f"\n  ── {name} ──")
+        lines.append(f"  {'Отрасль':<45} {'Occ':>8} {'Vac':>8} "
+                     f"{'Всего':>8} {'Факт':>8} {'Press':>7}")
+        lines.append("  " + _hline(90))
+
+        # Сортируем отрасли по общей ёмкости
+        sorted_inds = sorted(
+            ind_jobs.items(),
+            key=lambda x: -(x[1]["occupied"] + x[1]["vacant"])
+        )
+        for ind, jobs in sorted_inds[:8]:
+            occ = jobs["occupied"]
+            vac = jobs["vacant"]
+            cap = occ + vac
+            actual = actual_by_ind.get(ind, occ)
+            press = actual / max(cap, 1)
+            ind_short = str(ind)[:43]
+            lines.append(f"  {ind_short:<45} {occ:>8,} {vac:>8,} "
+                         f"{cap:>8,} {actual:>8,} {press:>6.3f}")
+
+    return "\n".join(lines)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. DEMOGRAPHIC PORTRAIT — основной портрет с приоритезацией метрик
 # ══════════════════════════════════════════════════════════════════════════════

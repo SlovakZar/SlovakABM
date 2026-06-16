@@ -315,7 +315,10 @@ def update_industry_pressure(G: nx.DiGraph, df):
     """
     Вычисляет отраслевое давление (industry_pressure) для каждого узла графа.
 
-    industry_pressure[district][industry] = занятые_агенты / industry_capacity.
+    v3: Использует industry_jobs (occupied+vacant) если доступно,
+    иначе fallback на industry_capacity.
+
+    industry_pressure[district][industry] = занятые_агенты / (occupied + vacant).
     Значение > 1.0 означает перегрузку отрасли в районе.
     Вызывается каждый тик из engine.tick().
     """
@@ -327,12 +330,39 @@ def update_industry_pressure(G: nx.DiGraph, df):
                      .to_dict())
 
     for district in G.nodes:
-        cap = G.nodes[district].get("industry_capacity", {})
-        pressure = {}
-        for ind, capacity in cap.items():
-            cnt = wp_ind_counts.get((district, ind), 0)
-            pressure[ind] = round(cnt / max(capacity, 1), 3)
-        G.nodes[district]["industry_pressure"] = pressure
+        # v3: предпочитаем industry_jobs (occupied+vacant)
+        ind_jobs = G.nodes[district].get("industry_jobs", {})
+        if ind_jobs:
+            pressure = {}
+            for ind, jobs in ind_jobs.items():
+                cnt = wp_ind_counts.get((district, ind), 0)
+                total_cap = jobs["occupied"] + jobs["vacant"]
+                pressure[ind] = round(cnt / max(total_cap, 1), 3)
+            G.nodes[district]["industry_pressure"] = pressure
+        else:
+            # Fallback: старый industry_capacity
+            cap = G.nodes[district].get("industry_capacity", {})
+            pressure = {}
+            for ind, capacity in cap.items():
+                cnt = wp_ind_counts.get((district, ind), 0)
+                pressure[ind] = round(cnt / max(capacity, 1), 3)
+            G.nodes[district]["industry_pressure"] = pressure
+
+
+def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacity: dict):
+    """
+    v3: Синхронизирует INDUSTRY_JOBS_CAPACITY и JOBS_CAPACITY в узлы графа.
+
+    Вызывается из run.py после create_agents().
+    """
+    for district in G.nodes:
+        if district in industry_jobs:
+            G.nodes[district]["industry_jobs"] = {
+                ind: {"occupied": v["occupied"], "vacant": v["vacant"]}
+                for ind, v in industry_jobs[district].items()
+            }
+        if district in jobs_capacity:
+            G.nodes[district]["jobs_capacity"] = jobs_capacity[district]
 
 
 def print_graph_summary(G: nx.DiGraph):

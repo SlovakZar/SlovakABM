@@ -60,6 +60,7 @@ class ScenarioEvent:
             industry=self.industry,
             magnitude=self.magnitude,
             size=self.size,
+            n_agents_affected=self.n_agents_affected,
         )
 
 

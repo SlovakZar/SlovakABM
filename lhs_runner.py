@@ -403,9 +403,10 @@ def lhs_test(
         DataFrame со всеми результатами: строки = прогоны, столбцы = параметры + метрики
     """
     from graph import build_graph
-    from agents import create_agents, JOBS_CAPACITY
+    from agents import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
     from engine import run_simulation
     from signals import EventBus
+    from graph import sync_industry_jobs_to_graph
 
     t_start = time.time()
 
@@ -458,10 +459,8 @@ def lhs_test(
             seed=run_seed,
         )
 
-        # Синхронизируем jobs_capacity
-        for d in G.nodes:
-            if d in JOBS_CAPACITY:
-                G.nodes[d]["jobs_capacity"] = JOBS_CAPACITY[d]
+        # v3: Синхронизируем industry_jobs (occupied+vacant) и jobs_capacity
+        sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
 
         # Создаём шину с кастомным dispatcher
         dispatcher = create_patched_dispatcher(signal_params)

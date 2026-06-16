@@ -161,6 +161,13 @@ _COMMUTING = None
 # Заполняется при первом вызове _get_commuting(), используется graph.py
 JOBS_CAPACITY: dict = {}
 
+# v3: Новая структура — отраслевая ёмкость с разделением на occupied/vacant
+# {district: {industry: {"occupied": int, "vacant": int}}}
+# occupied — занятые рабочие места (агенты с workplace=district, industry=X)
+# vacant   — открытые вакансии (изначально от unemployed_share, затем от NEW_EMPLOYER/CLOSED_EMPLOYER)
+# job_capacity по отрасли = occupied + vacant
+INDUSTRY_JOBS_CAPACITY: dict[str, dict[str, dict[str, int]]] = {}
+
 
 def _get_init_dists(path="agent_init_distributions.json"):
     global _INIT_DISTS
@@ -250,6 +257,98 @@ def _scale_jobs_capacity(n_agents: int):
         d: max(1, int(v * scale))
         for d, v in JOBS_CAPACITY.items()
     }
+
+
+def _init_industry_jobs(init_dists: dict, n_agents: int):
+    """
+    v3: Инициализирует INDUSTRY_JOBS_CAPACITY с разделением на occupied/vacant.
+
+    Для каждого района:
+      occupied_by_industry = scaled_population × employed_share × industry_share
+      vacant_by_industry   = occupied / (1 − unemployed_share) − occupied
+
+    Итого job_capacity по отрасли = occupied + vacant.
+
+    Также обновляет глобальный JOBS_CAPACITY (сумма по всем отраслям).
+    """
+    global INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY
+
+    # Суммарная популяция 18–65 по всем районам (из init_dists)
+    total_pop = sum(
+        d["population"] for d in init_dists.values()
+    )
+    if total_pop == 0:
+        return
+
+    scale = n_agents / total_pop
+
+    new_industry_jobs: dict[str, dict[str, dict[str, int]]] = {}
+    new_jobs_capacity: dict[str, int] = {}
+
+    for district, data in init_dists.items():
+        pop = data.get("population", 1)
+        scaled_pop = max(1, int(pop * scale))
+
+        employment = data.get("employment", {})
+        employed_share = employment.get("employed_share", 0.45)
+        unemployed_share = employment.get("unemployed_share", 0.06)
+
+        industry_shares = data.get("industry", {})
+        if not industry_shares:
+            industry_shares = {"Other": 1.0}
+
+        # Нормализуем доли отраслей
+        total_share = sum(industry_shares.values())
+        if total_share == 0:
+            total_share = 1.0
+
+        district_jobs: dict[str, dict[str, int]] = {}
+        district_total_capacity = 0
+
+        for industry, share in industry_shares.items():
+            norm_share = share / total_share
+
+            # Занятые места в отрасли
+            occupied = max(1, int(scaled_pop * employed_share * norm_share))
+
+            # Вакантные места = occupied / (1 − u) − occupied
+            # При unemployed_share → 1 избегаем деления на 0
+            safe_unemp = max(unemployed_share, 0.005)
+            total_positions = occupied / max(1.0 - safe_unemp, 0.01)
+            vacant = max(0, int(round(total_positions - occupied)))
+
+            district_jobs[industry] = {"occupied": occupied, "vacant": vacant}
+            district_total_capacity += occupied + vacant
+
+        new_industry_jobs[district] = district_jobs
+        new_jobs_capacity[district] = max(1, district_total_capacity)
+
+    INDUSTRY_JOBS_CAPACITY = new_industry_jobs
+    JOBS_CAPACITY = new_jobs_capacity
+
+    # Диагностика
+    total_occ = sum(
+        v["occupied"]
+        for d in INDUSTRY_JOBS_CAPACITY.values()
+        for v in d.values()
+    )
+    total_vac = sum(
+        v["vacant"]
+        for d in INDUSTRY_JOBS_CAPACITY.values()
+        for v in d.values()
+    )
+    print(f"  INDUSTRY_JOBS_CAPACITY: {len(INDUSTRY_JOBS_CAPACITY)} районов")
+    print(f"    occupied={total_occ:,}  vacant={total_vac:,}  "
+          f"total_capacity={total_occ+total_vac:,}")
+    print(f"    vacant/occupied ratio={total_vac/max(total_occ,1):.3f}")
+    # Пример для проверки
+    sample_d = "District of Bratislava I"
+    if sample_d in new_industry_jobs:
+        sample = new_industry_jobs[sample_d]
+        print(f"    {sample_d}:")
+        for ind, v in sorted(sample.items(), key=lambda x: -(x[1]["occupied"]+x[1]["vacant"]))[:5]:
+            print(f"      {ind}: occ={v['occupied']:,} vac={v['vacant']:,} "
+                  f"total={v['occupied']+v['vacant']:,}")
 
 
 # ── Школьные/студенческие потоки ──────────────────────────────────────────────
@@ -828,9 +927,11 @@ def create_agents(
     print(f"\n  Создано агентов: {len(df):,}  |  Районов: {df['residence_district'].nunique()}")
     _print_summary(df)
 
-    # Масштабируем JOBS_CAPACITY от реальной популяции к числу агентов,
-    # чтобы jobs_pressure колебался вокруг 1.0, а не 0.03
-    _scale_jobs_capacity(n_agents)
+    # v3: Инициализируем INDUSTRY_JOBS_CAPACITY с occupied/vacant по отраслям
+    # из данных init_dists (population, employed_share, unemployed_share, industry shares).
+    # Это заменяет старый _scale_jobs_capacity — отраслевая структура точнее,
+    # а commuting-матрица используется только для распределения агентов по workplace.
+    _init_industry_jobs(init_dists, n_agents)
 
     return df
 

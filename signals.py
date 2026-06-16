@@ -69,6 +69,7 @@ class Event:
       motivation       — economic / place
       magnitude        — сила события [0, 1]
       size             — размер работодателя: small/medium/big (для NEW_EMPLOYER/CLOSED_EMPLOYER)
+      n_agents_affected — число затронутых агентов/рабочих мест (для CLOSED_EMPLOYER/FACTORY_CLOSED)
       deliver_at_tick  — тик доставки (>= tick_emitted, для буферизации)
     """
     event_type: EventType
@@ -81,6 +82,7 @@ class Event:
     motivation: Optional[str] = None            # "economic" | "place"
     magnitude: float = 0.5
     size: Optional[str] = None                  # "small" | "medium" | "big"
+    n_agents_affected: int = 0                  # v3: число рабочих мест/агентов
     deliver_at_tick: Optional[int] = None       # None = мгновенно (tick_emitted)
 
     def __post_init__(self):
@@ -106,6 +108,12 @@ class Signal:
       clip_max         — максимальное значение после применения
       scale_by_field   — имя колонки для масштабирования delta (опционально)
       event_type       — тип события-источника (для sb_pending tracking, v2)
+
+    v3 — граф-операции (сигналы среде, не только агентам):
+      graph_op         — "add_vacant" | "sub_occupied" | None
+      graph_district   — район для граф-операции
+      graph_industry   — отрасль для граф-операции
+      graph_delta      — величина изменения в графе (int)
     """
     target_mask: Union[np.ndarray, Callable[[pd.DataFrame], np.ndarray]]
     field: str
@@ -117,38 +125,79 @@ class Signal:
     scale_by_field: Optional[str] = None
     event_type: Optional["EventType"] = None  # v2: для отслеживания decay
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Применяет сигнал к DataFrame, возвращает изменённый df."""
+    # v3: граф-операции
+    graph_op: Optional[str] = None           # "add_vacant" | "sub_occupied"
+    graph_district: Optional[str] = None
+    graph_industry: Optional[str] = None
+    graph_delta: float = 0.0
+
+    def apply(self, df: pd.DataFrame,
+              G: "nx.DiGraph | None" = None) -> pd.DataFrame:
+        """Применяет сигнал к DataFrame (и опционально к графу G).
+
+        v3: если graph_op задан — модифицирует industry_jobs в узлах графа.
+        """
         df = df.copy()
-        if callable(self.target_mask):
-            mask = self.target_mask(df)
-        else:
-            mask = self.target_mask
 
-        if not mask.any():
-            return df
-
-        col = df[self.field].values.copy()
-
-        if self.mode == "set":
-            # Установка явного значения (может быть строкой)
-            col[mask] = self.value if self.value is not None else self.delta
-        else:
-            # Вычисляем per-agent delta для add/multiply
-            if self.scale_by_field and self.scale_by_field in df.columns:
-                per_agent_delta = self.delta * df[self.scale_by_field].values
+        # ── Агентная часть (df) ──────────────────────────────────────────
+        if self.mode:
+            if callable(self.target_mask):
+                mask = self.target_mask(df)
             else:
-                per_agent_delta = np.full(len(df), self.delta)
+                mask = self.target_mask
 
-            if self.mode == "add":
-                col[mask] = col[mask] + per_agent_delta[mask]
-            elif self.mode == "multiply":
-                col[mask] = col[mask] * per_agent_delta[mask]
+            if mask.any():
+                col = df[self.field].values.copy()
 
-            col[mask] = np.clip(col[mask], self.clip_min, self.clip_max)
+                if self.mode == "set":
+                    col[mask] = self.value if self.value is not None else self.delta
+                else:
+                    if self.scale_by_field and self.scale_by_field in df.columns:
+                        per_agent_delta = self.delta * df[self.scale_by_field].values
+                    else:
+                        per_agent_delta = np.full(len(df), self.delta)
 
-        df[self.field] = col
+                    if self.mode == "add":
+                        col[mask] = col[mask] + per_agent_delta[mask]
+                    elif self.mode == "multiply":
+                        col[mask] = col[mask] * per_agent_delta[mask]
+
+                    col[mask] = np.clip(col[mask], self.clip_min, self.clip_max)
+
+                df[self.field] = col
+
+        # ── v3: Граф-операция ────────────────────────────────────────────
+        if self.graph_op and G is not None and self.graph_district:
+            self._apply_graph(G)
+
         return df
+
+    def _apply_graph(self, G: "nx.DiGraph") -> None:
+        """v3: Применяет граф-операцию к industry_jobs узла."""
+        district = self.graph_district
+        industry = self.graph_industry
+
+        if district not in G.nodes:
+            return
+
+        ind_jobs = G.nodes[district].get("industry_jobs", {})
+        if not ind_jobs:
+            return
+
+        if self.graph_op == "add_vacant":
+            if industry and industry in ind_jobs:
+                ind_jobs[industry]["vacant"] = max(
+                    0, ind_jobs[industry].get("vacant", 0) + int(self.graph_delta)
+                )
+        elif self.graph_op == "sub_occupied":
+            if industry and industry in ind_jobs:
+                ind_jobs[industry]["occupied"] = max(
+                    0, ind_jobs[industry].get("occupied", 0) - int(self.graph_delta)
+                )
+
+        # Пересчитываем общую jobs_capacity узла
+        total = sum(v["occupied"] + v["vacant"] for v in ind_jobs.values())
+        G.nodes[district]["jobs_capacity"] = max(1, total)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -174,6 +223,10 @@ class Rule:
       scale_by_field   — имя колонки для per-agent масштабирования delta
       clip_min         — мин. значение после применения (по умолчанию 0.0)
       clip_max         — макс. значение после применения (по умолчанию 1.0)
+
+    v3 — граф-правила:
+      graph_op         — "add_vacant" | "sub_occupied" | None
+      graph_delta      — величина изменения в графе (int)
     """
     event_type: EventType
     target_scope: str                           # см. выше
@@ -189,6 +242,13 @@ class Rule:
     scale_by_field: Optional[str] = None
     clip_min: float = 0.0
     clip_max: float = 1.0
+
+    # v3: граф-правила
+    graph_op: Optional[str] = None              # "add_vacant" | "sub_occupied"
+    graph_delta: float = 0.0                    # величина в графе
+
+    # v3: дополнительные фильтры
+    filter_wage_pressure: bool = False          # фильтровать агентов с wage_pressure > 1
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -238,6 +298,41 @@ SCOPE_SAME_SETTLEMENT_TYPE   = "same_settlement_type"    # тот же settlemen
 SCOPE_WHOLE_REGION           = "whole_region"            # весь регион source_district
 
 
+def _industry_wage_in_district_signal(G, district: str, industry: str) -> float:
+    """Отраслевая зарплата в узле графа; fallback → avg_wage → 1614."""
+    attr = G.nodes.get(district, {})
+    sal = attr.get("salary_by_industry", {})
+    if sal:
+        return float(sal.get(industry, attr.get("avg_wage", 1614.0)))
+    return float(attr.get("avg_wage", 1614.0))
+
+
+def _wage_pressure_mask(df: pd.DataFrame, G, event: "Event",
+                        base_mask: np.ndarray) -> np.ndarray:
+    """v3: Фильтрует маску — оставляет только агентов с wage_pressure > 1.
+
+    wage_pressure = отраслевая_зарплата_в_районе / зарплата_агента.
+    Если у агента зарплата 0 — wage_pressure = 1.0 (не фильтруется).
+    """
+    import numpy as np
+    indices = np.where(base_mask)[0]
+    if len(indices) == 0:
+        return base_mask
+
+    district = event.source_district
+    industry = event.industry
+    ind_wage = _industry_wage_in_district_signal(G, district, industry)
+
+    result = base_mask.copy()
+    for i in indices:
+        w = float(df.at[i, "wage"])
+        if w > 0 and ind_wage > 0:
+            wp = ind_wage / w
+            if wp <= 1.0:
+                result[i] = False
+    return result
+
+
 class Dispatcher:
     """Хранит таблицу правил event_type → list[Rule] и диспетчеризует события."""
 
@@ -257,6 +352,9 @@ class Dispatcher:
                  G: "nx.DiGraph | None" = None) -> tuple[list[Signal], list[tuple[Signal, int]]]:
         """Превращает событие в сигналы: немедленные и отложенные.
 
+        v3: Для правил с graph_op — создаёт граф-сигнал (district/industry из Event).
+        Для правил с field — создаёт агентный сигнал (как раньше).
+
         Returns:
           (signals_now, delayed) — где delayed = list[(Signal, deliver_at_tick)]
         """
@@ -269,6 +367,38 @@ class Dispatcher:
             if rule.motivation is not None and rule.motivation != event.motivation:
                 continue
 
+            # v3: Чисто граф-правило (нет field/delta для df)
+            if rule.graph_op:
+                # Граф-сигнал: не нужна маска агентов, district/industry из Event
+                if event.source_district is None:
+                    continue
+
+                # graph_delta: из Event.n_agents_affected, иначе из Event.size → _size_to_jobs
+                g_delta = rule.graph_delta
+                if event.n_agents_affected > 0:
+                    g_delta = float(event.n_agents_affected)
+                elif event.size:
+                    g_delta = float(_size_to_jobs(event.size))
+
+                sig = Signal(
+                    target_mask=np.zeros(len(df), dtype=bool),  # пустая маска
+                    field="",                                     # нет поля df
+                    mode="",                                      # нет режима df
+                    graph_op=rule.graph_op,
+                    graph_district=event.source_district,
+                    graph_industry=event.industry,
+                    graph_delta=g_delta,
+                    event_type=event.event_type,
+                )
+
+                if rule.delay_ticks > 0:
+                    deliver_at = event.tick_emitted + rule.delay_ticks
+                    delayed.append((sig, deliver_at))
+                else:
+                    signals_now.append(sig)
+                continue
+
+            # ── Агентное правило (стандартный путь) ───────────────────────
             mask = self._build_mask(rule, event, df, G)
             if not mask.any():
                 continue
@@ -354,6 +484,11 @@ class Dispatcher:
         if rule.filter_industry is not None:
             base = base & (df["industry"].values == rule.filter_industry)
 
+        # ── v3: Фильтр wage_pressure > 1 ─────────────────────────────────
+        if rule.filter_wage_pressure and G is not None and event.industry:
+            # Нужен импорт _industry_wage_in_district из engine — ленивый
+            base = base & _wage_pressure_mask(df, G, event, base)
+
         # ── Исключаем самого агента-источника (кроме scope=self) ─────────
         if scope != SCOPE_SELF and event.source_agent_id is not None:
             base = base & (df["id"].values != event.source_agent_id)
@@ -433,10 +568,11 @@ class EventBus:
         self.pending.clear()
         return all_signals
 
-    def flush(self, df: pd.DataFrame, signals: list[Signal]) -> pd.DataFrame:
-        """Применяет сигналы к DataFrame. v2: обновляет sb_pending для social_boost."""
+    def flush(self, df: pd.DataFrame, signals: list[Signal],
+              G: "nx.DiGraph | None" = None) -> pd.DataFrame:
+        """Применяет сигналы к DataFrame (и опционально к графу G). v3: +G."""
         for sig in signals:
-            df = sig.apply(df)
+            df = sig.apply(df, G)
 
             # v2: отслеживание decay для social_boost
             if sig.event_type is not None and sig.field == "social_boost" and sig.mode == "add":
@@ -497,6 +633,14 @@ class EventBus:
 EVENT_SOCIAL_BOOST    = 0.08   # базовая добавка social_boost от события
 UNEMPLOYED_SIGNAL     = 0.35   # добавка к signal_reduction при потере работы
 NEIGHBOR_SIGNAL_COEF  = 0.04   # коэфф. сигнала от переехавшего соседа
+
+# v3: размеры компаний → рабочие места
+_SIZE_TO_JOBS = {"small": 50, "medium": 250, "big": 1000}
+
+
+def _size_to_jobs(size: str) -> int:
+    """Переводит размер компании в примерное число рабочих мест."""
+    return _SIZE_TO_JOBS.get(size, 50)
 
 
 def create_default_dispatcher() -> Dispatcher:
@@ -648,25 +792,61 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # NEW_EMPLOYER — v2: econ_penalty обрабатывается напрямую в engine.tick
-    # (условие wage_pressure>1, size scaling). Здесь — только social_boost.
+    # NEW_EMPLOYER — v3: граф-сигнал (vacant_jobs) + агент-сигналы (social_boost, econ_penalty)
     # ═══════════════════════════════════════════════════════════════════════
+    # Граф: добавляем вакансии в отрасли района
+    d.add_rule(Rule(
+        event_type=EventType.NEW_EMPLOYER,
+        target_scope=SCOPE_SELF,           # игнорируется для graph_op
+        field="",                           # нет поля df
+        graph_op="add_vacant",
+        graph_delta=50,                     # переопределяется из Event.size
+    ))
+    # Агенты всего региона: social_boost
     d.add_rule(Rule(
         event_type=EventType.NEW_EMPLOYER,
         target_scope=SCOPE_WHOLE_REGION,
         field="social_boost",
         base_delta=0.05,
     ))
+    # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty
+    d.add_rule(Rule(
+        event_type=EventType.NEW_EMPLOYER,
+        target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
+        field="econ_penalty",
+        base_delta=0.02,
+        filter_wage_pressure=True,
+        clip_min=0.0,
+        clip_max=1.0,
+    ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # CLOSED_EMPLOYER — v2: econ_penalty обрабатывается напрямую в engine.tick
+    # CLOSED_EMPLOYER — v3: граф-сигнал (occupied_jobs) + агент-сигналы
     # ═══════════════════════════════════════════════════════════════════════
+    # Граф: уменьшаем занятые места в отрасли района
+    d.add_rule(Rule(
+        event_type=EventType.CLOSED_EMPLOYER,
+        target_scope=SCOPE_SELF,
+        field="",
+        graph_op="sub_occupied",
+        graph_delta=50,                     # переопределяется из Event.size / n_agents_affected
+    ))
+    # Агенты всего региона (занятые): aspirations ↑
     d.add_rule(Rule(
         event_type=EventType.CLOSED_EMPLOYER,
         target_scope=SCOPE_WHOLE_REGION,
         field="aspirations",
         base_delta=0.08,
         filter_status="employed",
+    ))
+    # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty сброс
+    d.add_rule(Rule(
+        event_type=EventType.CLOSED_EMPLOYER,
+        target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
+        field="econ_penalty",
+        mode="set",
+        value=0.0,
+        filter_wage_pressure=True,
     ))
 
     # ═══════════════════════════════════════════════════════════════════════

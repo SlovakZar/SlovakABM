@@ -231,10 +231,15 @@ def compute_dissatisfaction(df: pd.DataFrame) -> np.ndarray:
     return np.clip(np.sqrt(dissat), 0.0, 1.0)
 
 
-def _compute_jobs_pressure(df: pd.DataFrame, jobs_capacity: dict) -> dict:
+def _compute_jobs_pressure(df: pd.DataFrame, jobs_capacity: dict,
+                           G: nx.DiGraph = None) -> dict:
     """
-    jobs_pressure[district] = число занятых агентов с workplace=district
-                              / jobs_capacity[district]
+    v3: jobs_pressure[district] = число занятых агентов с workplace=district
+                                  / (occupied + vacant по всем отраслям).
+
+    Использует G.nodes[district]["industry_jobs"] для получения occupied+vacant,
+    если доступно. Иначе fallback на jobs_capacity.
+
     Значение > 1.0 означает перегрузку рынка труда.
     """
     wp_counts = (df[df["is_employed"]]
@@ -242,9 +247,24 @@ def _compute_jobs_pressure(df: pd.DataFrame, jobs_capacity: dict) -> dict:
                  .count()
                  .to_dict())
     pressure = {}
-    for d, cap in jobs_capacity.items():
-        cnt = wp_counts.get(d, 0)
-        pressure[d] = cnt / max(cap, 1)
+
+    if G is not None:
+        for district in G.nodes:
+            cnt = wp_counts.get(district, 0)
+            ind_jobs = G.nodes[district].get("industry_jobs", {})
+            if ind_jobs:
+                total_cap = sum(
+                    v["occupied"] + v["vacant"]
+                    for v in ind_jobs.values()
+                )
+            else:
+                total_cap = jobs_capacity.get(district, G.nodes[district].get("jobs_capacity", 1))
+            pressure[district] = cnt / max(total_cap, 1)
+    else:
+        for d, cap in jobs_capacity.items():
+            cnt = wp_counts.get(d, 0)
+            pressure[d] = cnt / max(cap, 1)
+
     return pressure
 
 
@@ -649,17 +669,17 @@ def _compute_target_wage(agent_wage, econ_perceived_control, sat_economic, thr_e
     """Целевая зарплата: поведенческая эвристика (из filter2)."""
     if agent_wage > 0:
         base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
-        thr = max(thr_economic, 0.01)
-        desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
-        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) * (1.0 - desperation)
+        #thr = max(thr_economic, 0.01)
+        #desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
+        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE)
         return agent_wage * (1.0 + desired_raise)
     else:
         home_attr = G.nodes.get(district, {})
         home_ind_wage = _industry_wage_in_district(G, district, agent_industry)
         base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
-        thr = max(thr_economic, 0.01)
-        desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
-        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE) * (1.0 - desperation)
+        #thr = max(thr_economic, 0.01)
+        #desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
+        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE)
         return (home_ind_wage * 0.85) * (1.0 + desired_raise)
 
 
@@ -1221,9 +1241,10 @@ def _execute_factory_closed(
     tick_num: int = 0,
 ) -> None:
     """
-    Прямое исполнение FACTORY_CLOSED: выбирает n_agents_affected случайных
-    занятых агентов в указанной отрасли и районе, устанавливает им статус
-    "unemployed" и эмитит LOST_JOB через шину.
+    Прямое увольнение агентов для FACTORY_CLOSED.
+
+    v3: Граф-модификация (occupied_jobs) теперь идёт через signals (CLOSED_EMPLOYER),
+    здесь только выбор N случайных агентов и перевод в unemployed + LOST_JOB.
     """
     import numpy as np
 
@@ -1380,69 +1401,6 @@ def _process_jobloss_ramp(df: pd.DataFrame) -> None:
     df["jobloss_econ_gap_bonus"] = bonus
 
 
-def _apply_employer_signal(df: pd.DataFrame, se, G, tick_num: int,
-                           bus: "Optional[EventBus]") -> None:
-    """v2: Прямая обработка NEW_EMPLOYER / CLOSED_EMPLOYER с условием wage_pressure > 1.
-
-    NEW_EMPLOYER:  econ_penalty += scaled_by_size, если wage_pressure > 1
-    CLOSED_EMPLOYER: econ_penalty = 0, если wage_pressure > 1
-    """
-    import numpy as np
-
-    district = se.district
-    industry = se.industry
-    size = getattr(se, 'size', None) or "small"
-
-    if industry is None:
-        return
-
-    # Размерный множитель
-    size_mult = {"small": 1.0, "medium": 2.0, "big": 3.0}
-    mult = size_mult.get(size, 1.0)
-    base_delta = 0.02 * mult
-
-    # Маска: агенты в той же отрасли + районе
-    mask = (
-        (df["workplace_district"].values == district) &
-        (df["industry"].values == industry) &
-        (df["status"].values != "student")
-    )
-    if not mask.any():
-        return
-
-    # Проверяем wage_pressure > 1 для каждого агента
-    for i in np.where(mask)[0]:
-        wp = df.at[i, "workplace_district"]
-        ind = df.at[i, "industry"]
-        w = df.at[i, "wage"]
-        ind_wage_wp = _industry_wage_in_district(G, wp, ind)
-        if w > 0 and ind_wage_wp > 0:
-            wage_pressure = ind_wage_wp / w
-        else:
-            wage_pressure = 1.0
-
-        if wage_pressure > 1.0:
-            if se.event_type == "NEW_EMPLOYER":
-                df.at[i, "econ_penalty"] = float(np.clip(
-                    df.at[i, "econ_penalty"] + base_delta, 0.0, 1.0
-                ))
-            elif se.event_type == "CLOSED_EMPLOYER":
-                df.at[i, "econ_penalty"] = 0.0
-
-    # Также эмитируем в шину для других эффектов (social_boost и т.д.)
-    if bus is not None:
-        event = se.to_event(tick_num)
-        event.size = size
-        bus.emit(event)
-
-
-def _apply_infra_signal(df: pd.DataFrame, se, G, tick_num: int,
-                        bus: "Optional[EventBus]") -> None:
-    """v2: Прямая обработка NEW_INFRA / CLOSED_INFRA."""
-    if bus is not None:
-        bus.emit(se.to_event(tick_num))
-
-
 # ── Главный tick ──────────────────────────────────────────────────────────────
 
 SOCIAL_BOOST_DECAY = 0.80   # множитель затухания social_boost за тик
@@ -1471,20 +1429,13 @@ def tick(
     # ── COLLECT: сценарные события ──────────────────────────────────────────
     if scenario is not None:
         for se in scenario.get_events(tick_num):
-            # v2: NEW_EMPLOYER / CLOSED_EMPLOYER — прямая обработка (условие wage_pressure>1)
-            if se.event_type in ("NEW_EMPLOYER", "CLOSED_EMPLOYER"):
-                _apply_employer_signal(df, se, G, tick_num, bus)
-                continue
-            # v2: NEW_INFRA / CLOSED_INFRA — прямая обработка
-            if se.event_type in ("NEW_INFRA", "CLOSED_INFRA"):
-                _apply_infra_signal(df, se, G, tick_num, bus)
-                continue
-
-            # Эмиссия в шину для сигнальной обработки
+            # v3: Все события — в шину. Signals обрабатывает и агентов (df),
+            # и среду (G — industry_jobs, vacant/occupied).
             if bus is not None:
                 bus.emit(se.to_event(tick_num))
 
-            # Прямое исполнение для FACTORY_CLOSED: увольнение агентов
+            # Прямое увольнение агентов для FACTORY_CLOSED (batch-операция —
+            # выбор N случайных агентов не укладывается в модель «сигнал-маска»).
             if se.event_type == "FACTORY_CLOSED" and se.n_agents_affected > 0:
                 _execute_factory_closed(df, se, G, rng, bus=bus, tick_num=tick_num)
 
@@ -1565,7 +1516,7 @@ def tick(
     if bus is not None:
         signals = bus.process(tick_num, df, G)
         if signals:
-            df = bus.flush(df, signals)
+            df = bus.flush(df, signals, G)
 
     # 1c. Ежетиковые обновления перед двухбарьерной проверкой
     # ── signal_reduction: затухание ───────────────────────────────────────
@@ -1634,8 +1585,8 @@ def tick(
 
     df["place_deficit_penalty"] = new_penalties
 
-    # 2. Давление рынка труда
-    jobs_pressure = _compute_jobs_pressure(df, jobs_capacity)
+    # 2. Давление рынка труда (v3: использует G.nodes industry_jobs, fallback на jobs_capacity)
+    jobs_pressure = _compute_jobs_pressure(df, jobs_capacity, G)
 
     # 2b. Отраслевое давление (industry_pressure) — для фильтра кандидатов
     update_industry_pressure(G, df)
@@ -1654,7 +1605,7 @@ def tick(
     if bus is not None:
         signals = bus.process(tick_num, df, G)
         if signals:
-            df = bus.flush(df, signals)
+            df = bus.flush(df, signals, G)
 
     # 7. Реакция среды (residence counts для жилья, workplace counts для зарплат)
     residence_counts = df.groupby("district")["id"].count().to_dict()

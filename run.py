@@ -20,12 +20,12 @@ from pathlib import Path
 SIM_DIR = Path(__file__).parent
 sys.path.insert(0, str(SIM_DIR))
 
-from graph   import build_graph, print_graph_summary
-from agents  import create_agents, JOBS_CAPACITY
+from graph   import build_graph, print_graph_summary, sync_industry_jobs_to_graph
+from agents  import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
 from engine  import run_simulation
 from signals import EventBus, create_default_dispatcher
 from scenario import Scenario
-from report  import demographic_portrait, compare_snapshots, summary_report, agent_parameters_table
+from report  import demographic_portrait, compare_snapshots, summary_report, agent_parameters_table, industry_jobs_snapshot
 
 
 def run(
@@ -51,12 +51,9 @@ def run(
         print(f"\n[2/4] Создаём агентов (n={n_agents:,}, seed={seed})...")
     df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed, commuting_path=commuting_path)
 
-    # Синхронизируем jobs_capacity в узлах графа с отмасштабированным JOBS_CAPACITY.
-    # G.nodes использует свою оценку (pop × 0.45), а JOBS_CAPACITY — из реальной
-    # commuting-матрицы. Приводим к единому знаменателю.
-    for d in G.nodes:
-        if d in JOBS_CAPACITY:
-            G.nodes[d]["jobs_capacity"] = JOBS_CAPACITY[d]
+    # v3: Синхронизируем industry_jobs (occupied+vacant) и jobs_capacity в узлы графа.
+    # INDUSTRY_JOBS_CAPACITY заполняется в create_agents → _init_industry_jobs.
+    sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
 
     # Загружаем init_dists для graduation (отрасль выпускников)
     dist_path = Path(agent_dist_path)
@@ -97,6 +94,10 @@ def run(
     # ═══ МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ: Тик 0 → Тик 6 ═══
     agent_table = agent_parameters_table(snapshots, G=G, n_show=20, tick_a=0, tick_b=6, seed=seed)
     report_parts.append(agent_table)
+
+    # ═══ v3: СНИМОК INDUSTRY JOBS (occupied/vacant) ═══
+    jobs_snap = industry_jobs_snapshot(G, df=df_final)
+    report_parts.append(jobs_snap)
 
     for t in sorted(snapshots.keys()):
         label = {0: "НАЧАЛО"}.get(t, f"Тик {t}")
