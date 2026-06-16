@@ -43,19 +43,19 @@
 
     "max_jobs_pressure": {
       "default": 1.20,
-      "range": [1.05, 1.50],
+      "range": [1.0, 1.50],
       "type": "float",
       "description": "Порог перегрузки рынка труда. Выше = терпимее к перегруженным районам."
     },
     "max_work_candidates": {
       "default": 12,
-      "range": [5, 30],
+      "range": [2, 30],
       "type": "int",
       "description": "Максимум районов-кандидатов для скрининга."
     },
     "housing_budget_ratio": {
       "default": 0.35,
-      "range": [0.20, 0.50],
+      "range": [0.15, 0.55],
       "type": "float",
       "description": "Доля зарплаты на жильё. Выше = больше районов доступны."
     },
@@ -91,7 +91,7 @@
     },
     "min_desired_raise": {
       "default": 0.05,
-      "range": [0.01, 0.15],
+      "range": [0.01, 0.2],
       "type": "float",
       "description": "Минимальная желаемая надбавка к зарплате."
     },
@@ -143,19 +143,19 @@
 
     "social_boost_move": {
       "default": 0.06,
-      "range": [0.02, 0.15],
+      "range": [0.01, 0.2],
       "type": "float",
       "description": "social_boost соседям при AGENT_MOVED."
     },
     "social_boost_commute": {
       "default": 0.02,
-      "range": [0.005, 0.08],
+      "range": [0.001, 0.2],
       "type": "float",
       "description": "social_boost соседям при AGENT_COMMUTE_STARTED."
     },
     "unemployed_signal": {
       "default": 0.35,
-      "range": [0.15, 0.60],
+      "range": [0.15, 0.70],
       "type": "float",
       "description": "signal_reduction при потере работы (LOST_JOB)."
     },
@@ -167,25 +167,25 @@
     },
     "inertia_mobility_penalty_move": {
       "default": 0.06,
-      "range": [0.02, 0.15],
+      "range": [0.02, 0.25],
       "type": "float",
       "description": "inertia_mobility_penalty соседям при AGENT_MOVED."
     },
     "inertia_loss_jobloss": {
       "default": -0.25,
-      "range": [-0.40, -0.10],
+      "range": [-0.60, -0.10],
       "type": "float",
       "description": "Снижение inertia самому агенту при LOST_JOB."
     },
     "econ_gap_jobloss": {
       "default": 0.25,
-      "range": [0.10, 0.45],
+      "range": [0.10, 0.55],
       "type": "float",
       "description": "Рост econ_gap самому агенту при LOST_JOB."
     },
     "place_deficit_penalty_move": {
       "default": 0.03,
-      "range": [0.01, 0.08],
+      "range": [0.01, 0.15],
       "type": "float",
       "description": "place_deficit_penalty соседям того же settlement при MOVE (place)."
     },
@@ -209,19 +209,19 @@
     },
     "decay_social_boost_move": {
       "default": 0.01,
-      "range": [0.005, 0.03],
+      "range": [0.001, 0.03],
       "type": "float",
       "description": "Затухание social_boost за тик для MOVE-потока."
     },
     "decay_inertia_mobility": {
       "default": 0.01,
-      "range": [0.005, 0.03],
+      "range": [0.001, 0.03],
       "type": "float",
       "description": "Затухание inertia_mobility_penalty за тик."
     },
     "decay_econ_penalty": {
       "default": 0.01,
-      "range": [0.005, 0.03],
+      "range": [0.001, 0.03],
       "type": "float",
       "description": "Затухание econ_penalty за тик."
     }
