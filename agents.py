@@ -432,17 +432,6 @@ def _weighted_choice(d: dict, rng: np.random.Generator) -> str:
     return keys[rng.choice(len(keys), p=weights / total)]
 
 
-def _infer_agent_type(age: float, education: str, marital: str,
-                      perceived_control: float, inertia: float) -> str:
-    if inertia > 0.65 and age > 40:
-        return "anchored"
-    if marital == "married" and age > 30:
-        return "family_first"
-    if perceived_control > 0.6 and education == "high":
-        return "seeker"
-    return "waiting"
-
-
 def _sample_workplace(
     residence: str,
     outflow_probs: dict,
@@ -698,23 +687,11 @@ def create_agents(
             if marital == "married":
                 inertia = float(np.clip(inertia + 0.08, 0.05, 0.95))
 
-            agent_type = _infer_agent_type(age, education, marital,
-                                           perceived_control, inertia)
-
-            # Веса доменов с модификаторами типа агента
-            type_modifiers = {
-                "seeker":       {"econ": 1.2, "social": 1.0, "family": 0.8, "future": 1.1, "place": 0.8},
-                "waiting":      {"econ": 1.0, "social": 0.9, "family": 1.0, "future": 0.9, "place": 1.0},
-                "anchored":     {"econ": 0.7, "social": 1.1, "family": 1.2, "future": 0.7, "place": 1.5},
-                "family_first": {"econ": 0.9, "social": 0.9, "family": 1.4, "future": 0.9, "place": 1.2},
-            }
-            mod = type_modifiers.get(agent_type,
-                                     {"econ": 1.0, "social": 1.0, "family": 1.0, "future": 1.0, "place": 1.0})
-
-            w_econ   = d_econ_weight * mod["econ"]
-            w_social = d_social_weight * mod["social"]
-            w_family = family_modifier * mod["family"]
-            w_future = d_future_value * mod["future"]
+            # Веса доменов (без модификаторов типа агента)
+            w_econ   = d_econ_weight
+            w_social = d_social_weight
+            w_family = family_modifier
+            w_future = d_future_value
             w_total  = w_econ + w_social + w_family + w_future + 1e-9
             w_econ  /= w_total; w_social /= w_total
             w_family /= w_total; w_future /= w_total
@@ -722,26 +699,19 @@ def create_agents(
             sat_init   = float(np.clip(satisfaction_base + rng.normal(0, 0.06), 0.05, 0.99))
             econ_value = float(np.clip(1.0 - d_econ_gap + rng.normal(0, 0.05), 0.0, 1.0))
 
-            # ── Порог place: база × тип агента + шум от place_aspiration ─────
+            # ── Порог place: база + шум от place_aspiration ──────────────────
             # domain_future_place μ≈0.316, σ≈0.185 — широкий разброс
-            # множители типа: seeker=0.8, waiting=1.0, anchored=1.5, family_first=1.2
             thr_place_val = float(np.clip(
-                0.28 * mod["place"] + 0.25 * (d_future_place - 0.316),
+                0.28 + 0.25 * (d_future_place - 0.316),
                 0.05, 0.85
             ))
 
-            # ═══ Блок E: индивидуальные пороги social/family по типу агента ═══
-            thr_social_map = {
-                "seeker": 0.30, "waiting": 0.35, "anchored": 0.55, "family_first": 0.40
-            }
-            thr_family_map = {
-                "seeker": 0.25, "waiting": 0.35, "anchored": 0.50, "family_first": 0.60
-            }
+            # ═══ Блок E: индивидуальные пороги social/family ═══
             thr_social_val = float(np.clip(
-                thr_social_map.get(agent_type, 0.35) + rng.normal(0, 0.04), 0.15, 0.85
+                0.35 + rng.normal(0, 0.04), 0.15, 0.85
             ))
             thr_family_val = float(np.clip(
-                thr_family_map.get(agent_type, 0.35) + rng.normal(0, 0.04), 0.15, 0.85
+                0.35 + rng.normal(0, 0.04), 0.15, 0.85
             ))
 
             records.append({
@@ -771,9 +741,6 @@ def create_agents(
                 "industry":            industry,
                 "wage":                round(wage, 2),
                 "owns_property":       owns_property,
-
-                # ── Тип агента ───────────────────────────────────────────────
-                "agent_type":          agent_type,
 
                 # ── Инерция и стаж ───────────────────────────────────────────
                 "inertia":             round(inertia, 4),
@@ -923,10 +890,6 @@ def _print_summary(df: pd.DataFrame):
 
     print(f"  owns_property:    {df['owns_property'].mean():.1%}")
     print(f"  network_location: {df['network_location'].mean():.1%}")
-
-    print(f"\n  Типы агентов:")
-    for t, n in df["agent_type"].value_counts().items():
-        print(f"    {t:<14}: {n:>7,}  ({n / len(df) * 100:.1f}%)")
 
     print(f"\n  Топ-5 отраслей (workplace):")
     emp_ind = df[df["is_employed"]]["industry"].value_counts().head(5)

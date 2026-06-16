@@ -891,7 +891,6 @@ def _unified_heuristic_search(
         thr_e = max(thr_econ, 0.01)
         return {
             "id": int(row["id"]),
-            "agent_type": str(row["agent_type"]),
             "activation_domain": activation_dom,
             "prev_residence": residence,
             "prev_workplace": workplace,

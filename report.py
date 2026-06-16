@@ -305,15 +305,7 @@ def demographic_portrait(
     if detail:
         lines.append(_section("ДОПОЛНИТЕЛЬНЫЕ МЕТРИКИ (detail=True)"))
 
-        # Распределение типов агентов
-        if "agent_type" in work_df.columns:
-            lines.append("\n  ТИПЫ АГЕНТОВ")
-            type_counts = work_df["agent_type"].value_counts()
-            max_t = type_counts.max() if not type_counts.empty else 1
-            for t, c in type_counts.items():
-                lines.append(f"  {str(t):<20} {c:>8,}  {_pct(c, total)}  {_bar(c, max_t)}")
-
-        # Психологические параметры по типам
+        # Психологические параметры
         psych_params = [
             ("inertia",                 "Inertia"),
             ("perceived_control",       "Perceived Control"),
@@ -325,21 +317,7 @@ def demographic_portrait(
             ("internal_mig_thr",        "Internal Mig Thr."),
         ]
         available_psych = [(c, l) for c, l in psych_params if c in work_df.columns]
-        if available_psych and "agent_type" in work_df.columns:
-            lines.append(_section("ПСИХОЛОГИЧЕСКИЕ ПАРАМЕТРЫ ПО ТИПАМ АГЕНТОВ"))
-            agent_types = sorted(work_df["agent_type"].unique())
-            header = f"  {'Параметр':<22}"
-            for at in agent_types:
-                header += f"  {str(at):>12}"
-            lines.append(header)
-            lines.append("  " + _hline(22 + len(agent_types) * 14))
-            for col, label_p in available_psych:
-                row = f"  {label_p:<22}"
-                for at in agent_types:
-                    val = work_df[work_df["agent_type"] == at][col].mean()
-                    row += f"  {val:>12.4f}"
-                lines.append(row)
-        elif available_psych:
+        if available_psych:
             lines.append(_section("ПСИХОЛОГИЧЕСКИЕ ПАРАМЕТРЫ (ОБЩИЕ)"))
             for col, label_p in available_psych:
                 m = work_df[col].mean()
@@ -392,7 +370,7 @@ def agent_behavior_audit(action_log: Optional[List[dict]], sample_size: int = 30
     sampled = [action_log[i] for i in indices]
 
     lines.append(
-        f"  {'ID':<6} | {'Тип':<12} | {'Домен':<10} | {'Решение':<9} | "
+        f"  {'ID':<6} | {'Домен':<10} | {'Решение':<9} | "
         f"{'Жильё до→после':<28} | {'Работа до→после':<28} | "
         f"{'Зарплата':>8} | {'Отрасль':<18} | {'Надбавка':>8}"
     )
@@ -400,7 +378,6 @@ def agent_behavior_audit(action_log: Optional[List[dict]], sample_size: int = 30
 
     for ag in sampled:
         ag_id       = str(ag.get("id", "?"))[:6]
-        ag_type     = str(ag.get("agent_type", "?"))[:12]
         act_domain  = str(ag.get("activation_domain", "?"))[:10]
         decision    = str(ag.get("decision", "?"))[:9]
 
@@ -926,7 +903,6 @@ def agent_parameters_table(
                 return default
 
         # Базовые поля
-        agent_type = str(_get(ra, "agent_type", "?"))[:11]
         status_a   = str(_get(ra, "status", "?"))
         status_b   = str(_get(rb, "status", "?"))
 
@@ -964,7 +940,6 @@ def agent_parameters_table(
 
         # Форматирование
         id_str      = f"{agent_id:>5}"
-        type_str    = f"{agent_type:<11}"
         status_str  = f"{status_a}→{status_b}"
         status_str  = f"{status_str:<17}"
 
@@ -1004,7 +979,7 @@ def agent_parameters_table(
         int_state_s = f"{int_state_s:<18}"
 
         lines.append(
-            f"  {id_str} {type_str} {status_str} "
+            f"  {id_str} {status_str} "
             f"{aspir_str} {d_econ_str} {wp_str} {d_place_str} {pr_str} {pp_str} "
             f"{ep_str} {ib_str} {imp_str} {jlb_str} "
             f"{capab_str} {inertia_str} {dyn_str} "
@@ -1158,11 +1133,6 @@ def agent_parameters_table(
     lines.append(f"  Среднее infra_bonus (тик {tick_b}):               {m_ib_b:.4f}")
     lines.append(f"  Среднее inertia_mobility_penalty (тик {tick_b}):  {m_imp_b:.4f}")
     lines.append(f"  Среднее jobloss_econ_gap_bonus (тик {tick_b}):    {m_jlb_b:.4f}")
-
-    # Распределение типов в выборке
-    type_dist = sampled_df_a["agent_type"].value_counts().to_dict() if "agent_type" in sampled_df_a.columns else {}
-    type_str = ", ".join(f"{k}: {v}" for k, v in sorted(type_dist.items()))
-    lines.append(f"  Типы агентов в выборке:                     {type_str}")
 
     lines.append("═" * 160)
     return "\n".join(lines)
