@@ -440,7 +440,7 @@ def lhs_test(
     all_results = []
 
     for run_idx in range(n_samples):
-        run_seed = seed + run_idx * 1000
+        run_seed = seed
         t_run = time.time()
 
         # Параметры этого прогона
