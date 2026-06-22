@@ -146,6 +146,11 @@ class ParamPatcher:
         "unemployed_wage_floor":         ("engine", "UNEMPLOYED_WAGE_FLOOR"),
         "unemployed_wage_ceil":          ("engine", "UNEMPLOYED_WAGE_CEIL"),
 
+        # ── DECAY (затухание динамических переменных) ──────────────────
+        "decay_social_boost_move":        ("engine", "SB_MOVE_DECAY_PER_TICK"),
+        "decay_inertia_mobility":         ("engine", "INERTIA_MOB_DECAY_PER_TICK"),
+        "decay_econ_penalty":             ("engine", "ECON_PENALTY_DECAY_PER_TICK"),
+
         # ── GRAPH_ENVIRONMENT ─────────────────────────────────────────────
         "housing_alpha":                 ("graph", "HOUSING_ALPHA"),
         "wage_alpha":                    ("graph", "WAGE_ALPHA"),
@@ -247,18 +252,29 @@ def create_patched_dispatcher(signal_params: Dict[str, float]):
 
     # AGENT_MOVED
     d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "social_boost", base_delta=social_boost_move))
-    d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "inertia_mobility_penalty", base_delta=inertia_mob_pen_move))
+    # Отрицательный знак: переезд соседа понижает инерцию, делая миграцию более вероятной
+    d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "inertia_mobility_penalty",
+                    base_delta=-inertia_mob_pen_move, clip_min=-1.0, clip_max=1.0))
     d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_TARGET_NEIGHBORS, "social_boost", base_delta=social_boost_move))
     d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_SAME_SETTLEMENT_TYPE, "place_deficit_penalty",
                     base_delta=place_deficit_pen_move, motivation="place", delay_ticks=1, clip_min=0.0, clip_max=5.0))
     d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "signal_reduction",
                     base_delta=neighbor_signal_coef, scale_by_field="net_signal_susc"))
+    # v3: soc_calibration_signal соседям при AGENT_MOVED
+    d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "soc_calibration_signal",
+                    base_delta=0.04, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
 
     # AGENT_COMMUTE_STARTED
     d.add_rule(Rule(EventType.AGENT_COMMUTE_STARTED, SCOPE_RESIDENCE_NEIGHBORS, "social_boost", base_delta=social_boost_commute))
+    # v3: soc_calibration_signal соседям при AGENT_COMMUTE_STARTED
+    d.add_rule(Rule(EventType.AGENT_COMMUTE_STARTED, SCOPE_RESIDENCE_NEIGHBORS, "soc_calibration_signal",
+                    base_delta=0.02, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
 
     # JOB_CHANGED
     d.add_rule(Rule(EventType.JOB_CHANGED, SCOPE_WORKPLACE_COLLEAGUES, "social_boost", base_delta=social_boost_move * 0.8))
+    # v3: soc_calibration_signal коллегам при JOB_CHANGED
+    d.add_rule(Rule(EventType.JOB_CHANGED, SCOPE_WORKPLACE_COLLEAGUES, "soc_calibration_signal",
+                    base_delta=0.03, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
 
     # LOST_JOB
     d.add_rule(Rule(EventType.LOST_JOB, SCOPE_SELF, "inertia", base_delta=inertia_loss_jobloss, clip_min=0.05, clip_max=0.95))
@@ -269,9 +285,21 @@ def create_patched_dispatcher(signal_params: Dict[str, float]):
 
     # NEW_EMPLOYER
     d.add_rule(Rule(EventType.NEW_EMPLOYER, SCOPE_WHOLE_REGION, "social_boost", base_delta=social_boost_new_employer))
+    # v3: soc_calibration_signal всему региону при NEW_EMPLOYER
+    d.add_rule(Rule(EventType.NEW_EMPLOYER, SCOPE_WHOLE_REGION, "soc_calibration_signal",
+                    base_delta=0.03, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
+    # v3: econ_penalty той же отрасли в том же районе при NEW_EMPLOYER (wage_pressure>1)
+    d.add_rule(Rule(EventType.NEW_EMPLOYER, SCOPE_SAME_INDUSTRY_DISTRICT, "econ_penalty",
+                    base_delta=0.02, filter_wage_pressure=True, clip_min=0.0, clip_max=1.0))
 
     # CLOSED_EMPLOYER
     d.add_rule(Rule(EventType.CLOSED_EMPLOYER, SCOPE_WHOLE_REGION, "aspirations", base_delta=aspirations_closed_employer, filter_status="employed"))
+    # v3: soc_calibration_signal снижается в регионе при CLOSED_EMPLOYER
+    d.add_rule(Rule(EventType.CLOSED_EMPLOYER, SCOPE_WHOLE_REGION, "soc_calibration_signal",
+                    base_delta=-0.03, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
+    # v3: econ_penalty сброс той же отрасли в том же районе при CLOSED_EMPLOYER
+    d.add_rule(Rule(EventType.CLOSED_EMPLOYER, SCOPE_SAME_INDUSTRY_DISTRICT, "econ_penalty",
+                    mode="set", value=0.0, filter_wage_pressure=True))
 
     # NEW_INFRA / CLOSED_INFRA
     d.add_rule(Rule(EventType.NEW_INFRA, SCOPE_RESIDENCE_NEIGHBORS, "infra_bonus", base_delta=infra_bonus_delta, clip_min=-1.0, clip_max=1.0))
