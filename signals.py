@@ -648,7 +648,7 @@ def create_default_dispatcher() -> Dispatcher:
 
     Новое в v2:
       - social_boost: раздельные decay для MOVE (+0.06, −0.01×6) и COMMUTE (+0.02, сброс через 3)
-      - inertia_mobility_penalty: накопление от MOVE соседей (+0.06, −0.01×6)
+      - inertia_mobility_penalty: накопление от MOVE соседей (−0.06, −0.01×6)
       - LOST_JOB: немедленное снижение inertia (−0.25) + рост econ_gap (+0.25) + ramp
       - NEW_EMPLOYER/CLOSED_EMPLOYER: econ_penalty с условием wage_pressure>1
       - NEW_INFRA/CLOSED_INFRA: infra_bonus ±0.05
@@ -665,12 +665,15 @@ def create_default_dispatcher() -> Dispatcher:
         field="social_boost",
         base_delta=0.06,
     ))
-    # Соседи по старому району: inertia_mobility_penalty +0.06 (decay: −0.01×6)
+    # Соседи по старому району: inertia_mobility_penalty −0.06 (decay: −0.01×6)
+    # Отрицательный знак: переезд соседа понижает инерцию, делая миграцию более вероятной
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_RESIDENCE_NEIGHBORS,
         field="inertia_mobility_penalty",
-        base_delta=0.06,
+        base_delta=-0.06,
+        clip_min=-1.0,
+        clip_max=1.0,
     ))
     # Соседи по новому району: позитивный сигнал → social_boost +0.06
     d.add_rule(Rule(

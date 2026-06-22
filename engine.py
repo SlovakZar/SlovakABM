@@ -1367,7 +1367,7 @@ def _decay_dynamic_vars(df: pd.DataFrame) -> None:
 
     econ_penalty:              -0.01/тик (до 0)
     infra_bonus:               без автоматического decay (управляется сигналами)
-    inertia_mobility_penalty:  -0.01/тик (до 0)
+    inertia_mobility_penalty:  затухание к 0 с обеих сторон (0.01/тик)
     soc_calibration_signal:    ×0.85/тик (затухание как signal_reduction)
     jobloss_econ_gap_bonus:    ramp up/down (обрабатывается в _process_jobloss_ramp)
     """
@@ -1378,9 +1378,13 @@ def _decay_dynamic_vars(df: pd.DataFrame) -> None:
     ep = np.maximum(0.0, ep - ECON_PENALTY_DECAY_PER_TICK)
     df["econ_penalty"] = ep
 
-    # inertia_mobility_penalty: линейный спад к 0
+    # inertia_mobility_penalty: затухание к 0 с обеих сторон
+    # Положительные → уменьшаются, отрицательные → увеличиваются (стремятся к 0)
     imp = df["inertia_mobility_penalty"].values.copy()
-    imp = np.maximum(0.0, imp - INERTIA_MOB_DECAY_PER_TICK)
+    positive = imp > 0
+    negative = imp < 0
+    imp[positive] = np.maximum(0.0, imp[positive] - INERTIA_MOB_DECAY_PER_TICK)
+    imp[negative] = np.minimum(0.0, imp[negative] + INERTIA_MOB_DECAY_PER_TICK)
     df["inertia_mobility_penalty"] = imp
 
     # soc_calibration_signal: мультипликативное затухание (как signal_reduction)
