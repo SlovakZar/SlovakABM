@@ -679,21 +679,23 @@ def _industry_wage_in_district(G: nx.DiGraph, district: str, industry: str) -> f
 
 def _compute_target_wage(agent_wage, econ_perceived_control, sat_economic, thr_economic,
                          G, district, agent_industry) -> float:
-    """Целевая зарплата: поведенческая эвристика (из filter2)."""
+    """Целевая зарплата: поведенческая эвристика.
+
+    Для занятых: текущая_зарплата × (1 + желаемая_надбавка).
+    Для безработных: max(национальный_пол, отраслевая×0.85) × (1 + желаемая_надбавка).
+      Национальный пол = (UNEMPLOYED_WAGE_FLOOR + PC × UNEMPLOYED_WAGE_CEIL) × NATIONAL_AVG_WAGE.
+    """
+    base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
+    desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE)
+
     if agent_wage > 0:
-        base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
-        #thr = max(thr_economic, 0.01)
-        #desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
-        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE)
         return agent_wage * (1.0 + desired_raise)
     else:
-        home_attr = G.nodes.get(district, {})
         home_ind_wage = _industry_wage_in_district(G, district, agent_industry)
-        base_appetite = BASE_APPETITE_MIN + econ_perceived_control * BASE_APPETITE_MAX
-        #thr = max(thr_economic, 0.01)
-        #desperation = float(np.clip((thr_economic - sat_economic) / thr, 0.0, 1.0))
-        desired_raise = MIN_DESIRED_RAISE + (base_appetite - MIN_DESIRED_RAISE)
-        return (home_ind_wage * 0.85) * (1.0 + desired_raise)
+        # Национальный пол зарплатных ожиданий безработного
+        nat_floor = (UNEMPLOYED_WAGE_FLOOR + econ_perceived_control * UNEMPLOYED_WAGE_CEIL) * NATIONAL_AVG_WAGE
+        base = max(nat_floor, home_ind_wage * 0.85)
+        return base * (1.0 + desired_raise)
 
 
 def _form_work_candidates(
