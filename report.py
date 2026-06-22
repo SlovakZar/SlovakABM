@@ -798,10 +798,18 @@ def _compute_capabilities(agent_row) -> float:
 
 
 def _compute_dynamic_inertia(agent_row) -> float:
-    """Динамическая инерция = inertia × max(0.3, 1 − signal_reduction)."""
+    """v3: Динамическая инерция барьера 2 = inertia × max(0.15, 1 − social_boost)."""
     inertia = float(agent_row.get("inertia", 0.5))
+    social_boost = float(agent_row.get("social_boost", 0.0))
+    return round(inertia * max(0.15, 1.0 - social_boost), 4)
+
+
+def _compute_dynamic_threshold_stage1(agent_row) -> float:
+    """v3: Динамический порог барьера 1 = (internal_mig_thr + inertia_mob_penalty) × max(0.15, 1 − signal_reduction)."""
+    internal_thr = float(agent_row.get("internal_mig_thr", 0.5))
+    inertia_mob_pen = float(agent_row.get("inertia_mobility_penalty", 0.0))
     signal_red = float(agent_row.get("signal_reduction", 0.0))
-    return round(inertia * max(0.3, 1.0 - signal_red), 4)
+    return round((internal_thr + inertia_mob_pen) * max(0.15, 1.0 - signal_red), 4)
 
 
 def _industry_wage_in_district_report(G, district: str, industry: str) -> float:
@@ -842,8 +850,8 @@ def _compute_d_components(agent_row, G=None) -> dict:
     else:
         wage_pressure = 1.0  # безработный → максимальное давление
 
-    # v2: econ_penalty добавляется к wage_pressure
-    D_econ = w_econ * (wage_pressure + econ_penalty) * (econ_gap / max(job_flex, 0.01))
+    # v3: econ_penalty — прямая прибавка к D_econ (не сглаживается формулой)
+    D_econ = w_econ * wage_pressure * (econ_gap / max(job_flex, 0.01)) + econ_penalty
 
     # place_reality: качество жилья и инфраструктуры (0–1) — v2
     monthly_cost = housing * 50 * 0.004
@@ -967,11 +975,17 @@ def agent_parameters_table(
     lines.append("  JlBonus     — v2: jobloss_econ_gap_bonus (ramp-бонус от LOST_JOB)")
     lines.append("  Capab.      — capabilities: (income_index + education_index + weak_ties) / 3")
     lines.append("  Inertia     — базовая инерция агента")
-    lines.append("  DynInert    — динамическая инерция = inertia × max(0.3, 1 − signal_reduction)")
-    lines.append("  ═══ БАРЬЕР 2 — TPB: Attitude + SubjectiveNorm + PBC → intention vs internal_mig_thr ═══")
+    lines.append("  ═══ БАРЬЕР 1: Потенциал vs Динамический порог ═══")
+    lines.append("  DynThr1     — динамический порог: (internal_mig_thr + InMobPen) × max(0.15, 1 − signal_reduction)")
+    lines.append("  Thr_mig     — internal_mig_threshold (базовый порог барьера 1)")
+    lines.append("  SignRed     — signal_reduction (накопленный эффект сигналов, снижающий порог)")
+    lines.append("  ═══ БАРЬЕР 2: D_perceived vs Динамическая инерция ═══")
+    lines.append("  D_perc      — D_perceived = D_instant × Attribution × SocialCalibration")
+    lines.append("  Attrib      — Attribution = PC × (1 − helplessness)")
+    lines.append("  Help        — helplessness = clip(1 − PC − weak_ties × 0.3, 0, 1)")
+    lines.append("  SocCal      — SocialCalibration = 1 + net_signal_susc × soc_calibration_signal")
+    lines.append("  DynInert    — динамическая инерция S2 = inertia × max(0.15, 1 − social_boost)")
     lines.append("  TPB         — флаг активности / счётчик задержки намерения")
-    lines.append("  Thr_mig     — internal_mig_threshold (порог срабатывания TPB-намерения)")
-    lines.append("  SignRed     — signal_reduction (накопленный эффект сигналов, снижающий инерцию)")
     lines.append("  IntState    — intention_state (none | seeking_work | seeking_residence)")
 
     # ── Шапка таблицы ────────────────────────────────────────────────────
@@ -979,11 +993,12 @@ def agent_parameters_table(
     lines.append(
         f"  {'ID':>5} {'Тип':<11} {'Статус':<17} "
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} {'PlacePen':>9} "
-        f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} "
-        f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} "
+        f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} {'SocCalSig':>9} "
+        f"{'Capab.':>10} {'Inertia':>13} {'DynThr1':>13} "
+        f"{'D_perc':>10} {'Attrib':>8} {'Help':>8} {'SocCal':>8} {'DynInert':>13} "
         f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
-    lines.append("  " + "─" * 158)
+    lines.append("  " + "─" * 210)
 
     # ── Строки агентов ──────────────────────────────────────────────────
     for i in range(len(sampled_df_a)):
@@ -1014,6 +1029,35 @@ def agent_parameters_table(
 
         inertia_a = float(_get(ra, "inertia", 0))
         inertia_b = float(_get(rb, "inertia", 0))
+
+        # v3: Барьер 1 — динамический порог
+        dyn_thr1_a = _compute_dynamic_threshold_stage1(ra)
+        dyn_thr1_b = _compute_dynamic_threshold_stage1(rb)
+
+        # v3: Барьер 2 — D_perceived модель
+        pc_a = float(_get(ra, "perceived_control", 0.5))
+        pc_b = float(_get(rb, "perceived_control", 0.5))
+        wt_a = float(_get(ra, "weak_ties_utility", 0.0))
+        wt_b = float(_get(rb, "weak_ties_utility", 0.0))
+        nss_a = float(_get(ra, "net_signal_susc", 0.5))
+        nss_b = float(_get(rb, "net_signal_susc", 0.5))
+        scs_a = float(_get(ra, "soc_calibration_signal", 0.0))
+        scs_b = float(_get(rb, "soc_calibration_signal", 0.0))
+        sb_a  = float(_get(ra, "social_boost", 0.0))
+        sb_b  = float(_get(rb, "social_boost", 0.0))
+
+        # helplessness = clip(1 − PC − weak_ties × 0.3, 0, 1)
+        help_a = float(np.clip(1.0 - pc_a - wt_a * 0.3, 0.0, 1.0))
+        help_b = float(np.clip(1.0 - pc_b - wt_b * 0.3, 0.0, 1.0))
+        # Attribution = PC × (1 − helplessness)
+        attr_a = pc_a * (1.0 - help_a)
+        attr_b = pc_b * (1.0 - help_b)
+        # SocialCalibration = 1 + net_signal_susc × soc_calibration_signal
+        soccal_a = 1.0 + nss_a * scs_a
+        soccal_b = 1.0 + nss_b * scs_b
+        # D_perceived = D_instant × Attribution × SocialCalibration
+        D_perc_a = d_a["D_instant"] * attr_a * soccal_a
+        D_perc_b = d_b["D_instant"] * attr_b * soccal_b
 
         dyn_inertia_a = _compute_dynamic_inertia(ra)
         dyn_inertia_b = _compute_dynamic_inertia(rb)
@@ -1060,9 +1104,16 @@ def agent_parameters_table(
         ib_str  = _fmt_arrow(ib_a, ib_b, ".3f", 8)
         imp_str = _fmt_arrow(imp_a, imp_b, ".3f", 9)
         jlb_str = _fmt_arrow(jlb_a, jlb_b, ".3f", 8)
+        scs_str = _fmt_arrow(scs_a, scs_b, ".3f", 9)
 
         capab_str   = _fmt_arrow(capabilities_a, capabilities_b, ".3f", 10)
         inertia_str = _fmt_arrow(inertia_a, inertia_b, ".3f", 13)
+        dyn_thr1_str = _fmt_arrow(dyn_thr1_a, dyn_thr1_b, ".3f", 13)
+
+        D_perc_str  = _fmt_arrow(D_perc_a, D_perc_b, ".3f", 10)
+        attr_str    = _fmt_arrow(attr_a, attr_b, ".3f", 8)
+        help_str    = _fmt_arrow(help_a, help_b, ".3f", 8)
+        soccal_str  = _fmt_arrow(soccal_a, soccal_b, ".3f", 8)
         dyn_str     = _fmt_arrow(dyn_inertia_a, dyn_inertia_b, ".3f", 13)
 
         tpb_str = f"{_fmt_bool_arrow(tpb_active_a, tpb_active_b, 6)} {tpb_delay_a}→{tpb_delay_b}"
@@ -1074,15 +1125,16 @@ def agent_parameters_table(
         int_state_s = f"{int_state_s:<18}"
 
         lines.append(
-            f"  {id_str} {status_str} "
+            f"  {id_str} {'':<11} {status_str} "
             f"{aspir_str} {d_econ_str} {wp_str} {d_place_str} {pr_str} {pp_str} "
-            f"{ep_str} {ib_str} {imp_str} {jlb_str} "
-            f"{capab_str} {inertia_str} {dyn_str} "
+            f"{ep_str} {ib_str} {imp_str} {jlb_str} {scs_str} "
+            f"{capab_str} {inertia_str} {dyn_thr1_str} "
+            f"{D_perc_str} {attr_str} {help_str} {soccal_str} {dyn_str} "
             f"{tpb_str} {thr_str} {sign_str} {int_state_s}"
         )
 
     # ── Сводная статистика по выборке ────────────────────────────────────
-    lines.append("  " + "─" * 158)
+    lines.append("  " + "─" * 210)
 
     def _col_mean(df_sub, col):
         if col not in df_sub.columns:

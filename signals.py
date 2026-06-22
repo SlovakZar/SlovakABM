@@ -700,6 +700,16 @@ def create_default_dispatcher() -> Dispatcher:
         base_delta=NEIGHBOR_SIGNAL_COEF,         # 0.04
         scale_by_field="net_signal_susc",
     ))
+    # ── v3: AGENT_MOVED → soc_calibration_signal соседям ──────────────────
+    d.add_rule(Rule(
+        event_type=EventType.AGENT_MOVED,
+        target_scope=SCOPE_RESIDENCE_NEIGHBORS,
+        field="soc_calibration_signal",
+        base_delta=0.04,
+        scale_by_field="net_signal_susc",
+        clip_min=0.0,
+        clip_max=1.0,
+    ))
 
     # ═══════════════════════════════════════════════════════════════════════
     # AGENT_COMMUTE_STARTED — v2: social_boost +0.02, сброс через 3 тика
@@ -710,6 +720,16 @@ def create_default_dispatcher() -> Dispatcher:
         field="social_boost",
         base_delta=0.02,
     ))
+    # ── v3: AGENT_COMMUTE_STARTED → soc_calibration_signal ─────────────────
+    d.add_rule(Rule(
+        event_type=EventType.AGENT_COMMUTE_STARTED,
+        target_scope=SCOPE_RESIDENCE_NEIGHBORS,
+        field="soc_calibration_signal",
+        base_delta=0.02,
+        scale_by_field="net_signal_susc",
+        clip_min=0.0,
+        clip_max=1.0,
+    ))
 
     # ═══════════════════════════════════════════════════════════════════════
     # JOB_CHANGED
@@ -719,6 +739,16 @@ def create_default_dispatcher() -> Dispatcher:
         target_scope=SCOPE_WORKPLACE_COLLEAGUES,
         field="social_boost",
         base_delta=EVENT_SOCIAL_BOOST * 0.8,       # 0.064
+    ))
+    # ── v3: JOB_CHANGED → soc_calibration_signal коллегам ─────────────────
+    d.add_rule(Rule(
+        event_type=EventType.JOB_CHANGED,
+        target_scope=SCOPE_WORKPLACE_COLLEAGUES,
+        field="soc_calibration_signal",
+        base_delta=0.03,
+        scale_by_field="net_signal_susc",
+        clip_min=0.0,
+        clip_max=1.0,
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -809,6 +839,16 @@ def create_default_dispatcher() -> Dispatcher:
         field="social_boost",
         base_delta=0.05,
     ))
+    # v3: NEW_EMPLOYER → soc_calibration_signal всему региону
+    d.add_rule(Rule(
+        event_type=EventType.NEW_EMPLOYER,
+        target_scope=SCOPE_WHOLE_REGION,
+        field="soc_calibration_signal",
+        base_delta=0.03,
+        scale_by_field="net_signal_susc",
+        clip_min=0.0,
+        clip_max=1.0,
+    ))
     # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty
     d.add_rule(Rule(
         event_type=EventType.NEW_EMPLOYER,
@@ -838,6 +878,16 @@ def create_default_dispatcher() -> Dispatcher:
         field="aspirations",
         base_delta=0.08,
         filter_status="employed",
+    ))
+    # v3: CLOSED_EMPLOYER → soc_calibration_signal снижается в регионе ─────
+    d.add_rule(Rule(
+        event_type=EventType.CLOSED_EMPLOYER,
+        target_scope=SCOPE_WHOLE_REGION,
+        field="soc_calibration_signal",
+        base_delta=-0.03,
+        scale_by_field="net_signal_susc",
+        clip_min=0.0,
+        clip_max=1.0,
     ))
     # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty сброс
     d.add_rule(Rule(

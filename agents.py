@@ -916,10 +916,11 @@ def create_agents(
                 "domain_future_place": round(float(d_future_place), 4),  # адаптивные ожидания места
 
                 # ── Динамические переменные сигнальной системы v2 ────────────
-                "econ_penalty":            0.0,   # динамический штраф к D_econ
+                "econ_penalty":            0.0,   # динамический штраф к D_econ (прямая прибавка)
                 "infra_bonus":             0.0,   # динамический бонус к инфраструктуре
                 "inertia_mobility_penalty": 0.0,  # динамический штраф к инерции от переездов соседей
                 "jobloss_econ_gap_bonus":  0.0,   # временный бонус к econ_gap от LOST_JOB
+                "soc_calibration_signal":  0.0,   # v3: сигнал социальной калибровки для SocialCalibration
             })
             agent_id += 1
 
