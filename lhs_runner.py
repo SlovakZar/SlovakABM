@@ -50,13 +50,13 @@ def load_param_specs(spec_path: str = "lhs_parameters.json") -> List[ParamSpec]:
 
     params = []
     # Рекурсивно обходим JSON, собираем только объекты с range/default
-    def _walk(obj, category="", prefix=""):
+    def _walk(obj, category="", prefix="", leaf_key=None):
         if isinstance(obj, dict):
             if "range" in obj and "default" in obj and "type" in obj:
                 ptype = obj["type"]
                 if ptype in ("float", "int"):
                     rng = obj["range"]
-                    name = prefix.rstrip(".")
+                    name = leaf_key  # короткое имя без пути секций
                     params.append(ParamSpec(
                         name=name,
                         default=obj["default"],
@@ -71,7 +71,7 @@ def load_param_specs(spec_path: str = "lhs_parameters.json") -> List[ParamSpec]:
                     if k.startswith("_"):
                         continue
                     next_cat = k if category == "" else f"{category}.{k}"
-                    _walk(v, next_cat, f"{prefix}{k}.")
+                    _walk(v, next_cat, f"{prefix}{k}.", leaf_key=k)
 
     _walk(spec)
     print(f"  Загружено {len(params)} параметров для LHS из {spec_path}")

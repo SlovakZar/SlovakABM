@@ -3,38 +3,153 @@
   "_version": "1.0",
   "_usage": "Каждый блок содержит номинал (default) и диапазон [min, max] для LHS-сэмплирования.",
 
-  "TWO_BARRIER_MODEL": {
-    "_description": "Двухбарьерная модель: Aspirations×Capabilities → TPB → Эвристический поиск",
+  "DYNAMIC_VARIABLES": {
+    "_description": "Двухфазная система динамических переменных: Фаза 1 — накопление (accumulation) из событий/состояний, Фаза 2 — затухание (decay) к базовым значениям каждый тик.",
 
-    "aspirations_alpha": {
-      "default": 0.08,
-      "range": [0.02, 0.20],
-      "type": "float",
-      "description": "Скорость EWMA-накопления aspirations из D_instant. Выше = быстрее реакция."
+    "PHASE_1_ACCUMULATION": {
+      "_description": "Скорости накопления динамических переменных: aspirations, сигнальные эффекты, адаптация gap, реакция среды графа.",
+
+      "aspirations_alpha": {
+        "default": 0.08,
+        "range": [0.02, 0.20],
+        "type": "float",
+        "description": "Скорость EWMA-накопления aspirations из D_instant. Выше = быстрее реакция."
+      },
+      "gap_adapt_lambda": {
+        "default": 0.05,
+        "range": [0.01, 0.15],
+        "type": "float",
+        "description": "Скорость адаптации econ_gap и domain_future_place. Выше = быстрее привыкание."
+      },
+      "sat_smoothing": {
+        "default": 0.88,
+        "range": [0.75, 0.95],
+        "type": "float",
+        "description": "Сглаживание satisfaction по 4 доменам (α). Выше = инертнее."
+      },
+
+      "social_boost_move": {
+        "default": 0.06,
+        "range": [0.01, 0.2],
+        "type": "float",
+        "description": "social_boost соседям при AGENT_MOVED."
+      },
+      "social_boost_commute": {
+        "default": 0.02,
+        "range": [0.001, 0.2],
+        "type": "float",
+        "description": "social_boost соседям при AGENT_COMMUTE_STARTED."
+      },
+      "social_boost_new_employer": {
+        "default": 0.05,
+        "range": [0.02, 0.12],
+        "type": "float",
+        "description": "social_boost всему региону при NEW_EMPLOYER."
+      },
+
+      "unemployed_signal": {
+        "default": 0.35,
+        "range": [0.15, 0.70],
+        "type": "float",
+        "description": "signal_reduction при потере работы (LOST_JOB)."
+      },
+      "neighbor_signal_coef": {
+        "default": 0.04,
+        "range": [0.01, 0.10],
+        "type": "float",
+        "description": "Коэфф. signal_reduction от переехавшего соседа."
+      },
+
+      "inertia_mobility_penalty_move": {
+        "default": 0.06,
+        "range": [0.02, 0.25],
+        "type": "float",
+        "description": "inertia_mobility_penalty соседям при AGENT_MOVED."
+      },
+      "inertia_loss_jobloss": {
+        "default": -0.25,
+        "range": [-0.60, -0.10],
+        "type": "float",
+        "description": "Снижение inertia самому агенту при LOST_JOB."
+      },
+      "econ_gap_jobloss": {
+        "default": 0.25,
+        "range": [0.10, 0.55],
+        "type": "float",
+        "description": "Рост econ_gap самому агенту при LOST_JOB."
+      },
+      "place_deficit_penalty_move": {
+        "default": 0.03,
+        "range": [0.01, 0.15],
+        "type": "float",
+        "description": "place_deficit_penalty соседям того же settlement при MOVE (place)."
+      },
+      "infra_bonus_delta": {
+        "default": 0.05,
+        "range": [0.02, 0.12],
+        "type": "float",
+        "description": "|infra_bonus| при NEW_INFRA / CLOSED_INFRA."
+      },
+      "aspirations_closed_employer": {
+        "default": 0.08,
+        "range": [0.03, 0.18],
+        "type": "float",
+        "description": "aspirations employed агентам региона при CLOSED_EMPLOYER."
+      },
+
+      "housing_alpha": {
+        "default": 0.03,
+        "range": [0.005, 0.08],
+        "type": "float",
+        "description": "Скорость реакции housing_price на плотность агентов."
+      },
+      "wage_alpha": {
+        "default": 0.02,
+        "range": [0.005, 0.06],
+        "type": "float",
+        "description": "Скорость реакции avg_wage на jobs_pressure."
+      },
+      "hub_weak_ties_bonus": {
+        "default": 0.005,
+        "range": [0.001, 0.02],
+        "type": "float",
+        "description": "Прирост weak_ties_utility за тик в хабах."
+      },
+      "move_weak_ties_penalty": {
+        "default": -0.10,
+        "range": [-0.25, -0.03],
+        "type": "float",
+        "description": "Сброс weak_ties при переезде (отрицательное число)."
+      }
     },
-    "signal_decay": {
-      "default": 0.85,
-      "range": [0.70, 0.95],
-      "type": "float",
-      "description": "Затухание signal_reduction за тик. (1-x) = доля сброса."
-    },
-    "gap_adapt_lambda": {
-      "default": 0.05,
-      "range": [0.01, 0.15],
-      "type": "float",
-      "description": "Скорость адаптации econ_gap и domain_future_place. Выше = быстрее привыкание."
-    },
-    "sat_smoothing": {
-      "default": 0.88,
-      "range": [0.75, 0.95],
-      "type": "float",
-      "description": "Сглаживание satisfaction по 4 доменам (α). Выше = инертнее."
-    },
-    "national_avg_wage": {
-      "default": 1614.0,
-      "range": [1200.0, 2000.0],
-      "type": "float",
-      "description": "Национальная средняя зарплата (€). База для capabilities income_index."
+
+    "PHASE_2_DECAY": {
+      "_description": "Скорости затухания динамических переменных к 0 каждый тик. Ниже = медленнее затухание (дольше эффект).",
+
+      "signal_decay": {
+        "default": 0.85,
+        "range": [0.70, 0.95],
+        "type": "float",
+        "description": "Затухание signal_reduction за тик. (1-x) = доля сброса."
+      },
+      "decay_social_boost_move": {
+        "default": 0.01,
+        "range": [0.001, 0.03],
+        "type": "float",
+        "description": "Затухание social_boost за тик для MOVE-потока."
+      },
+      "decay_inertia_mobility": {
+        "default": 0.01,
+        "range": [0.001, 0.03],
+        "type": "float",
+        "description": "Затухание inertia_mobility_penalty за тик."
+      },
+      "decay_econ_penalty": {
+        "default": 0.01,
+        "range": [0.001, 0.03],
+        "type": "float",
+        "description": "Затухание econ_penalty за тик."
+      }
     }
   },
 
@@ -47,6 +162,12 @@
       "type": "float",
       "description": "Порог перегрузки рынка труда. Выше = терпимее к перегруженным районам."
     },
+    "move_stress_factor": {
+      "default": 0.80,
+      "range": [0.60, 0.95],
+      "type": "float",
+      "description": "Множитель satisfaction после переезда. Ниже = сильнее стресс."
+    },
     "max_work_candidates": {
       "default": 12,
       "range": [2, 30],
@@ -58,12 +179,6 @@
       "range": [0.15, 0.55],
       "type": "float",
       "description": "Доля зарплаты на жильё. Выше = больше районов доступны."
-    },
-    "move_stress_factor": {
-      "default": 0.80,
-      "range": [0.60, 0.95],
-      "type": "float",
-      "description": "Множитель satisfaction после переезда. Ниже = сильнее стресс."
     },
     "adapt_flex_threshold": {
       "default": 0.65,
@@ -109,121 +224,14 @@
     }
   },
 
-  "GRAPH_ENVIRONMENT": {
-    "_description": "Реакция среды графа (жильё, зарплаты, инфраструктура)",
+  "CALIBRATION": {
+    "_description": "Калибровочные параметры (базовые значения среды, не динамические)",
 
-    "housing_alpha": {
-      "default": 0.03,
-      "range": [0.005, 0.08],
+    "national_avg_wage": {
+      "default": 1614.0,
+      "range": [1200.0, 2000.0],
       "type": "float",
-      "description": "Скорость реакции housing_price на плотность агентов."
-    },
-    "wage_alpha": {
-      "default": 0.02,
-      "range": [0.005, 0.06],
-      "type": "float",
-      "description": "Скорость реакции avg_wage на jobs_pressure."
-    },
-    "hub_weak_ties_bonus": {
-      "default": 0.005,
-      "range": [0.001, 0.02],
-      "type": "float",
-      "description": "Прирост weak_ties_utility за тик в хабах."
-    },
-    "move_weak_ties_penalty": {
-      "default": -0.10,
-      "range": [-0.25, -0.03],
-      "type": "float",
-      "description": "Сброс weak_ties при переезде (отрицательное число)."
-    }
-  },
-
-  "SIGNAL_SYSTEM": {
-    "_description": "Сигнальная система v2 — социальные эффекты событий",
-
-    "social_boost_move": {
-      "default": 0.06,
-      "range": [0.01, 0.2],
-      "type": "float",
-      "description": "social_boost соседям при AGENT_MOVED."
-    },
-    "social_boost_commute": {
-      "default": 0.02,
-      "range": [0.001, 0.2],
-      "type": "float",
-      "description": "social_boost соседям при AGENT_COMMUTE_STARTED."
-    },
-    "unemployed_signal": {
-      "default": 0.35,
-      "range": [0.15, 0.70],
-      "type": "float",
-      "description": "signal_reduction при потере работы (LOST_JOB)."
-    },
-    "neighbor_signal_coef": {
-      "default": 0.04,
-      "range": [0.01, 0.10],
-      "type": "float",
-      "description": "Коэфф. signal_reduction от переехавшего соседа."
-    },
-    "inertia_mobility_penalty_move": {
-      "default": 0.06,
-      "range": [0.02, 0.25],
-      "type": "float",
-      "description": "inertia_mobility_penalty соседям при AGENT_MOVED."
-    },
-    "inertia_loss_jobloss": {
-      "default": -0.25,
-      "range": [-0.60, -0.10],
-      "type": "float",
-      "description": "Снижение inertia самому агенту при LOST_JOB."
-    },
-    "econ_gap_jobloss": {
-      "default": 0.25,
-      "range": [0.10, 0.55],
-      "type": "float",
-      "description": "Рост econ_gap самому агенту при LOST_JOB."
-    },
-    "place_deficit_penalty_move": {
-      "default": 0.03,
-      "range": [0.01, 0.15],
-      "type": "float",
-      "description": "place_deficit_penalty соседям того же settlement при MOVE (place)."
-    },
-    "infra_bonus_delta": {
-      "default": 0.05,
-      "range": [0.02, 0.12],
-      "type": "float",
-      "description": "|infra_bonus| при NEW_INFRA / CLOSED_INFRA."
-    },
-    "social_boost_new_employer": {
-      "default": 0.05,
-      "range": [0.02, 0.12],
-      "type": "float",
-      "description": "social_boost всему региону при NEW_EMPLOYER."
-    },
-    "aspirations_closed_employer": {
-      "default": 0.08,
-      "range": [0.03, 0.18],
-      "type": "float",
-      "description": "aspirations employed агентам региона при CLOSED_EMPLOYER."
-    },
-    "decay_social_boost_move": {
-      "default": 0.01,
-      "range": [0.001, 0.03],
-      "type": "float",
-      "description": "Затухание social_boost за тик для MOVE-потока."
-    },
-    "decay_inertia_mobility": {
-      "default": 0.01,
-      "range": [0.001, 0.03],
-      "type": "float",
-      "description": "Затухание inertia_mobility_penalty за тик."
-    },
-    "decay_econ_penalty": {
-      "default": 0.01,
-      "range": [0.001, 0.03],
-      "type": "float",
-      "description": "Затухание econ_penalty за тик."
+      "description": "Национальная средняя зарплата (€). База для capabilities income_index."
     }
   },
 
