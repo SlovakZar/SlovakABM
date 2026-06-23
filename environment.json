@@ -10,7 +10,16 @@
       "housing",
       "infrastructure",
       "business"
-    ]
+    ],
+    "housing_fields_used": [
+      "price_m2",
+      "apartment_price_eur",
+      "house_price_eur",
+      "owner_share",
+      "total_dwellings",
+      "vacant_dwellings"
+    ],
+    "housing_market_sensitivity": "Автоматически вычисляется из региона в graph.py (REGION_HOUSING_SENSITIVITY). BA=1.75, KE=1.50, TT=1.10, NR/ZA=1.05, TN/BB/PO=1.00. Может быть переопределено в housing.housing_market_sensitivity каждой локации."
   },
   "locations": {
     "District of Bánovce nad Bebravou": {

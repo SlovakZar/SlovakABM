@@ -41,6 +41,22 @@ from pathlib import Path
 HOUSING_ALPHA = 0.03
 WAGE_ALPHA    = 0.02
 
+# ── Чувствительность рынка жилья по регионам ─────────────────────────────────
+# BA (Братислава) = 1.75 — высокая конкуренция за жильё
+# KE (Кошице)     = 1.50 — второй город
+# TT, NR, ZA      = 1.05–1.10 — региональные центры
+# TN, BB, PO      = 1.00 — стандартная чувствительность
+REGION_HOUSING_SENSITIVITY = {
+    "BA": 1.75,
+    "KE": 1.50,
+    "TT": 1.10,
+    "NR": 1.05,
+    "ZA": 1.05,
+    "TN": 1.00,
+    "BB": 1.00,
+    "PO": 1.00,
+}
+
 # Региональные центры для long-range рёбер в awareness_set
 REGIONAL_CENTERS = {
     "BA": "District of Bratislava I",
@@ -133,7 +149,16 @@ def build_graph(
         unemployment_rate = loc.get("unemployment_rate") or 0.08
         avg_wage = loc.get("avg_wage") or 1400.0
         owner_share = (loc.get("housing", {}) or {}).get("owner_share") or 0.65
-        housing_m2 = (loc.get("housing", {}) or {}).get("price_m2") or 1500.0
+        housing_data  = loc.get("housing", {}) or {}
+        housing_m2    = housing_data.get("price_m2") or 1500.0
+        owner_share   = housing_data.get("owner_share") or 0.65
+        total_dwell   = housing_data.get("total_dwellings") or 0
+        vacant_dwell  = housing_data.get("vacant_dwellings") or 0
+
+        # Чувствительность рынка жилья: из данных локации или fallback по региону
+        housing_mkt_sens = housing_data.get("housing_market_sensitivity")
+        if housing_mkt_sens is None:
+            housing_mkt_sens = REGION_HOUSING_SENSITIVITY.get(region, 1.00)
 
         # Вычисляем infrastructure_score на основе блока "infrastructure"
         infra_data = loc.get("infrastructure", {})
@@ -172,6 +197,10 @@ def build_graph(
             salary_by_industry=salary_by_ind,             # отраслевые зарплаты
             industry_capacity=industry_capacity,          # отраслевая ёмкость (базовая)
             business=business_data,                       # бизнес-статистика
+            # Жильё (из environment.json)
+            total_dwellings=int(total_dwell),             # общее число жилищ
+            vacant_dwellings=int(vacant_dwell),           # свободное жильё
+            housing_market_sensitivity=float(housing_mkt_sens),  # чувствительность рынка
             # Динамические (обновляются каждый тик)
             avg_wage=float(avg_wage),
             housing_price_m2=float(housing_m2),
