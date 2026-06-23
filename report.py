@@ -774,10 +774,6 @@ def compare_snapshots(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 5. SUMMARY REPORT — обёртка для полного отчёта
-# ══════════════════════════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════════════════════════
 # 5. AGENT PARAMETERS TABLE — матрица параметров агентов с динамикой
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1286,7 +1282,205 @@ def agent_parameters_table(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6. SUMMARY REPORT — обёртка для полного отчёта
+# 6. MASTER DISTRICT TABLE — мастер-таблица по 79 районам (окресам)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def master_district_table(
+    tick_stats: list,
+    G,
+    all_action_log: Optional[List[dict]] = None,
+    snapshots: Optional[dict] = None,
+) -> str:
+    """
+    Мастер-таблица по 79 районам Словакии (okresy, не края).
+
+    Строки: 79 районов (из DISTRICT_TO_REGION_CODE в agents.py).
+    Столбцы: для каждого тика — количество агентов в районе и стоимость жилья.
+    Финальные столбцы:
+      - Δ econ  — въехавшие в район по экономическому мотиву за всю симуляцию
+      - Δ place — въехавшие в район по мотиву места за всю симуляцию
+
+    Использует:
+      - tick_stats[i]["district_counts"] для поколичества агентов по тикам
+      - G.nodes[district]["housing_price_m2"] для стоимости жилья
+      - all_action_log для подсчёта мотивированных переездов
+      - snapshots[0] для данных тика 0 (если есть)
+    """
+    # Все районы из графа (79 okresov)
+    all_districts = sorted(G.nodes)
+
+    # Подготавливаем списки тиков
+    n_ticks = len(tick_stats)
+    tick_nums = list(range(1, n_ticks + 1))
+
+    # ── Агенты на тике 0 (из snapshots) ──────────────────────────────────
+    t0_counts = {}
+    if snapshots and 0 in snapshots:
+        t0_counts = snapshots[0].groupby("district")["id"].count().to_dict()
+
+    # ── Агенты на каждом тике (из tick_stats) ────────────────────────────
+    tick_counts = {}  # {district: [count_t1, count_t2, ...]}
+    for district in all_districts:
+        tick_counts[district] = []
+    for s in tick_stats:
+        dc = s.get("district_counts", {})
+        for district in all_districts:
+            tick_counts[district].append(dc.get(district, 0))
+
+    # ── Стоимость жилья: эффективная цена с учётом HOUSING_REMAINING ────
+    # Формула из engine._get_effective_housing_price:
+    #   delta = base_price × (1.1 / remaining) × sensitivity
+    #   effective = base_price + delta
+    _AGENT_FOOTPRINT = 1.1  # AGENT_HOUSING_FOOTPRINT из engine.py
+
+    # Базовая цена и чувствительность из графа
+    base_prices = {}
+    sensitivities = {}
+    for district in all_districts:
+        base_prices[district] = G.nodes[district].get("housing_price_m2", 1800.0)
+        sensitivities[district] = G.nodes[district].get("housing_market_sensitivity", 1.0)
+
+    # Эффективная цена на каждом тике (используем housing_remaining из tick_stats)
+    housing_by_tick = {}  # {district: [price_t0, price_t1, ...]}
+    for district in all_districts:
+        housing_by_tick[district] = []
+
+    # Тик 0: нет данных housing_remaining → используем базовую цену
+    if snapshots and 0 in snapshots:
+        for district in all_districts:
+            housing_by_tick[district].append(base_prices[district])
+
+    # Тики 1..N: из tick_stats district_housing_remaining
+    for s in tick_stats:
+        hr = s.get("district_housing_remaining", {})
+        for district in all_districts:
+            remaining = hr.get(district, 1.0)
+            bp = base_prices[district]
+            sens = sensitivities[district]
+            if remaining > 0.01:
+                delta = bp * (_AGENT_FOOTPRINT / remaining) * sens
+                effective = bp + delta
+            else:
+                effective = bp * 100.0  # жильё закончилось
+            housing_by_tick[district].append(effective)
+
+    # ── Подсчёт переездов по мотивам из all_action_log ──────────────────
+    econ_inflow = {d: 0 for d in all_districts}
+    place_inflow = {d: 0 for d in all_districts}
+    if all_action_log:
+        for entry in all_action_log:
+            decision = entry.get("decision", "")
+            if decision in ("move", "satellite_move"):
+                new_res = entry.get("new_residence", "")
+                domain = entry.get("activation_domain", "")
+                if new_res in econ_inflow:
+                    if domain == "economic":
+                        econ_inflow[new_res] += 1
+                    elif domain == "place":
+                        place_inflow[new_res] += 1
+
+    # ── Формирование таблицы ─────────────────────────────────────────────
+    lines = []
+    lines.append(_section("МАСТЕР-ТАБЛИЦА ПО 79 РАЙОНАМ (OKRESY)"))
+
+    # Пояснение
+    has_t0 = (snapshots and 0 in snapshots)
+    lines.append(f"  Всего районов: {len(all_districts)} | Тиков: {n_ticks}")
+    lines.append(f"  Таблица 1: количество агентов в районе на каждом тике")
+    lines.append(f"  Таблица 2: эффективная стоимость жилья (€/м²) с учётом остатка квартир")
+    lines.append(f"  Δ econ / Δ place: суммарный въезд в район по мотиву за всю симуляцию")
+    lines.append("")
+
+    # ── ПОДТАБЛИЦА 1: Количество агентов ─────────────────────────────────
+    lines.append(_section("АГЕНТОВ В РАЙОНЕ ПО ТИКАМ"))
+    header1 = f"  {'Район':<30}"
+    if has_t0:
+        header1 += f" {'T0':>6}"
+    for tn in tick_nums:
+        header1 += f" {'T' + str(tn):>6}"
+    header1 += f" {'Δ econ':>8} {'Δ place':>8}"
+    lines.append(header1)
+
+    col_count = (1 if has_t0 else 0) + n_ticks
+    line_w1 = 32 + col_count * 7 + 9 + 9
+    lines.append("  " + _hline(line_w1, "─"))
+
+    for district in all_districts:
+        name = district.replace("District of ", "")[:28]
+        row = f"  {name:<30}"
+        if has_t0:
+            row += f" {t0_counts.get(district, 0):>6,}"
+        for count in tick_counts[district]:
+            row += f" {count:>6,}"
+        row += f" {econ_inflow[district]:>8,} {place_inflow[district]:>8,}"
+        lines.append(row)
+
+    # ИТОГО для агентов
+    lines.append("  " + _hline(line_w1, "─"))
+    total_row1 = f"  {'ИТОГО':<30}"
+    if has_t0:
+        total_row1 += f" {sum(t0_counts.values()):>6,}"
+    for i in range(n_ticks):
+        t_total = sum(tick_counts[d][i] for d in all_districts)
+        total_row1 += f" {t_total:>6,}"
+    total_econ = sum(econ_inflow.values())
+    total_place = sum(place_inflow.values())
+    total_row1 += f" {total_econ:>8,} {total_place:>8,}"
+    lines.append(total_row1)
+
+    # ── ПОДТАБЛИЦА 2: Эффективная стоимость жилья ────────────────────────
+    lines.append("")
+    lines.append(_section("ЭФФЕКТИВНАЯ СТОИМОСТЬ ЖИЛЬЯ ПО ТИКАМ (€/м²)"))
+    lines.append(f"  Формула: базовая_цена × (1 + 1.1 / остаток_квартир × чувствительность)")
+    lines.append(f"  Чем меньше остаток квартир → тем выше эффективная цена (конкуренция).")
+    lines.append("")
+
+    header2 = f"  {'Район':<30}"
+    if has_t0:
+        header2 += f" {'T0':>9}"
+    for tn in tick_nums:
+        header2 += f" {'T' + str(tn):>9}"
+    lines.append(header2)
+
+    line_w2 = 32 + col_count * 10
+    lines.append("  " + _hline(line_w2, "─"))
+
+    for district in all_districts:
+        name = district.replace("District of ", "")[:28]
+        row = f"  {name:<30}"
+        for hp in housing_by_tick[district]:
+            row += f" {hp:>8,.0f}€"
+        lines.append(row)
+
+    # ИТОГО для жилья (среднее)
+    lines.append("  " + _hline(line_w2, "─"))
+    total_row2 = f"  {'СРЕДНЕЕ':<30}"
+    for tick_idx in range(len(tick_nums) + (1 if has_t0 else 0)):
+        avg = sum(housing_by_tick[d][tick_idx] for d in all_districts) / max(len(all_districts), 1)
+        total_row2 += f" {avg:>8,.0f}€"
+    lines.append(total_row2)
+
+    # ── Статистика по переездам ──────────────────────────────────────────
+    lines.append("")
+    lines.append(f"  Всего въездов по экономическому мотиву: {total_econ:,}")
+    lines.append(f"  Всего въездов по мотиву места:         {total_place:,}")
+
+    # Топ-10 районов по притоку
+    if total_econ > 0:
+        top_econ = sorted(econ_inflow.items(), key=lambda x: -x[1])[:5]
+        lines.append(f"  Топ-5 районов по econ-притоку: "
+                     + ", ".join(f"{d.replace('District of ', '')}({c})" for d, c in top_econ if c > 0))
+    if total_place > 0:
+        top_place = sorted(place_inflow.items(), key=lambda x: -x[1])[:5]
+        lines.append(f"  Топ-5 районов по place-притоку: "
+                     + ", ".join(f"{d.replace('District of ', '')}({c})" for d, c in top_place if c > 0))
+
+    lines.append("=" * 78)
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7. SUMMARY REPORT — обёртка для полного отчёта
 # ══════════════════════════════════════════════════════════════════════════════
 
 def summary_report(
@@ -1328,6 +1522,10 @@ def summary_report(
         parts.append(compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail))
     elif detail and all_action_log:
         parts.append(agent_behavior_audit(all_action_log, sample_size=30))
+
+    # 4. МАСТЕР-ТАБЛИЦА ПО 79 РАЙОНАМ (всегда в конце)
+    if G is not None and tick_stats:
+        parts.append(master_district_table(tick_stats, G, all_action_log, snapshots=snapshots))
 
     return "\n\n".join(parts)
 

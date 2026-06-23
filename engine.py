@@ -1832,6 +1832,7 @@ def tick(
         "district_counts":   residence_counts,
         "jobs_pressure_max": round(max(jobs_pressure.values()) if jobs_pressure else 0, 2),
         "action_log":        action_log,
+        "district_housing_remaining": dict(HOUSING_REMAINING),
     }
 
     return df, stats
