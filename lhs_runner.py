@@ -140,6 +140,8 @@ class ParamPatcher:
         "move_stress_factor":            ("engine", "MOVE_STRESS_FACTOR"),
         "adapt_flex_threshold":          ("engine", "ADAPT_FLEX_THRESHOLD"),
         "adapt_sat_boost":               ("engine", "ADAPT_SAT_BOOST"),
+        "commuter_gate_ref":             ("engine", "COMMUTER_GATE_REF"),
+        "job_flex_gate_ref":             ("engine", "JOB_FLEX_GATE_REF"),
         "base_appetite_min":             ("engine", "BASE_APPETITE_MIN"),
         "base_appetite_max":             ("engine", "BASE_APPETITE_MAX"),
         "min_desired_raise":             ("engine", "MIN_DESIRED_RAISE"),

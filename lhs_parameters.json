@@ -221,6 +221,19 @@
       "range": [0.05, 0.40],
       "type": "float",
       "description": "Добавка к wage_floor за econ_perceived_control (при PC=1)."
+    },
+
+    "commuter_gate_ref": {
+      "default": 0.50,
+      "range": [0.35, 0.65],
+      "type": "float",
+      "description": "Порог сравнения commuter_threshold в гейтах commute/satellite. Выше = жёстче фильтр."
+    },
+    "job_flex_gate_ref": {
+      "default": 0.50,
+      "range": [0.35, 0.65],
+      "type": "float",
+      "description": "Порог сравнения job_flexibility для бонуса к допустимому времени в пути. Выше = меньше бонус."
     }
   },
 

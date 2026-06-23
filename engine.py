@@ -54,6 +54,10 @@ MOVE_STRESS_FACTOR       = 0.80   # satisfaction после переезда × 
 ADAPT_FLEX_THRESHOLD     = 0.65   # минимальная job_flexibility для адаптации
 ADAPT_SAT_BOOST          = 0.06   # прирост sat_economic при адаптации
 
+# Heuristic gates (commute/satellite)
+COMMUTER_GATE_REF        = 0.50   # порог сравнения commuter_threshold (глобальное среднее)
+JOB_FLEX_GATE_REF        = 0.50   # порог сравнения job_flexibility (глобальное среднее)
+
 # Фильтр 2 — поведенческая эвристика зарплатных ожиданий
 BASE_APPETITE_MIN        = 0.10   # базовый аппетит к росту зарплаты (при PC=0)
 BASE_APPETITE_MAX        = 0.20   # добавка за econ_perceived_control (при PC=1 аппетит=0.30)
@@ -917,6 +921,9 @@ def _unified_heuristic_search(
     sat_place     = float(row["sat_place"])
     thr_place     = float(row["thr_place"])
     activation_dom = str(row["activation_domain"])
+    current_status = str(row["status"])
+    job_flex       = float(row["job_flexibility"])
+    flex_bonus     = max(0.0, job_flex - JOB_FLEX_GATE_REF)
 
     target_wage = _compute_target_wage(
         agent_wage, epc, sat_econ, thr_econ, G, residence, agent_ind
@@ -951,12 +958,14 @@ def _unified_heuristic_search(
             # 1. Commute
             if G.has_edge(residence, dst_work):
                 tt = G[residence][dst_work].get("travel_time_min", 999)
-                place_ok = sat_place >= thr_place * 0.80
-                if tt <= comm_thr_min and place_ok:
-                    desired_raise = (target_wage / max(agent_wage, 1.0)) - 1.0 if agent_wage > 0 else 0.0
-                    _execute_commute(df, idx, dst_work, G, rng)
-                    new_w = float(df.at[idx, "wage"])
-                    return "commute", _snap("commute", residence, dst_work, new_w, desired_raise)
+                # Гейт: пропускаем если уже commute, иначе commuter_threshold > 0.5
+                if current_status == "commute" or comm_thr_norm > COMMUTER_GATE_REF:
+                    effective_thr = comm_thr_min * (1.0 + flex_bonus)
+                    if tt <= effective_thr:
+                        desired_raise = (target_wage / max(agent_wage, 1.0)) - 1.0 if agent_wage > 0 else 0.0
+                        _execute_commute(df, idx, dst_work, G, rng)
+                        new_w = float(df.at[idx, "wage"])
+                        return "commute", _snap("commute", residence, dst_work, new_w, desired_raise)
 
             # 2. Direct move
             dst_attr = G.nodes.get(dst_work, {})
@@ -996,7 +1005,9 @@ def _unified_heuristic_search(
                 # Время от спутника до работы
                 if G.has_edge(sat, dst_work):
                     tt_sat = G[sat][dst_work].get("travel_time_min", 999)
-                    if tt_sat <= comm_thr_min:
+                    # Гейт: boosted commuter_threshold > 0.5
+                    adjusted_commuter = comm_thr_norm * (1.0 + flex_bonus)
+                    if adjusted_commuter > COMMUTER_GATE_REF and tt_sat <= comm_thr_min * (1.0 + flex_bonus):
                         desired_raise = (target_wage / max(agent_wage, 1.0)) - 1.0 if agent_wage > 0 else 0.0
                         _execute_move(df, idx, sat, dst_work, G, rng)
                         new_w = float(df.at[idx, "wage"])
@@ -1015,21 +1026,21 @@ def _unified_heuristic_search(
             return "stay", _snap("stay", residence, workplace, agent_wage)
 
         for new_res in res_candidates:
-            # 1. Поиск работы в new_res или рядом
-            found_work = _find_job_near(
-                new_res, agent_ind, target_wage, G,
-                net_loc, pc, info_q, rng, comm_thr_min,
-            )
-            if found_work is not None:
+            # 1. Поиск работы только в new_res (без соседей)
+            res_attr = G.nodes.get(new_res, {})
+            ind_wage = _industry_wage_in_district(G, new_res, agent_ind)
+            ind_press = res_attr.get("industry_pressure", {}).get(agent_ind, 0.0)
+            if ind_wage >= target_wage and ind_press < MAX_JOBS_PRESSURE:
                 desired_raise = (target_wage / max(agent_wage, 1.0)) - 1.0 if agent_wage > 0 else 0.0
-                _execute_move(df, idx, new_res, found_work, G, rng)
+                _execute_move(df, idx, new_res, new_res, G, rng)
                 new_w = float(df.at[idx, "wage"])
-                return "move", _snap("move", new_res, found_work, new_w, desired_raise)
+                return "move", _snap("move", new_res, new_res, new_w, desired_raise)
 
-            # 2. Сохранение старой работы
+            # 2. Сохранение старой работы (маятник: те же правила)
             if G.has_edge(new_res, workplace):
                 tt_old = G[new_res][workplace].get("travel_time_min", 999)
-                if tt_old <= comm_thr_min:
+                adjusted_commuter = comm_thr_norm * (1.0 + flex_bonus)
+                if (current_status == "commute" or adjusted_commuter > COMMUTER_GATE_REF) and tt_old <= comm_thr_min * (1.0 + flex_bonus):
                     _execute_move(df, idx, new_res, workplace, G, rng)
                     new_w = float(df.at[idx, "wage"])
                     return "move", _snap("move", new_res, workplace, new_w)
@@ -1063,7 +1074,8 @@ def _unified_heuristic_search(
                     continue
                 if G.has_edge(new_res, sat_work):
                     tt_sw = G[new_res][sat_work].get("travel_time_min", 999)
-                    if tt_sw <= comm_thr_min:
+                    adjusted_commuter = comm_thr_norm * (1.0 + flex_bonus)
+                    if (current_status == "commute" or adjusted_commuter > COMMUTER_GATE_REF) and tt_sw <= comm_thr_min * (1.0 + flex_bonus):
                         desired_raise = (target_wage / max(agent_wage, 1.0)) - 1.0 if agent_wage > 0 else 0.0
                         _execute_move(df, idx, new_res, sat_work, G, rng)
                         new_w = float(df.at[idx, "wage"])
