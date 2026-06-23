@@ -1,5 +1,14 @@
 """
-agents.py v8 — FFT Architecture
+agents.py v9 — Квотная инициализация агентов
+
+ИЗМЕНЕНИЯ v9:
+  1. КВОТНАЯ ИНИЦИАЛИЗАЦИЯ: вместо семплирования n агентов с последующей
+     классификацией (где все не-employed становились безработными),
+     теперь явно создаются квоты: занятые (employed_share), безработные
+     (unemployed_share) и студенты (enrollment rates). Неактивное население
+     15–65 агентами НЕ становится.
+  2. ВОЗРАСТНОЙ ДИАПАЗОН расширен с 18–65 до 15–65.
+  3. УБРАН inactivity_r — неактивные больше не попадают в статус "unemployed".
 
 ИЗМЕНЕНИЯ v8:
   1. FIX Bernoulli regional: network_location/network_job_search теперь
@@ -58,10 +67,12 @@ RC_A1, RC_MU1, RC_ALPHA1 = 0.09, 22.0, 0.10
 RC_A2, RC_MU2, RC_ALPHA2 = 0.01, 65.0, 0.07
 RC_C = 0.005
 
-# Возрастные бины SODB в диапазоне 18–65
+# Возрастные бины SODB в диапазоне 15–65
 # (midpoint, width, fraction_of_bin_to_use)
+# v9: расширен с 18–65 до 15–65 — бин 15-19 теперь полностью (5/5),
+#      бин 65-69 — только возраст 65 (1/5).
 AGE_BIN_META = {
-    "15 - 19 years": (18.5, 2, 2 / 5),
+    "15 - 19 years": (17.0, 5, 1.0),
     "20 - 24 years": (22.0, 5, 1.0),
     "25 - 29 years": (27.0, 5, 1.0),
     "30 - 34 years": (32.0, 5, 1.0),
@@ -566,59 +577,123 @@ def create_agents(
 
     districts = list(init_dists.keys())
 
-    # Эффективная популяция 18–65 по каждому району
-    pop_1865 = {}
+    # ── v9: целевые квоты по категориям (занятые / безработные / студенты) ─
+    # Вместо семплирования n случайных людей с последующей классификацией,
+    # явно выделяем три НЕПЕРЕСЕКАЮЩИХСЯ категории. Неактивное население 15–65
+    # (не работающее, не безработное, не учащееся) агентами НЕ становится.
+    pop_1564 = {}
+    pop_1526 = {}
+    expected_students = {}
+
     for d in districts:
         age_sex = init_dists[d].get("age_sex", {})
-        total = sum(
-            meta["count"] * AGE_BIN_META[key.split("|")[0]][2]
-            for key, meta in age_sex.items()
-            if key.split("|")[0] in AGE_BIN_META
-        )
-        pop_1865[d] = max(1, total)
+        total_1564 = 0.0
+        total_1526 = 0.0
+        exp_stu = 0.0
 
-    total_pop = sum(pop_1865.values())
-    agents_per_d = {d: max(1, round(n_agents * pop_1865[d] / total_pop))
-                    for d in districts}
-    diff = n_agents - sum(agents_per_d.values())
-    agents_per_d[districts[0]] += diff
+        for key, meta in age_sex.items():
+            bin_label = key.split("|")[0]
+            if bin_label not in AGE_BIN_META:
+                continue
+            eff = meta["count"] * AGE_BIN_META[bin_label][2]
+
+            # 15–64: все бины КРОМЕ 65-69
+            if bin_label != "65 - 69 years":
+                total_1564 += eff
+
+            # 15–26: бины для студентов
+            if bin_label in ("15 - 19 years", "20 - 24 years", "25 - 29 years"):
+                total_1526 += eff
+                age_key = {"15 - 19 years": "15-19", "20 - 24 years": "20-24",
+                           "25 - 29 years": "25-29"}[bin_label]
+                enroll_r = _ENROLLMENT_RATES.get(d, {}).get(age_key, 0.05)
+                exp_stu += eff * enroll_r
+
+        pop_1564[d] = max(1.0, total_1564)
+        pop_1526[d] = max(1.0, total_1526)
+        expected_students[d] = max(0.0, exp_stu)
+
+    # Целевые количества по категориям (в масштабе реальной популяции)
+    targets = {}
+    total_active_real = 0.0
+    for d in districts:
+        dd = init_dists[d]
+        emp_share = dd.get("employment", {}).get("employed_share", 0.45)
+        unemp_share = dd.get("employment", {}).get("unemployed_share", 0.06)
+
+        n_emp = pop_1564[d] * emp_share
+        n_unemp = pop_1564[d] * unemp_share
+        n_stu = expected_students[d]
+
+        targets[d] = {"employed": n_emp, "unemployed": n_unemp, "student": n_stu}
+        total_active_real += n_emp + n_unemp + n_stu
+
+    # Масштабируем до n_agents
+    scale = n_agents / max(total_active_real, 1.0)
+    for d in districts:
+        for cat in ("employed", "unemployed", "student"):
+            targets[d][cat] = max(1, round(targets[d][cat] * scale))
+
+    # Корректировка округления
+    current_total = sum(targets[d][cat] for d in districts
+                        for cat in ("employed", "unemployed", "student"))
+    diff = n_agents - current_total
+    # Распределяем разницу по крупнейшим категориям
+    dlist = list(districts)
+    while diff != 0:
+        for d in dlist:
+            if diff == 0:
+                break
+            # Приоритет: employed (самая большая категория)
+            if diff > 0:
+                targets[d]["employed"] += 1
+                diff -= 1
+            else:
+                if targets[d]["employed"] > 1:
+                    targets[d]["employed"] -= 1
+                    diff += 1
 
     records  = []
     agent_id = 0
 
     for residence in districts:
-        n  = agents_per_d[residence]
         dd = init_dists[residence]
+        tg = targets[residence]
         region_code = DISTRICT_TO_REGION_CODE.get(residence, "XX")
 
-        # Возрастные бины
-        age_sex     = dd.get("age_sex", {})
-        valid_keys  = [k for k in age_sex if k.split("|")[0] in AGE_BIN_META]
-        if not valid_keys:
-            continue
+        age_sex = dd.get("age_sex", {})
+        # Ключи для 15–64 (занятые/безработные) — исключаем 65-69
+        work_keys = [k for k in age_sex
+                     if k.split("|")[0] in AGE_BIN_META
+                     and k.split("|")[0] != "65 - 69 years"]
+        work_weights = np.array([age_sex[k]["count"] * AGE_BIN_META[k.split("|")[0]][2]
+                                 for k in work_keys], dtype=float)
+        if work_weights.sum() > 0:
+            work_weights /= work_weights.sum()
+        else:
+            work_weights = np.ones(len(work_keys)) / len(work_keys)
 
-        weights = np.array([
-            age_sex[k]["count"] * AGE_BIN_META[k.split("|")[0]][2]
-            for k in valid_keys
-        ], dtype=float)
-        if weights.sum() == 0:
-            continue
-        weights /= weights.sum()
+        # Ключи для студентов (15–29)
+        stu_keys = [k for k in age_sex
+                    if k.split("|")[0] in ("15 - 19 years", "20 - 24 years", "25 - 29 years")]
+        stu_weights = np.array([age_sex[k]["count"] * AGE_BIN_META[k.split("|")[0]][2]
+                                for k in stu_keys], dtype=float)
+        if stu_weights.sum() > 0:
+            stu_weights /= stu_weights.sum()
+        else:
+            stu_weights = np.ones(len(stu_keys)) / len(stu_keys)
 
-        sampled_idx    = rng.choice(len(valid_keys), size=n, p=weights)
         edu_dist       = dd.get("education", {"low": 0.3, "medium": 0.5, "high": 0.2})
-        unemployment_r = dd.get("employment", {}).get("unemployed_share", 0.06)
         owner_share    = dd.get("owner_share", 0.65)
         housing_m2     = dd.get("housing_price_m2", 1500.0)
         nat_dist_d     = dd.get("nationality", {"Slovak": 1.0})
 
-        for idx in sampled_idx:
-            key = valid_keys[idx]
-            bin_label, sex = key.split("|")
-            mid, width, _ = AGE_BIN_META[bin_label]
-            age = float(np.clip(mid + rng.uniform(-width / 2, width / 2), 18, 65))
-
-            education   = _weighted_choice(edu_dist, rng) if edu_dist else "medium"
+        # ── Вспомогательная: создание записи агента ──────────────────────────
+        def make_agent(age, sex, status, is_employed, workplace, industry, wage,
+                       graduation_tick_val=-1, education_override=None):
+            nonlocal agent_id
+            education = (education_override if education_override is not None
+                         else _weighted_choice(edu_dist, rng) if edu_dist else "medium")
             marital_sex = dd.get("marital", {}).get(sex, {})
             marital     = MARITAL_MAP.get(
                 _weighted_choice(marital_sex, rng) if marital_sex else "Never married",
@@ -626,96 +701,13 @@ def create_agents(
             )
             nationality = _weighted_choice(nat_dist_d, rng)
 
-            # ── Шаг 0a: ОТРАСЛЕВАЯ СПЕЦИАЛИЗАЦИЯ (для всех, кроме студентов) ─
-            # Безработные получают отрасль из residence_district — они потеряли
-            # работу в своей отрасли, но сохраняют специализацию.
-            # Для занятых отрасль позже переопределяется из workplace_district.
-            res_industry_dist = dd.get("industry", {})
-            agent_industry = _weighted_choice(res_industry_dist, rng) if res_industry_dist else "Other"
-
-            # ── Шаг 0b: СТУДЕНТ? ─────────────────────────────────────────────
-            is_student   = False
-            graduation_tick_val = -1  # -1 = не студент
-
-            if age <= 26:
-                if age < 20:
-                    age_bin_key = "15-19"
-                elif age < 25:
-                    age_bin_key = "20-24"
-                else:
-                    age_bin_key = "25-29"
-
-                enroll_r = _ENROLLMENT_RATES.get(residence, {}).get(age_bin_key, 0.05)
-                is_student = rng.random() < enroll_r
-
-            if is_student:
-                # ── Студент ──────────────────────────────────────────────────
-                status    = "student"
-                is_employed = False
-                workplace = _sample_schoolplace(residence, school_outflow, rng)
-                industry  = "Education"
-                wage      = 0.0
-
-                # Дата выпуска: тики от текущего возраста до graduation_age
-                if age < 19:
-                    grad_age = 19.0   # средняя школа
-                elif age < 22:
-                    grad_age = 22.0   # бакалавриат
-                else:
-                    grad_age = 24.0   # магистратура
-
-                graduation_tick_val = max(1, int(round((grad_age - age) * 12)))
-            else:
-                # ── Не студент: обычная занятость ────────────────────────────
-                if age < 25:
-                    inactivity_r = 0.35
-                elif age < 55:
-                    inactivity_r = 0.10
-                else:
-                    inactivity_r = 0.22
-
-                p_employed = float(np.clip(
-                    (1.0 - inactivity_r) * (1.0 - unemployment_r), 0.0, 1.0
-                ))
-                is_employed = rng.random() < p_employed
-
-                if is_employed:
-                    workplace = _sample_workplace(residence, outflow_probs, rng)
-                    status    = "stay" if workplace == residence else "commute"
-                else:
-                    workplace = residence
-                    status    = "unemployed"
-
-                # ── Отрасль и зарплата ───────────────────────────────────────
-                if is_employed:
-                    # Занятый: отрасль из workplace_district (реальная работа)
-                    wp_data        = init_dists.get(workplace, dd)
-                    industry_dist  = wp_data.get("industry", {})
-                    salary_by_ind  = wp_data.get("salary_by_industry", {})
-                    avg_wage_wp    = wp_data.get("avg_wage", 1400.0)
-
-                    industry = _weighted_choice(industry_dist, rng) if industry_dist else agent_industry
-                    base_wage = salary_by_ind.get(industry, avg_wage_wp)
-                    edu_mult  = {"low": 0.82, "medium": 1.0, "high": 1.35}.get(education, 1.0)
-                    wage = float(max(0, rng.normal(base_wage * edu_mult, base_wage * 0.22)))
-                else:
-                    # Безработный: сохраняет отраслевую специализацию из residence_district
-                    industry = agent_industry
-                    wage     = 0.0
-
-            # ── SASD параметры ────────────────────────────────────────────────
+            # ── SASD параметры ───────────────────────────────────────────────
             settlement = SETTLEMENT_MAP.get(residence, "town")
             def sp(name): return sample_param(name, age, education, region_code,
                                               settlement, rng)
 
             perceived_control      = sp("perceived_control")
             econ_perceived_control = sp("econ_perceived_control")
-
-            # ═══ Пункт 6: условная связь perceived_control → econ_perceived_control ═══
-            # В реальности они коррелируют ~0.4: общий локус контроля влияет на
-            # восприятие контроля в рабочей сфере. Смешиваем 60% независимого
-            # семпла + 40% от perceived_control чтобы избежать нереалистичных
-            # комбинаций (pc=0.9, epc=0.1).
             econ_perceived_control = float(np.clip(
                 econ_perceived_control * 0.60 + perceived_control * 0.40, 0.0, 1.0
             ))
@@ -732,9 +724,6 @@ def create_agents(
             commuter_threshold     = sp("commuter_mode_threshold")
             internal_mig_thr       = sp("internal_mig_threshold")
             external_mig_thr       = sp("external_mig_threshold")
-
-            # ═══ v8: future_orientation → internal_mig_threshold (r≈0.3) ═══
-            # Оптимистичные люди имеют более низкий порог внутренней миграции.
             internal_mig_thr = float(np.clip(
                 internal_mig_thr + (1.0 - d_future_value) * 0.20, 0.0, 1.0
             ))
@@ -742,30 +731,20 @@ def create_agents(
             shock_sensitivity      = sp("inertia_shock_sensitivity")
             satisfaction_base      = sp("satisfaction_init")
 
-            # ═══ Пункт 4 (v8): Hurdle модель для shock_sensitivity ═══
-            # В опросе большинство не переживало шок → mean≈0.05.
-            # Normal + clip создаёт массу искусственных нулей.
-            # Правильно: Bernoulli(был ли шок) × intensity(насколько сильный).
-            # p_shock — из данных: доля респондентов с shock > 0 после norm01.
-            # Используем survey-параметр если доступен, иначе консервативно 0.30.
             p_shock_raw = _get_survey().get("inertia_shock_sensitivity", {}).get("p_shock", 0.30)
             if rng.random() < p_shock_raw:
-                # Интенсивность шока: усечённый normal со средним ~0.20
                 shock_intensity = max(0.02, rng.normal(0.20, 0.08))
                 shock_sensitivity = float(np.clip(shock_intensity, 0.02, 0.50))
             else:
                 shock_sensitivity = 0.0
+
             network_loc            = sp("network_location")
             network_job            = sp("network_job_search")
             weak_ties              = sp("weak_ties_utility")
             digital_comm           = sp("digital_comm_intensity")
             net_signal_susc        = sp("network_signal_susceptibility")
             digital_trust_v        = sp("digital_trust")
-
-            # ═══ v8: условные связи цифровых параметров ═══
-            # digital_comm → info_quality: активные пользователи лучше информированы (r≈0.5)
             info_quality = float(np.clip(info_quality * 0.55 + digital_comm * 0.45, 0.0, 1.0))
-            # digital_comm → digital_trust: больше пользуешься → больше доверяешь (r≈0.3)
             digital_trust_v = float(np.clip(digital_trust_v * 0.75 + digital_comm * 0.25, 0.0, 1.0))
 
             # ── Inertia ───────────────────────────────────────────────────────
@@ -786,7 +765,6 @@ def create_agents(
             if marital == "married":
                 inertia = float(np.clip(inertia + 0.08, 0.05, 0.95))
 
-            # Веса доменов (без модификаторов типа агента)
             w_econ   = d_econ_weight
             w_social = d_social_weight
             w_family = family_modifier
@@ -798,14 +776,10 @@ def create_agents(
             sat_init   = float(np.clip(satisfaction_base + rng.normal(0, 0.06), 0.05, 0.99))
             econ_value = float(np.clip(1.0 - d_econ_gap + rng.normal(0, 0.05), 0.0, 1.0))
 
-            # ── Порог place: база + шум от place_aspiration ──────────────────
-            # domain_future_place μ≈0.316, σ≈0.185 — широкий разброс
             thr_place_val = float(np.clip(
                 0.28 + 0.25 * (d_future_place - 0.316),
                 0.05, 0.85
             ))
-
-            # ═══ Блок E: индивидуальные пороги social/family ═══
             thr_social_val = float(np.clip(
                 0.35 + rng.normal(0, 0.04), 0.15, 0.85
             ))
@@ -814,115 +788,141 @@ def create_agents(
             ))
 
             records.append({
-                # ── Идентификация ────────────────────────────────────────────
                 "id":                  agent_id,
-
-                # ── Локация (НОВОЕ: два поля) ─────────────────────────────────
                 "residence_district":  residence,
                 "workplace_district":  workplace,
                 "region":              region_code,
-                # Обратная совместимость с engine/report — текущий "home"
                 "district":            residence,
-
-                # ── Статус занятости (НОВОЕ) ──────────────────────────────────
-                "status":              status,   # stay | commute | unemployed | student
-                "graduation_tick":     graduation_tick_val,  # -1 = не студент
-
-                # ── Демография ───────────────────────────────────────────────
+                "status":              status,
+                "graduation_tick":     graduation_tick_val,
                 "age":                 round(age, 2),
                 "sex":                 sex,
                 "education":           education,
                 "nationality":         nationality,
                 "marital":             marital,
-
-                # ── Занятость ────────────────────────────────────────────────
                 "is_employed":         is_employed,
                 "industry":            industry,
                 "wage":                round(wage, 2),
                 "owns_property":       owns_property,
-
-                # ── Инерция и стаж ───────────────────────────────────────────
                 "inertia":             round(inertia, 4),
                 "tenure":              tenure,
-                "moved_ticks":         999,  # давно на месте
-
-                # ── TPB состояние (ОБНОВЛЕНО для FFT) ────────────────────────
-                # "none"              — агент не активен
-                # "seeking_work"      — Фильтр 1 открылся, ищет dst_work
-                # "seeking_residence" — dst_work найден, ищет жильё
-                # "commute_pending"   — решил на commute, проверяет feasibility
+                "moved_ticks":         999,
                 "intention_state":     "none",
-                "dst_work":            "",    # целевой район работы (пуст до активации)
-                "activation_timer":    0,     # Блок D: счётчик тиков ожидания (inertia-задержка)
-                "activation_domain":   "",    # доминантный домен при активации (economic/place/social/family)
-                "social_boost":        0.0,   # Блок B: временный буст social target от событий
-                "sb_pending":          "",    # v2: очередь активных decay-потоков social_boost ("M5,M3,C2" формат)
-
-                # ── Домены satisfaction ───────────────────────────────────────
+                "dst_work":            "",
+                "activation_timer":    0,
+                "activation_domain":   "",
+                "social_boost":        0.0,
+                "sb_pending":          "",
                 "sat_economic":        round(econ_value, 4),
                 "sat_social":          round(sat_init, 4),
                 "sat_family":          round(sat_init, 4),
                 "sat_place":           round(d_future_place, 4),
-
-                # ── Веса доменов ─────────────────────────────────────────────
                 "w_economic":          round(w_econ, 4),
                 "w_social":            round(w_social, 4),
                 "w_family":            round(w_family, 4),
                 "w_future":            round(w_future, 4),
-
-                # ── Пороги доменов ───────────────────────────────────────────
                 "thr_economic":        round(d_econ_threshold, 4),
                 "thr_social":          round(thr_social_val, 4),
                 "thr_family":          round(thr_family_val, 4),
                 "thr_place":           round(thr_place_val, 4),
-
-                # ── Психологические параметры (SASD) ──────────────────────────
                 "perceived_control":       round(perceived_control, 4),
                 "econ_perceived_control":  round(econ_perceived_control, 4),
                 "inertia_social":          round(inertia_social, 4),
                 "info_quality":            round(info_quality, 4),
-
-                # ── Пороги мобильности ───────────────────────────────────────
                 "commuter_threshold":  round(commuter_threshold, 4),
                 "internal_mig_thr":    round(internal_mig_thr, 4),
                 "external_mig_thr":    round(external_mig_thr, 4),
                 "job_flexibility":     round(job_flexibility, 4),
                 "family_weight_mod":   round(family_modifier, 4),
-
-                # ── Инерционные параметры ────────────────────────────────────
                 "shock_sensitivity":   round(shock_sensitivity, 4),
-
-                # ── Сеть ─────────────────────────────────────────────────────
                 "network_location":    float(network_loc),
                 "network_job_search":  float(network_job),
                 "weak_ties_utility":   round(weak_ties, 4),
                 "network_signal":      "neutral",
                 "net_signal_susc":     round(net_signal_susc, 4),
-
-                # ── Цифровые параметры ───────────────────────────────────────
                 "digital_comm":        round(digital_comm, 4),
                 "digital_trust":       round(digital_trust_v, 4),
-
-                # ── Жильё ────────────────────────────────────────────────────
                 "housing_price_m2":    round(housing_m2, 0),
-
-                # ── Двухбарьерная модель (Aspirations×Capabilities → TPB) ────
-                "aspirations":         0.0,          # EWMA-накопление D_instant (обновляется в engine.tick)
-                "signal_reduction":    0.0,          # накопленный эффект соц. сигналов, снижающий инерцию
-                "place_deficit_penalty": 0.0,        # накопленный штраф за неудовлетворённость местом
-                "tpb_active":          False,        # флаг фазы TPB
-                "intention_delay":     0,            # счётчик тиков задержки после превышения порога намерения
-                "econ_gap":            round(float(d_econ_gap), 4),  # адаптивное восприятие econ-разрыва
-                "domain_future_place": round(float(d_future_place), 4),  # адаптивные ожидания места
-
-                # ── Динамические переменные сигнальной системы v2 ────────────
-                "econ_penalty":            0.0,   # динамический штраф к D_econ (прямая прибавка)
-                "infra_bonus":             0.0,   # динамический бонус к инфраструктуре
-                "inertia_mobility_penalty": 0.0,  # динамический штраф к инерции от переездов соседей
-                "jobloss_econ_gap_bonus":  0.0,   # временный бонус к econ_gap от LOST_JOB
-                "soc_calibration_signal":  0.0,   # v3: сигнал социальной калибровки для SocialCalibration
+                "aspirations":         0.0,
+                "signal_reduction":    0.0,
+                "place_deficit_penalty": 0.0,
+                "tpb_active":          False,
+                "intention_delay":     0,
+                "econ_gap":            round(float(d_econ_gap), 4),
+                "domain_future_place": round(float(d_future_place), 4),
+                "econ_penalty":            0.0,
+                "infra_bonus":             0.0,
+                "inertia_mobility_penalty": 0.0,
+                "jobloss_econ_gap_bonus":  0.0,
+                "soc_calibration_signal":  0.0,
             })
             agent_id += 1
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 1. СТУДЕНТЫ
+        # ══════════════════════════════════════════════════════════════════════
+        for _ in range(tg["student"]):
+            idx = rng.choice(len(stu_keys), p=stu_weights)
+            key = stu_keys[idx]
+            bin_label, sex = key.split("|")
+            mid, width, _ = AGE_BIN_META[bin_label]
+            age = float(np.clip(mid + rng.uniform(-width / 2, width / 2), 15, 29))
+
+            workplace = _sample_schoolplace(residence, school_outflow, rng)
+
+            if age < 19:
+                grad_age = 19.0
+            elif age < 22:
+                grad_age = 22.0
+            else:
+                grad_age = 24.0
+            graduation_tick_val = max(1, int(round((grad_age - age) * 12)))
+
+            make_agent(age, sex, "student", False, workplace, "Education", 0.0,
+                       graduation_tick_val)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 2. ЗАНЯТЫЕ
+        # ══════════════════════════════════════════════════════════════════════
+        for _ in range(tg["employed"]):
+            idx = rng.choice(len(work_keys), p=work_weights)
+            key = work_keys[idx]
+            bin_label, sex = key.split("|")
+            mid, width, _ = AGE_BIN_META[bin_label]
+            age = float(np.clip(mid + rng.uniform(-width / 2, width / 2), 15, 65))
+
+            workplace = _sample_workplace(residence, outflow_probs, rng)
+            status = "stay" if workplace == residence else "commute"
+
+            wp_data       = init_dists.get(workplace, dd)
+            industry_dist = wp_data.get("industry", {})
+            salary_by_ind = wp_data.get("salary_by_industry", {})
+            avg_wage_wp   = wp_data.get("avg_wage", 1400.0)
+
+            industry = _weighted_choice(industry_dist, rng) if industry_dist else "Other"
+            base_wage = salary_by_ind.get(industry, avg_wage_wp)
+            # Семплируем education заранее для корректного edu_mult
+            edu_pre = _weighted_choice(edu_dist, rng) if edu_dist else "medium"
+            edu_mult = {"low": 0.82, "medium": 1.0, "high": 1.35}.get(edu_pre, 1.0)
+            wage = float(max(0, rng.normal(base_wage * edu_mult, base_wage * 0.22)))
+
+            make_agent(age, sex, status, True, workplace, industry, wage,
+                       education_override=edu_pre)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 3. БЕЗРАБОТНЫЕ
+        # ══════════════════════════════════════════════════════════════════════
+        for _ in range(tg["unemployed"]):
+            idx = rng.choice(len(work_keys), p=work_weights)
+            key = work_keys[idx]
+            bin_label, sex = key.split("|")
+            mid, width, _ = AGE_BIN_META[bin_label]
+            age = float(np.clip(mid + rng.uniform(-width / 2, width / 2), 15, 65))
+
+            res_industry_dist = dd.get("industry", {})
+            industry = _weighted_choice(res_industry_dist, rng) if res_industry_dist else "Other"
+
+            make_agent(age, sex, "unemployed", False, residence, industry, 0.0)
 
     df = pd.DataFrame(records)
     print(f"\n  Создано агентов: {len(df):,}  |  Районов: {df['residence_district'].nunique()}")

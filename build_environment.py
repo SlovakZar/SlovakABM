@@ -120,40 +120,21 @@ def _collapse_education(edu_counts: dict) -> dict:
             out[grp] += cnt
     return {k: v for k, v in out.items() if v > 0}
 
-def _build_companies_by_industry(df_companies: pd.DataFrame) -> dict:
-    result = {}
-    for _, row in df_companies.iterrows():
-        district = row["District"]
-        industry = row["Industry"]
-        size = row["Size"]
-        count = int(row["Companies"])
-        if district not in result:
-            result[district] = {}
-        if industry not in result[district]:
-            result[district][industry] = {"small": 0, "medium": 0, "large": 0, "total": 0}
-        result[district][industry][size] = count
-        result[district][industry]["total"] += count
-    return result
-
 def build(
     master_path: str = "districts_master.csv",
     dist_path: str = "agent_distributions_with_industry.csv",
-    companies_path: str = "companies_by_district_industry_size.csv",
     env_out: str = "environment.json",
     dist_out: str = "agent_init_distributions.json",
 ):
     print("Загрузка данных...")
     dm = pd.read_csv(master_path, sep=";")
     dd = pd.read_csv(dist_path)
-    dc = pd.read_csv(companies_path, sep=";")
 
     dd.columns = [c.lstrip("\ufeff") for c in dd.columns]
 
     print(f"  districts_master: {len(dm)} районов, {len(dm.columns)} столбцов")
-    print(f"  companies: {len(dc)} строк, {dc['Industry'].nunique()} отраслей")
     print(f"  agent_distributions: {len(dd)} строк, {dd['variable'].nunique()} переменных")
 
-    companies_by_ind = _build_companies_by_industry(dc)
     var_dfs = {v: dd[dd["variable"] == v].copy() for v in dd["variable"].unique()}
 
     age_dist    = _pivot_distribution(var_dfs["age_group"], sex_col_needed=True)
@@ -195,14 +176,12 @@ def build(
             "galleries":       (int(_to_float(row["galleries_count"]) or 0)),
         }
 
-        companies_industry = companies_by_ind.get(district, {})
         business = {
             "total_companies":   (int(_to_float(row["total_companies"]) or 0)),
             "foreign_companies": int(str(row["foreign_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["foreign_companies"]) else 0,
             "small_companies":   int(str(row["small_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["small_companies"]) else 0,
             "medium_companies":  int(str(row["medium_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["medium_companies"]) else 0,
             "large_companies":   int(str(row["large_companies"]).replace("\xa0", "").replace(" ", "")) if pd.notna(row["large_companies"]) else 0,
-            "by_industry":       companies_industry,
         }
 
         locations[district] = {
@@ -373,8 +352,6 @@ if __name__ == "__main__":
                         help="Имя файла districts_master.csv (относительно data_dir)")
     parser.add_argument("--distributions", default="agent_distributions_with_industry.csv",
                         help="Имя файла agent_distributions_with_industry.csv")
-    parser.add_argument("--companies", default="companies_by_district_industry_size.csv",
-                        help="Имя файла companies_by_district_industry_size.csv")
     parser.add_argument("--env_out", default="environment.json",
                         help="Выходной файл environment.json")
     parser.add_argument("--dist_out", default="agent_init_distributions.json",
@@ -387,12 +364,10 @@ if __name__ == "__main__":
 
     master_path = os.path.join(args.data_dir, args.master)
     dist_path = os.path.join(args.data_dir, args.distributions)
-    companies_path = os.path.join(args.data_dir, args.companies)
 
     build(
         master_path=master_path,
         dist_path=dist_path,
-        companies_path=companies_path,
         env_out=args.env_out,
         dist_out=args.dist_out,
     )
