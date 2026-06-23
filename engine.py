@@ -1487,16 +1487,15 @@ def tick(
     df["tenure"]      = df["tenure"] + 1
     df["moved_ticks"] = df["moved_ticks"] + 1
 
-    # 1b. Graduation: студенты взрослеют → выпуск
-    student_mask = df["status"].values == "student"
-    if student_mask.any():
-        # Декремент тиков до выпуска
-        df.loc[student_mask, "graduation_tick"] = (
-            df.loc[student_mask, "graduation_tick"] - 1
+    # 1b. Graduation: пакетный выпуск раз в 12 тиков по когортам
+    if tick_num in (12, 24, 36, 48):
+        cohort = tick_num // 12  # 1, 2, 3, 4
+        grad_mask = (
+            (df["status"].values == "student") &
+            (df["graduation_cohort"].values == cohort)
         )
-        graduating = student_mask & (df["graduation_tick"].values <= 0)
-        if graduating.any():
-            grad_idx = np.where(graduating)[0]
+        if grad_mask.any():
+            grad_idx = np.where(grad_mask)[0]
             for idx in grad_idx:
                 age_at_grad = df.at[idx, "age"]
                 residence   = str(df.at[idx, "residence_district"])
@@ -1505,7 +1504,7 @@ def tick(
 
                 df.at[idx, "status"]          = "unemployed"
                 df.at[idx, "is_employed"]     = False
-                df.at[idx, "graduation_tick"] = -1
+                df.at[idx, "graduation_cohort"] = -1
                 # v8: сэмплируем отрасль из распределения района проживания
                 if init_dists:
                     res_data = init_dists.get(residence, {})
@@ -1545,9 +1544,9 @@ def tick(
                     ))
                     # v2: устанавливаем jobloss_econ_gap_bonus для ramp
                     df.at[idx, "jobloss_econ_gap_bonus"] = 0.25
-            n_grad = int(graduating.sum())
+            n_grad = int(grad_mask.sum())
             if n_grad > 0:
-                print(f"  [tick {tick_num}] Выпустилось студентов: {n_grad}")
+                print(f"  [tick {tick_num}] Выпустилось студентов (cohort={cohort}): {n_grad}")
 
     # ── DISPATCH + APPLY (фаза 1): обработка graduation-событий ────────────
     if bus is not None:

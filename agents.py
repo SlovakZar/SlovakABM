@@ -690,7 +690,7 @@ def create_agents(
 
         # ── Вспомогательная: создание записи агента ──────────────────────────
         def make_agent(age, sex, status, is_employed, workplace, industry, wage,
-                       graduation_tick_val=-1, education_override=None):
+                       graduation_cohort=-1, education_override=None):
             nonlocal agent_id
             education = (education_override if education_override is not None
                          else _weighted_choice(edu_dist, rng) if edu_dist else "medium")
@@ -794,7 +794,7 @@ def create_agents(
                 "region":              region_code,
                 "district":            residence,
                 "status":              status,
-                "graduation_tick":     graduation_tick_val,
+                "graduation_cohort":   graduation_cohort,
                 "age":                 round(age, 2),
                 "sex":                 sex,
                 "education":           education,
@@ -870,16 +870,17 @@ def create_agents(
 
             workplace = _sample_schoolplace(residence, school_outflow, rng)
 
-            if age < 19:
-                grad_age = 19.0
+            if age < 18:
+                graduation_cohort = 4   # тик 48
+            elif age < 20:
+                graduation_cohort = 3   # тик 36
             elif age < 22:
-                grad_age = 22.0
+                graduation_cohort = 2   # тик 24
             else:
-                grad_age = 24.0
-            graduation_tick_val = max(1, int(round((grad_age - age) * 12)))
+                graduation_cohort = 1   # тик 12
 
             make_agent(age, sex, "student", False, workplace, "Education", 0.0,
-                       graduation_tick_val)
+                       graduation_cohort)
 
         # ══════════════════════════════════════════════════════════════════════
         # 2. ЗАНЯТЫЕ
@@ -971,7 +972,9 @@ def _print_summary(df: pd.DataFrame):
     if len(students) > 0:
         print(f"\n  СТУДЕНТЫ: {len(students):,}  "
               f"ср.возраст={students['age'].mean():.1f}  "
-              f"ср.выпуск через {students['graduation_tick'].mean():.0f} тиков")
+              f"когорты: " + ", ".join(
+                  f"к{int(k)}={int(v)}" for k, v in
+                  students['graduation_cohort'].value_counts().sort_index().items()))
         top_school_flows = (students
                             .groupby(["residence_district", "workplace_district"])
                             .size()
