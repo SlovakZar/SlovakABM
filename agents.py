@@ -855,6 +855,7 @@ def create_agents(
                 "inertia_mobility_penalty": 0.0,
                 "jobloss_econ_gap_bonus":  0.0,
                 "soc_calibration_signal":  0.0,
+                "migration_pressure":   0.0,
             })
             agent_id += 1
 

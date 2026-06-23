@@ -55,6 +55,7 @@ def _append_dynamic_vars_section(lines: list, df: pd.DataFrame) -> None:
         ("infra_bonus",              "Infra Bonus",            "бонус к инфраструктуре"),
         ("inertia_mobility_penalty", "Inertia Mobility Penalty", "штраф к инерции от соседей"),
         ("jobloss_econ_gap_bonus",   "Jobloss Econ Gap Bonus", "ramp-бонус к econ_gap от LOST_JOB"),
+        ("migration_pressure",       "Migration Pressure",     "накопленное давление к миграции"),
     ]
 
     available = []
@@ -981,6 +982,7 @@ def agent_parameters_table(
     lines.append("  Help        — helplessness = clip(1 − PC − weak_ties × 0.3, 0, 1)")
     lines.append("  SocCal      — SocialCalibration = 1 + net_signal_susc × soc_calibration_signal")
     lines.append("  DynInert    — динамическая инерция S2 = inertia × max(0.15, 1 − social_boost)")
+    lines.append("  MigrPress   — v4: накопленное давление к миграции (0–2)")
     lines.append("  TPB         — флаг активности / счётчик задержки намерения")
     lines.append("  IntState    — intention_state (none | seeking_work | seeking_residence)")
 
@@ -991,7 +993,7 @@ def agent_parameters_table(
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} {'PlacePen':>9} "
         f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} {'SocCalSig':>9} "
         f"{'Capab.':>10} {'Inertia':>13} {'DynThr1':>13} "
-        f"{'D_perc':>10} {'Attrib':>8} {'Help':>8} {'SocCal':>8} {'DynInert':>13} "
+        f"{'D_perc':>10} {'Attrib':>8} {'Help':>8} {'SocCal':>8} {'DynInert':>13} {'MigrPress':>10} "
         f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
     lines.append("  " + "─" * 210)
@@ -1112,6 +1114,11 @@ def agent_parameters_table(
         soccal_str  = _fmt_arrow(soccal_a, soccal_b, ".3f", 8)
         dyn_str     = _fmt_arrow(dyn_inertia_a, dyn_inertia_b, ".3f", 13)
 
+        # v4: migration_pressure
+        migr_a = float(_get(ra, "migration_pressure", 0.0))
+        migr_b = float(_get(rb, "migration_pressure", 0.0))
+        migr_str = _fmt_arrow(migr_a, migr_b, ".3f", 10)
+
         tpb_str = f"{_fmt_bool_arrow(tpb_active_a, tpb_active_b, 6)} {tpb_delay_a}→{tpb_delay_b}"
         tpb_str = f"{tpb_str:>13}"
 
@@ -1125,7 +1132,7 @@ def agent_parameters_table(
             f"{aspir_str} {d_econ_str} {wp_str} {d_place_str} {pr_str} {pp_str} "
             f"{ep_str} {ib_str} {imp_str} {jlb_str} {scs_str} "
             f"{capab_str} {inertia_str} {dyn_thr1_str} "
-            f"{D_perc_str} {attr_str} {help_str} {soccal_str} {dyn_str} "
+            f"{D_perc_str} {attr_str} {help_str} {soccal_str} {dyn_str} {migr_str} "
             f"{tpb_str} {thr_str} {sign_str} {int_state_s}"
         )
 
@@ -1142,7 +1149,7 @@ def agent_parameters_table(
         f"  {'':>5} {'':11} {'':17} "
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} "
         f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} "
-        f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} "
+        f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} {'MigrPress':>10} "
         f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
 
@@ -1192,6 +1199,10 @@ def agent_parameters_table(
     m_jlb_a = _col_mean(sampled_df_a, "jobloss_econ_gap_bonus")
     m_jlb_b = _col_mean(sampled_df_b, "jobloss_econ_gap_bonus")
 
+    # v4: migration_pressure
+    m_migr_a = _col_mean(sampled_df_a, "migration_pressure")
+    m_migr_b = _col_mean(sampled_df_b, "migration_pressure")
+
     # Форматирование сводной строки
     m_asp_str = _fmt_arrow(m_asp_a, m_asp_b, ".3f", 13)
     m_de_str  = _fmt_arrow(m_de_a, m_de_b, ".3f", 10)
@@ -1205,6 +1216,7 @@ def agent_parameters_table(
     m_cap_str = _fmt_arrow(m_cap_a, m_cap_b, ".3f", 10)
     m_in_str  = _fmt_arrow(m_in_a, m_in_b, ".3f", 13)
     m_dyn_s   = _fmt_arrow(m_dyn_a, m_dyn_b, ".3f", 13)
+    m_migr_s  = _fmt_arrow(m_migr_a, m_migr_b, ".3f", 10)
 
     m_tpb_s = f"{_fmt_bool_arrow(m_tpb_a > 0.5, m_tpb_b > 0.5, 6)} {m_del_a:.1f}→{m_del_b:.1f}"
     m_tpb_s = f"{m_tpb_s:>13}"
@@ -1230,7 +1242,7 @@ def agent_parameters_table(
         f"  {m_st_str} "
         f"{m_asp_str} {m_de_str} {m_wp_str} {m_dp_str} {m_pr_str} "
         f"{m_ep_s} {m_ib_s} {m_imp_s} {m_jlb_s} "
-        f"{m_cap_str} {m_in_str} {m_dyn_s} "
+        f"{m_cap_str} {m_in_str} {m_dyn_s} {m_migr_s} "
         f"{m_tpb_s} {m_th_str} {m_sr_str} {m_is_str}"
     )
 
