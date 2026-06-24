@@ -222,9 +222,10 @@ def _compute_d_instant_vectorized(
     # Экономическая компонента
     safe_w = np.maximum(agent_wages, 0.0)
     safe_ind = np.maximum(industry_avg_wages_wp, 0.0)
+    # Используем np.divide с where, чтобы избежать предупреждения деления на ноль
     wage_pressure = np.where(
         (safe_w > 0) & (safe_ind > 0),
-        safe_ind / safe_w,
+        np.divide(safe_ind, safe_w, where=(safe_w > 0), out=np.zeros_like(safe_ind)),
         1.0  # безработный — максимальное давление
     )
     D_econ = w_econs * wage_pressure * (econ_gaps / np.maximum(job_flexs, 0.01)) + econ_penalties
