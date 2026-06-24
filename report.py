@@ -1339,11 +1339,15 @@ def master_district_table(
         for district in all_districts:
             tick_counts[district].append(dc.get(district, 0))
 
-    # ── Стоимость жилья: эффективная цена с учётом HOUSING_REMAINING ────
-    # Формула из engine._get_effective_housing_price:
-    #   delta = base_price × (1.1 / remaining) × sensitivity
-    #   effective = base_price + delta
-    _AGENT_FOOTPRINT = 1.1  # AGENT_HOUSING_FOOTPRINT из engine.py
+    # ── Стоимость жилья: эффективная цена из графа ──
+    # G.nodes[district]["effective_housing_price_m2"] уже предвычислена
+    # в update_graph() каждый тик с учётом housing_remaining и sensitivity.
+
+    # Эффективная цена на каждом тике (читаем из графа, который обновляется каждый тик)
+    # Но в отчёте у нас нет графа «на каждый тик» — используем housing_remaining из tick_stats
+    # и формулу как в graph.py для воспроизведения.
+    _AGENT_FOOTPRINT = 1.1  # AGENT_HOUSING_FOOTPRINT из graph.py
+    _REMAINING_FLOOR = 1.5  # HOUSING_REMAINING_FLOOR из graph.py
 
     # Базовая цена и чувствительность из графа
     base_prices = {}
@@ -1366,11 +1370,11 @@ def master_district_table(
     for s in tick_stats:
         hr = s.get("district_housing_remaining", {})
         for district in all_districts:
-            remaining = hr.get(district, 1.0)
+            remaining = hr.get(district, _REMAINING_FLOOR)
             bp = base_prices[district]
             sens = sensitivities[district]
             if remaining > 0.01:
-                delta = bp * (_AGENT_FOOTPRINT / remaining) * sens
+                delta = bp * (_AGENT_FOOTPRINT / max(remaining, _REMAINING_FLOOR)) * sens
                 effective = bp + delta
             else:
                 effective = bp * 100.0  # жильё закончилось

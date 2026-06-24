@@ -20,7 +20,7 @@ from pathlib import Path
 SIM_DIR = Path(__file__).parent
 sys.path.insert(0, str(SIM_DIR))
 
-from graph   import build_graph, print_graph_summary, sync_industry_jobs_to_graph
+from graph   import build_graph, print_graph_summary, sync_industry_jobs_to_graph, initialize_industry_pressure_from_agents
 from agents  import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
 from engine  import run_simulation
 from signals import EventBus, create_default_dispatcher
@@ -54,6 +54,9 @@ def run(
     # v3: Синхронизируем industry_jobs (occupied+vacant) и jobs_capacity в узлы графа.
     # INDUSTRY_JOBS_CAPACITY заполняется в create_agents → _init_industry_jobs.
     sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
+    
+    # v4: Инициализируем industry_pressure с учетом начального распределения агентов
+    initialize_industry_pressure_from_agents(G, df)
 
     # Загружаем init_dists для graduation (отрасль выпускников)
     dist_path = Path(agent_dist_path)

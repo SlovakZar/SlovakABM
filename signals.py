@@ -249,6 +249,8 @@ class Rule:
 
     # v3: дополнительные фильтры
     filter_wage_pressure: bool = False          # фильтровать агентов с wage_pressure > 1
+    filter_education: Optional[str] = None      # "low" | "medium" | "high"
+    filter_same_industry: bool = False          # фильтровать агентов той же отрасли, что и event.industry
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -489,6 +491,14 @@ class Dispatcher:
             # Нужен импорт _industry_wage_in_district из engine — ленивый
             base = base & _wage_pressure_mask(df, G, event, base)
 
+        # ── Фильтр по образованию ───────────────────────────────────────
+        if rule.filter_education is not None:
+            base = base & (df["education"].values == rule.filter_education)
+
+        # ── Фильтр по той же отрасли, что и событие ─────────────────────
+        if rule.filter_same_industry and event.industry:
+            base = base & (df["industry"].values == event.industry)
+
         # ── Исключаем самого агента-источника (кроме scope=self) ─────────
         if scope != SCOPE_SELF and event.source_agent_id is not None:
             base = base & (df["id"].values != event.source_agent_id)
@@ -713,6 +723,18 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
+    # ── AGENT_MOVED (economic) → econ_penalty низкообразованным соседям той же отрасли ─
+    d.add_rule(Rule(
+        event_type=EventType.AGENT_MOVED,
+        target_scope=SCOPE_RESIDENCE_NEIGHBORS,
+        field="econ_penalty",
+        base_delta=0.05,
+        motivation="economic",
+        filter_education="low",
+        filter_same_industry=True,
+        clip_min=0.0,
+        clip_max=0.5,
+    ))
 
     # ═══════════════════════════════════════════════════════════════════════
     # AGENT_COMMUTE_STARTED — v2: social_boost +0.02, сброс через 3 тика
@@ -752,6 +774,17 @@ def create_default_dispatcher() -> Dispatcher:
         scale_by_field="net_signal_susc",
         clip_min=0.0,
         clip_max=1.0,
+    ))
+    # ── JOB_CHANGED → econ_penalty низкообразованным коллегам той же отрасли ─
+    d.add_rule(Rule(
+        event_type=EventType.JOB_CHANGED,
+        target_scope=SCOPE_WORKPLACE_COLLEAGUES,
+        field="econ_penalty",
+        base_delta=0.03,
+        filter_education="low",
+        filter_same_industry=True,
+        clip_min=0.0,
+        clip_max=0.5,
     ))
 
     # ═══════════════════════════════════════════════════════════════════════

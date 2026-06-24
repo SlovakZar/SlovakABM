@@ -41,17 +41,19 @@ from pathlib import Path
 HOUSING_ALPHA = 0.03
 WAGE_ALPHA    = 0.02
 
+# ── Параметры динамического жилья ─────────────────────────────────────────────
+AGENT_HOUSING_FOOTPRINT = 1.1   # один агент занимает ~1.1 условных квартир
+HOUSING_REMAINING_FLOOR = 1.5   # пол для remaining (порог остановки роста цены)
+
 # ── Чувствительность рынка жилья по регионам ─────────────────────────────────
-# BA (Братислава) = 1.75 — высокая конкуренция за жильё
-# KE (Кошице)     = 1.50 — второй город
-# TT, NR, ZA      = 1.05–1.10 — региональные центры
-# TN, BB, PO      = 1.00 — стандартная чувствительность
+# BA (Братислава) = 1.30 — повышенная конкуренция за жильё
+# Все остальные   = 1.00 — стандартная чувствительность
 REGION_HOUSING_SENSITIVITY = {
-    "BA": 1.75,
-    "KE": 1.50,
-    "TT": 1.10,
-    "NR": 1.05,
-    "ZA": 1.05,
+    "BA": 1.30,
+    "KE": 1.00,
+    "TT": 1.00,
+    "NR": 1.00,
+    "ZA": 1.00,
     "TN": 1.00,
     "BB": 1.00,
     "PO": 1.00,
@@ -182,6 +184,9 @@ def build_graph(
         else:
             industry_capacity = {"Other": jobs_capacity}
 
+        # ── Инициализация industry_pressure = 1.0 для каждой отрасли ──
+        initial_industry_pressure = {ind: 1.0 for ind in industry_capacity.keys()}
+
         G.add_node(
             district,
             region=region,
@@ -204,8 +209,10 @@ def build_graph(
             # Динамические (обновляются каждый тик)
             avg_wage=float(avg_wage),
             housing_price_m2=float(housing_m2),
+            effective_housing_price_m2=float(housing_m2),  # эффективная цена (с учётом remaining)
+            housing_remaining=float(max(1.0, vacant_dwell)),  # остаток жилья (иниц. в init_housing_remaining)
             agent_count=0,
-            industry_pressure={},                         # давление по отраслям
+            industry_pressure=initial_industry_pressure,  # v4: начальное давление = 1.0 (накопительная система)
         )
 
     # ── Рёбра ────────────────────────────────────────────────────────────────
@@ -339,17 +346,98 @@ def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
         G.nodes[district]["avg_wage"]          = round(new_wage, 0)
         G.nodes[district]["agent_count"]        = current_agents
 
+        # ── Эффективная цена жилья (с учётом housing_remaining) ──────────
+        remaining = attr.get("housing_remaining", HOUSING_REMAINING_FLOOR)
+        sensitivity = attr.get("housing_market_sensitivity", 1.0)
+        delta = new_housing * (AGENT_HOUSING_FOOTPRINT / max(remaining, HOUSING_REMAINING_FLOOR)) * sensitivity
+        G.nodes[district]["effective_housing_price_m2"] = round(new_housing + delta, 0)
 
-def update_industry_pressure(G: nx.DiGraph, df):
+
+def init_housing_remaining(G: nx.DiGraph, n_agents: int) -> None:
     """
-    Вычисляет отраслевое давление (industry_pressure) для каждого узла графа.
+    Инициализирует housing_remaining в узлах графа.
 
-    v3: Использует industry_jobs (occupied+vacant) если доступно,
-    иначе fallback на industry_capacity.
+    Для каждого района:
+      scaled_vacant = vacant_dwellings × (n_agents / total_population)
+    где n_agents / total_population — масштабный коэффициент симуляции.
 
-    industry_pressure[district][industry] = занятые_агенты / (occupied + vacant).
-    Значение > 1.0 означает перегрузку отрасли в районе.
-    Вызывается каждый тик из engine.tick().
+    Также сразу вычисляет effective_housing_price_m2.
+    """
+    total_pop = sum(
+        G.nodes[d].get("real_population", 1)
+        for d in G.nodes
+    )
+    if total_pop == 0:
+        return
+
+    scale = n_agents / total_pop
+
+    for district in G.nodes:
+        attr = G.nodes[district]
+        vacant = attr.get("vacant_dwellings", 0)
+        remaining = max(HOUSING_REMAINING_FLOOR, vacant * scale)
+        G.nodes[district]["housing_remaining"] = float(remaining)
+
+        # Сразу считаем эффективную цену
+        base_price = attr.get("housing_price_m2", 1800.0)
+        sensitivity = attr.get("housing_market_sensitivity", 1.0)
+        delta = base_price * (AGENT_HOUSING_FOOTPRINT / remaining) * sensitivity
+        G.nodes[district]["effective_housing_price_m2"] = round(base_price + delta, 0)
+
+    # Диагностика
+    total_scaled = sum(G.nodes[d]["housing_remaining"] for d in G.nodes)
+    print(f"  HOUSING_REMAINING (граф): {G.number_of_nodes()} узлов")
+    print(f"    total_scaled_vacant={total_scaled:,.1f}  "
+          f"scale={scale:.6f}  n_agents={n_agents:,}")
+    ba1 = "District of Bratislava I"
+    if ba1 in G.nodes:
+        print(f"    {ba1}: remaining={G.nodes[ba1]['housing_remaining']:.1f}  "
+              f"sensitivity={G.nodes[ba1].get('housing_market_sensitivity', 1.0)}  "
+              f"effective_price={G.nodes[ba1]['effective_housing_price_m2']:.0f}")
+
+
+def get_effective_housing_price(G: nx.DiGraph, district: str) -> float:
+    """
+    Возвращает эффективную цену жилья (€/м²) для района из графа.
+
+    Значение уже предвычислено в update_graph() каждый тик,
+    здесь просто читаем из атрибутов узла.
+    """
+    if district in G.nodes:
+        return float(G.nodes[district].get("effective_housing_price_m2", 1800.0))
+    return 1800.0
+
+
+def update_industry_pressure(G: nx.DiGraph, df=None):
+    """
+    v4: Инициализирует industry_pressure только если ещё не инициализировано.
+    
+    Теперь это система накопительного давления (не пересчет каждый тик):
+      - Начальное: pressure[industry] = 1.0
+      - При занятии места: pressure += 1 / max(vacant, 1)
+      - При освобождении места: pressure -= 1 / max(old_vacant, 1)
+    
+    Эта функция вызывается только при инициализации графа и не пересчитывает
+    давление каждый тик. Обновления давления происходят через update_industry_pressure_delta()
+    при событиях COMMUTE, JOB_CHANGE, AGENT_MOVED.
+    """
+    # Проверяем, инициализировано ли давление
+    for district in G.nodes:
+        pressure = G.nodes[district].get("industry_pressure", {})
+        if not pressure:
+            # Инициализируем по первому разу
+            capacity = G.nodes[district].get("industry_capacity", {})
+            initial_pressure = {ind: 1.0 for ind in capacity.keys()}
+            G.nodes[district]["industry_pressure"] = initial_pressure
+
+
+def initialize_industry_pressure_from_agents(G: nx.DiGraph, df: pd.DataFrame) -> None:
+    """
+    v4: Инициализирует industry_pressure с учетом начального распределения агентов.
+    
+    Вызывается один раз после создания агентов и sync_industry_jobs_to_graph.
+    Обновляет pressure для каждого (district, industry) на основе количества
+    занятых агентов в каждой отрасли.
     """
     # Подсчитываем занятых агентов по (workplace_district, industry)
     employed = df[df["is_employed"]]
@@ -357,25 +445,49 @@ def update_industry_pressure(G: nx.DiGraph, df):
                      .groupby(["workplace_district", "industry"])["id"]
                      .count()
                      .to_dict())
-
+    
     for district in G.nodes:
-        # v3: предпочитаем industry_jobs (occupied+vacant)
         ind_jobs = G.nodes[district].get("industry_jobs", {})
-        if ind_jobs:
-            pressure = {}
-            for ind, jobs in ind_jobs.items():
-                cnt = wp_ind_counts.get((district, ind), 0)
-                total_cap = jobs["occupied"] + jobs["vacant"]
-                pressure[ind] = round(cnt / max(total_cap, 1), 3)
-            G.nodes[district]["industry_pressure"] = pressure
-        else:
-            # Fallback: старый industry_capacity
-            cap = G.nodes[district].get("industry_capacity", {})
-            pressure = {}
-            for ind, capacity in cap.items():
-                cnt = wp_ind_counts.get((district, ind), 0)
-                pressure[ind] = round(cnt / max(capacity, 1), 3)
-            G.nodes[district]["industry_pressure"] = pressure
+        pressure_dict = G.nodes[district].get("industry_pressure", {})
+        
+        if ind_jobs and pressure_dict:
+            # Для каждой отрасли в этом районе добавляем delta за каждого агента
+            for industry in ind_jobs.keys():
+                cnt = wp_ind_counts.get((district, industry), 0)
+                if cnt > 0:
+                    vacant = ind_jobs[industry].get("vacant", 1)
+                    # Добавляем delta за каждого агента
+                    delta_per_agent = 1.0 / max(vacant, 1)
+                    pressure_dict[industry] = 1.0 + (cnt * delta_per_agent)
+
+
+def update_industry_pressure_delta(G: nx.DiGraph, district: str, industry: str, 
+                                    delta: float) -> None:
+    """
+    v4: Обновляет industry_pressure по накопительной системе.
+    
+    При заполнении вакансии: delta = +1 / max(vacant, 1)
+    При освобождении: delta = -1 / max(vacant, 1)
+    
+    Вызывается из engine.py при событиях COMMUTE/JOB_CHANGE/AGENT_MOVED.
+    """
+    if district not in G.nodes:
+        return
+    
+    pressure_dict = G.nodes[district].get("industry_pressure", {})
+    if not pressure_dict:
+        # Инициализируем если не было
+        capacity = G.nodes[district].get("industry_capacity", {})
+        pressure_dict = {ind: 1.0 for ind in capacity.keys()}
+        G.nodes[district]["industry_pressure"] = pressure_dict
+    
+    if industry in pressure_dict:
+        # Обновляем с ограничением снизу
+        new_pressure = pressure_dict[industry] + delta
+        pressure_dict[industry] = max(0.0, new_pressure)
+    else:
+        # Если отрасли нет в давлении — инициализируем
+        pressure_dict[industry] = 1.0 + delta
 
 
 def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacity: dict):
