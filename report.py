@@ -1373,11 +1373,9 @@ def master_district_table(
             remaining = hr.get(district, _REMAINING_FLOOR)
             bp = base_prices[district]
             sens = sensitivities[district]
-            if remaining > 0.01:
-                delta = bp * (_AGENT_FOOTPRINT / max(remaining, _REMAINING_FLOOR)) * sens
-                effective = bp + delta
-            else:
-                effective = bp * 100.0  # жильё закончилось
+            # Используем ту же формулу с полом, что и в graph.py update_graph
+            delta = bp * (_AGENT_FOOTPRINT / max(remaining, _REMAINING_FLOOR)) * sens
+            effective = bp + delta
             housing_by_tick[district].append(effective)
 
     # ── Подсчёт переездов по мотивам из all_action_log ──────────────────
