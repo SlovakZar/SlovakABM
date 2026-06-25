@@ -45,6 +45,10 @@ WAGE_ALPHA    = 0.02
 AGENT_HOUSING_FOOTPRINT = 1.1   # один агент занимает ~1.1 условных квартир
 HOUSING_REMAINING_FLOOR = 1.5   # пол для remaining (порог остановки роста цены)
 
+# ── Spillover инфраструктуры ─────────────────────────────────────────────────
+SPILLOVER_WEIGHT = 0.25         # вес бонуса от соседей (0 = выключен)
+SPILLOVER_TIME_MAX = 90.0       # макс. время в пути (мин), после которого spillover = 0
+
 # ── Чувствительность рынка жилья по регионам ─────────────────────────────────
 # BA (Братислава) = 1.30 — повышенная конкуренция за жильё
 # Все остальные   = 1.00 — стандартная чувствительность
@@ -71,32 +75,108 @@ REGIONAL_CENTERS = {
     "KE": "District of Košice I",
 }
 
-# ── Вспомогательная функция для расчёта infrastructure_score ─────────────────
+# ── Вспомогательные функции для расчёта infrastructure_score ─────────────────
+
+def _compute_infrastructure_raw(infra_data: dict) -> float:
+    """
+    «Сырой» линейный подсчёт — БЕЗ diminishing returns.
+    Используется для spillover: сосед с 5 больницами даёт больший бонус,
+    чем сосед с 2 больницами.
+    """
+    if not infra_data:
+        return 0.0
+
+    return (infra_data.get("polyclinics", 0) * 0.2 +
+            infra_data.get("hospitals", 0)   * 0.5 +
+            infra_data.get("cinemas", 0)     * 0.1 +
+            infra_data.get("museums", 0)     * 0.1 +
+            infra_data.get("galleries", 0)   * 0.1)
+
+
 def _compute_infrastructure_score(infra_data: dict) -> float:
     """
-    Вычисляет score инфраструктуры района в диапазоне [0, 1] на основе
-    количества медицинских, культурных и социальных учреждений.
+    Вычисляет score района [0, 1] с убывающей отдачей для больниц и поликлиник.
+    Первые 2 учреждения — полный вес, каждое следующее — sqrt(k).
+    Для spillover используется _compute_infrastructure_raw (без diminishing).
     """
     if not infra_data:
         return 0.5  # значение по умолчанию
 
-    polyclinics = infra_data.get("polyclinics", 0)
-    hospitals   = infra_data.get("hospitals", 0)
-    cinemas     = infra_data.get("cinemas", 0)
-    museums     = infra_data.get("museums", 0)
-    galleries   = infra_data.get("galleries", 0)
+    # diminishing returns: count → effective_count (первые 2 — линейно, дальше — sqrt)
+    def _dim(count: int) -> float:
+        if count <= 2:
+            return float(count)
+        return 2.0 + (count - 2) ** 0.5
 
-    # Веса: больницы и поликлиники важнее, культура — дополнительный бонус
-    raw = (polyclinics * 0.2 +
-           hospitals   * 0.5 +
-           cinemas     * 0.1 +
-           museums     * 0.1 +
-           galleries   * 0.1)
+    poly_eff = _dim(infra_data.get("polyclinics", 0))
+    hosp_eff = _dim(infra_data.get("hospitals", 0))
+
+    raw = (poly_eff * 0.2 +
+           hosp_eff * 0.5 +
+           infra_data.get("cinemas", 0)   * 0.1 +
+           infra_data.get("museums", 0)   * 0.1 +
+           infra_data.get("galleries", 0) * 0.1)
 
     # Нормализация: максимальное raw по данным ~7.4 (Bratislava I) → делим на 5,
     # чтобы получить score ~0.8-1.0 для лидеров.
     score = min(1.0, raw / 5.0)
     return round(score, 3)
+
+
+def _get_min_travel_between(G: nx.DiGraph, a: str, b: str) -> float:
+    """Минимальное travel_time между районами a и b в любом направлении."""
+    t = 999.0
+    if G.has_edge(a, b):
+        t = min(t, G.edges[a, b].get("travel_time_min", 999.0))
+    if G.has_edge(b, a):
+        t = min(t, G.edges[b, a].get("travel_time_min", 999.0))
+    return t
+
+
+def get_effective_infrastructure(G: nx.DiGraph, district: str) -> float:
+    """
+    Инфраструктурный скор района с учётом spillover от соседей.
+
+    Соседи — все районы, с которыми есть commuting-связь (входящая или исходящая).
+    Бонус = SPILLOVER_WEIGHT × (raw_соседа − raw_своя) × time_factor,
+    только если сосед «сильнее» по сырой инфраструктуре.
+    """
+    loc = G.nodes[district]
+    infra_data = loc.get("infrastructure", {})
+    own_raw = _compute_infrastructure_raw(infra_data)
+    own_score = loc.get("infrastructure_score", 0.5)
+
+    # Собираем соседей по commuting-рёбрам (входящие + исходящие)
+    neighbors: set[str] = set()
+    for src, _ in G.in_edges(district):
+        neighbors.add(src)
+    for _, dst in G.out_edges(district):
+        neighbors.add(dst)
+    neighbors.discard(district)
+
+    if not neighbors:
+        return own_score
+
+    spillover_bonus = 0.0
+    for nb in neighbors:
+        nb_data = G.nodes[nb].get("infrastructure", {})
+        nb_raw = _compute_infrastructure_raw(nb_data)
+
+        # Бонус только если сосед объективно «сильнее» по сырой инфраструктуре
+        if nb_raw <= own_raw:
+            continue
+
+        raw_diff = nb_raw - own_raw
+
+        # Фактор времени: чем быстрее доехать, тем сильнее spillover
+        travel = _get_min_travel_between(G, district, nb)
+        if travel >= SPILLOVER_TIME_MAX:
+            continue
+        time_factor = 1.0 - travel / SPILLOVER_TIME_MAX
+
+        spillover_bonus += SPILLOVER_WEIGHT * raw_diff * time_factor
+
+    return min(1.0, own_score + spillover_bonus)
 
 
 def build_graph(

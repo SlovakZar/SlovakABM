@@ -39,7 +39,8 @@ from typing import Optional
 
 from graph import (update_graph, get_awareness_set, update_industry_pressure,
                     update_industry_pressure_delta, init_housing_remaining,
-                    get_effective_housing_price, AGENT_HOUSING_FOOTPRINT)
+                    get_effective_housing_price, get_effective_infrastructure,
+                    AGENT_HOUSING_FOOTPRINT)
 from signals import EventBus, Event, EventType, Dispatcher, set_settlement_map
 
 # ── Константы ─────────────────────────────────────────────────────────────────
@@ -319,7 +320,7 @@ def _two_barrier_activation(
     all_districts = set(G.nodes)
     housing_cache   = {d: float(G.nodes[d].get("effective_housing_price_m2",
                          G.nodes[d].get("housing_price_m2", 1800.0))) for d in all_districts}
-    infra_cache     = {d: float(G.nodes[d].get("infrastructure_score", 0.5)) for d in all_districts}
+    infra_cache     = {d: get_effective_infrastructure(G, d) for d in all_districts}
 
     # Отраслевая зарплата: кэш (district, industry) → wage
     ind_wage_cache: dict[tuple, float] = {}
@@ -612,7 +613,7 @@ def _execute_move(
 
     # Форсированный рывок sat_place к target_place нового района
     new_h = G.nodes[new_residence].get("housing_price_m2", 1800)
-    new_i = G.nodes[new_residence].get("infrastructure_score", 0.5)
+    new_i = get_effective_infrastructure(G, new_residence)
     new_target = _sigmoid(0.5 * (1800 - new_h) / 1800 + 0.5 * (new_i - 0.5))
     df.at[idx, "sat_place"] = float(np.clip(
         df.at[idx, "sat_place"] * 0.5 + new_target * 0.5, 0.05, 0.95
@@ -775,7 +776,7 @@ get_effective_housing_price(G, residence
     # Текущая place_reality резиденции
     res_attr = G.nodes.get(residence, {})
     cur_h = res_attr.get("housing_price_m2", 1800.0)
-    cur_i = res_attr.get("infrastructure_score", 0.5)
+    cur_i = get_effective_infrastructure(G, residence)
     monthly_cost = cur_h * 50 * 0.004
     burden = monthly_cost / max(agent_wage, 1.0)
     cur_afford = max(0.0, 1.0 - burden / 0.35)
@@ -804,7 +805,7 @@ get_effective_housing_price(G, residence
         mc = get_effective_housing_price(G, dst) * 50 * 0.004
         b = mc / max(agent_wage, 1.0)
         aff = max(0.0, 1.0 - b / 0.35)
-        dst_infra = dst_attr.get("infrastructure_score", 0.5)
+        dst_infra = get_effective_infrastructure(G, dst)
         dst_place_reality = 0.6 * aff + 0.4 * dst_infra
         if dst_place_reality <= cur_place_reality + 0.02:
             continue
@@ -814,7 +815,7 @@ get_effective_housing_price(G, residence
     # имеют больше шансов оказаться в начале списка.
     if len(filtered) > 1:
         scores = np.array([
-            (G.nodes.get(d, {}).get("infrastructure_score", 0.5) +
+            (get_effective_infrastructure(G, d) +
              max(0.0, 1.0 - (get_effective_housing_price(G, d) * 50 * 0.004)
                  / max(agent_wage, 1.0) / 0.35)) / 2.0
             for d in filtered
@@ -1678,7 +1679,7 @@ def tick(
     # Предвычисляем housing_price и infra_score для всех уникальных районов
     unique_res = set(res_districts)
     hp_map = {d: get_effective_housing_price(G, d) for d in unique_res}
-    infra_map = {d: float(G.nodes[d].get("infrastructure_score", 0.5)) for d in unique_res}
+    infra_map = {d: get_effective_infrastructure(G, d) for d in unique_res}
 
     # Векторизованный расчёт place_reality для всех агентов
     housing_prices = np.array([hp_map[d] for d in res_districts], dtype=float)
