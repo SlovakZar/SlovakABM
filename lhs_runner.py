@@ -159,6 +159,15 @@ class ParamPatcher:
         "hub_weak_ties_bonus":           ("engine", "HUB_WEAK_TIES_BONUS"),
         "move_weak_ties_penalty":        ("engine", "MOVE_WEAK_TIES_PENALTY"),
 
+        # ── AGENT_CREATION (Rogers-Castro — константы модуля agents) ──────
+        "rogers_castro_a1":              ("agents", "RC_A1"),
+        "rogers_castro_mu1":             ("agents", "RC_MU1"),
+        "rogers_castro_alpha1":          ("agents", "RC_ALPHA1"),
+        "rogers_castro_a2":              ("agents", "RC_A2"),
+        "rogers_castro_mu2":             ("agents", "RC_MU2"),
+        "rogers_castro_alpha2":          ("agents", "RC_ALPHA2"),
+        "rogers_castro_c":               ("agents", "RC_C"),
+
         # ── SIGNAL_SYSTEM (патчим через пересоздание dispatcher) ─────────
         # Эти параметры не константы модуля, а параметры create_default_dispatcher().
         # Они обрабатываются отдельно — через пересоздание шины с новыми параметрами.
@@ -172,6 +181,7 @@ class ParamPatcher:
         """Применяет параметры к модулям. Возвращает словарь сигнальных параметров."""
         import engine
         import graph
+        import agents
 
         signal_params = {}
 
@@ -194,6 +204,13 @@ class ParamPatcher:
                 self._originals[(mod_name, const_name)] = orig
                 setattr(graph, const_name, val)
 
+            elif mod_name == "agents":
+                if not hasattr(agents, const_name):
+                    continue
+                orig = getattr(agents, const_name)
+                self._originals[(mod_name, const_name)] = orig
+                setattr(agents, const_name, val)
+
         # Собираем сигнальные параметры отдельно
         signal_keys = [
             "social_boost_move", "social_boost_commute",
@@ -215,12 +232,15 @@ class ParamPatcher:
         """Восстанавливает оригинальные значения констант."""
         import engine
         import graph
+        import agents
 
         for (mod_name, const_name), orig_val in self._originals.items():
             if mod_name == "engine":
                 setattr(engine, const_name, orig_val)
             elif mod_name == "graph":
                 setattr(graph, const_name, orig_val)
+            elif mod_name == "agents":
+                setattr(agents, const_name, orig_val)
         self._originals.clear()
 
 
@@ -265,6 +285,10 @@ def create_patched_dispatcher(signal_params: Dict[str, float]):
     # v3: soc_calibration_signal соседям при AGENT_MOVED
     d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "soc_calibration_signal",
                     base_delta=0.04, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
+    # v3: AGENT_MOVED (economic) → econ_penalty низкообразованным соседям той же отрасли
+    d.add_rule(Rule(EventType.AGENT_MOVED, SCOPE_RESIDENCE_NEIGHBORS, "econ_penalty",
+                    base_delta=0.05, motivation="economic", filter_education="low",
+                    filter_same_industry=True, clip_min=0.0, clip_max=0.5))
 
     # AGENT_COMMUTE_STARTED
     d.add_rule(Rule(EventType.AGENT_COMMUTE_STARTED, SCOPE_RESIDENCE_NEIGHBORS, "social_boost", base_delta=social_boost_commute))
@@ -277,6 +301,10 @@ def create_patched_dispatcher(signal_params: Dict[str, float]):
     # v3: soc_calibration_signal коллегам при JOB_CHANGED
     d.add_rule(Rule(EventType.JOB_CHANGED, SCOPE_WORKPLACE_COLLEAGUES, "soc_calibration_signal",
                     base_delta=0.03, scale_by_field="net_signal_susc", clip_min=0.0, clip_max=1.0))
+    # v3: JOB_CHANGED → econ_penalty низкообразованным коллегам той же отрасли
+    d.add_rule(Rule(EventType.JOB_CHANGED, SCOPE_WORKPLACE_COLLEAGUES, "econ_penalty",
+                    base_delta=0.03, filter_education="low",
+                    filter_same_industry=True, clip_min=0.0, clip_max=0.5))
 
     # LOST_JOB
     d.add_rule(Rule(EventType.LOST_JOB, SCOPE_SELF, "inertia", base_delta=inertia_loss_jobloss, clip_min=0.05, clip_max=0.95))

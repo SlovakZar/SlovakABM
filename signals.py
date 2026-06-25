@@ -148,6 +148,12 @@ class Signal:
 
             if mask.any():
                 col = df[self.field].values
+                # v5: pandas .values может быть read-only (numpy >= 1.24)
+                # или StringArray (pandas extension). Проверяем через isinstance.
+                need_writeback = False
+                if isinstance(col, np.ndarray) and not col.flags.writeable:
+                    col = col.copy()
+                    need_writeback = True
 
                 if self.mode == "set":
                     col[mask] = self.value if self.value is not None else self.delta
@@ -163,6 +169,9 @@ class Signal:
                         col[mask] = col[mask] * per_agent_delta[mask]
 
                     col[mask] = np.clip(col[mask], self.clip_min, self.clip_max)
+
+                if need_writeback:
+                    df[self.field] = col
 
         # ── v3: Граф-операция ────────────────────────────────────────────
         if self.graph_op and G is not None and self.graph_district:

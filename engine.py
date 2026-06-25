@@ -80,6 +80,7 @@ NATIONAL_AVG_WAGE        = 1614.0
 # ── Двухбарьерная модель: константы ──────────────────────────────────────────
 ASPIRATIONS_ALPHA        = 0.08   # скорость EWMA-накопления aspirations из D_instant
 SIGNAL_DECAY             = 0.85   # затухание signal_reduction за тик
+MIGRATION_COOLDOWN_TICKS = 9      # тиков задержки после переезда до новой активации
 
 # v4: Накопительное давление и вероятностный триггер (замена жёсткой задержки)
 MIGRATION_PRESSURE_P_MIN    = 0.03   # минимальный шанс сорваться в тик
@@ -356,7 +357,7 @@ def _two_barrier_activation(
     # ── ВЕКТОРИЗОВАННАЯ двухбарьерная логика (замена per-agent цикла) ──
     # Шаг 1: маски исключений
     skip_student = (statuses == "student")
-    skip_recent  = (moved_ticks < 9)
+    skip_recent  = (moved_ticks < MIGRATION_COOLDOWN_TICKS)
     skip_age     = (ages < 18) | (ages > 62)
     skip_mask    = skip_student | skip_recent | skip_age
     active_mask  = ~skip_mask
@@ -1471,8 +1472,8 @@ def _process_jobloss_ramp(df: pd.DataFrame) -> None:
     jobloss_econ_gap_bonus > 0 → фаза ramp-up (+0.05/тик × 3)
     jobloss_econ_gap_bonus < 0 → фаза ramp-down (-0.05/тик × 3)
     """
-    bonus = df["jobloss_econ_gap_bonus"].values
-    econ_gap = df["econ_gap"].values
+    bonus = df["jobloss_econ_gap_bonus"].values.copy()
+    econ_gap = df["econ_gap"].values.copy()
 
     # ── Фаза ramp-up: bonus > 0.001 ─────────────────────────────────────
     ramp_up = bonus > 0.001

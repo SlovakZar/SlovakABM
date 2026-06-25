@@ -7,6 +7,7 @@
         "/^python -c \"import engine; print\\('OK'\\)\"$/": {
             "approve": true,
             "matchCommandLine": true
-        }
+        },
+        "timeout": true
     }
 }
