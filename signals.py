@@ -325,13 +325,14 @@ def _wage_pressure_mask(df: pd.DataFrame, G, event: "Event",
     industry = event.industry
     ind_wage = _industry_wage_in_district_signal(G, district, industry)
 
+    # Векторизовано: вместо цикла по индексам
     result = base_mask.copy()
-    for i in indices:
-        w = float(df.at[i, "wage"])
-        if w > 0 and ind_wage > 0:
-            wp = ind_wage / w
-            if wp <= 1.0:
-                result[i] = False
+    wages = df["wage"].values[indices].astype(float)
+    if ind_wage > 0:
+        wp = np.where(wages > 0, ind_wage / wages, 1.0)
+        # Оставляем только агентов с wage_pressure > 1
+        keep = wp > 1.0
+        result[indices[~keep]] = False
     return result
 
 
@@ -458,20 +459,18 @@ class Dispatcher:
         elif scope == SCOPE_SAME_SETTLEMENT_TYPE:
             if event.settlement_type is None:
                 return np.zeros(n, dtype=bool)
-            # Вычисляем settlement для каждого агента по его району
-            agent_settlements = np.array([
-                _get_settlement(str(df.at[i, "district"]))
-                for i in range(n)
-            ])
-            base = agent_settlements == event.settlement_type
+            # Векторизовано: pandas .map вместо цикла по агентам
+            base = (df["district"].map(_SETTLEMENT_MAP).fillna("town").values == event.settlement_type)
         elif scope == SCOPE_WHOLE_REGION:
             if event.source_district is None:
                 return np.zeros(n, dtype=bool)
             region = _get_region(event.source_district, G)
-            agent_regions = np.array([
-                _get_region(str(df.at[i, "district"]), G)
-                for i in range(n)
-            ])
+            # Векторизовано: строим region-map из G.nodes один раз
+            if G is not None:
+                region_map = {d: str(G.nodes[d].get("region", "XX")) for d in G.nodes}
+            else:
+                region_map = {}
+            agent_regions = df["district"].map(region_map).fillna("XX").values
             base = agent_regions == region
         else:
             return np.zeros(n, dtype=bool)

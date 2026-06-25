@@ -1369,7 +1369,7 @@ JOBLOSS_RAMP_STEP       = 0.05    # шаг ramp
 
 
 def _process_sb_pending(df: pd.DataFrame) -> None:
-    """v2: Обрабатывает очередь sb_pending — затухание social_boost.
+    """v2: Обрабатывает очередь sb_pending — затухание social_boost (ВЕКТОРИЗОВАНО).
 
     Формат sb_pending: "M5,M3,C2" — M= MOVE (remaining_ticks), C= COMMUTE (remaining_ticks).
     M-decay: -0.01/тик на каждый активный M-поток.
@@ -1377,14 +1377,25 @@ def _process_sb_pending(df: pd.DataFrame) -> None:
     """
     sb_pending = df["sb_pending"].values
     sb = df["social_boost"].values.copy()
+    n = len(df)
 
-    for i in range(len(df)):
+    # Собираем индексы непустых pending
+    non_empty_mask = np.array([
+        (v is not None and str(v) not in ("", "nan", "None"))
+        for v in sb_pending
+    ], dtype=bool)
+
+    if not non_empty_mask.any():
+        return
+
+    indices = np.where(non_empty_mask)[0]
+    new_pending = np.empty(n, dtype=object)
+
+    for i in indices:
         val = str(sb_pending[i])
-        if not val or val == "nan" or val == "":
-            continue
-
         parts = val.split(",")
         new_parts = []
+        m_count = 0  # счётчик активных M-потоков для этого агента
 
         for p in parts:
             if not p or len(p) < 2:
@@ -1396,21 +1407,26 @@ def _process_sb_pending(df: pd.DataFrame) -> None:
                 continue
 
             if typ == 'M':
-                # Линейный спад: -0.01/тик
-                sb[i] = max(0.0, sb[i] - SB_MOVE_DECAY_PER_TICK)
+                m_count += 1
                 if rem > 1:
                     new_parts.append(f'M{rem - 1}')
-                # rem == 1: последний тик, decay применён, поток удаляется
             elif typ == 'C':
                 if rem == 1:
-                    # Сброс всего буста через 3 тика
+                    # Сброс через 3 тика: -0.02
                     sb[i] = max(0.0, sb[i] - 0.02)
-                    # поток удаляется
                 else:
                     new_parts.append(f'C{rem - 1}')
 
-        df.at[i, "sb_pending"] = ",".join(new_parts) if new_parts else ""
+        # Применяем накопленный M-decay: -0.01 за каждый активный M-поток
+        if m_count > 0:
+            sb[i] = max(0.0, sb[i] - m_count * SB_MOVE_DECAY_PER_TICK)
 
+        new_pending[i] = ",".join(new_parts) if new_parts else ""
+
+    # Для неактивных агентов — пустая строка (векторизовано)
+    new_pending[~non_empty_mask] = ""
+
+    df["sb_pending"] = new_pending
     df["social_boost"] = np.clip(sb, 0.0, 1.0)
 
 
@@ -1446,7 +1462,7 @@ def _decay_dynamic_vars(df: pd.DataFrame) -> None:
 
 
 def _process_jobloss_ramp(df: pd.DataFrame) -> None:
-    """v2: Обрабатывает ramp econ_gap после LOST_JOB.
+    """v2: Обрабатывает ramp econ_gap после LOST_JOB (ВЕКТОРИЗОВАНО).
 
     jobloss_econ_gap_bonus > 0 → фаза ramp-up (+0.05/тик × 3)
     jobloss_econ_gap_bonus < 0 → фаза ramp-down (-0.05/тик × 3)
@@ -1454,23 +1470,25 @@ def _process_jobloss_ramp(df: pd.DataFrame) -> None:
     bonus = df["jobloss_econ_gap_bonus"].values
     econ_gap = df["econ_gap"].values
 
-    for i in range(len(df)):
-        b = bonus[i]
-        if b > 0.001:
-            # Фаза ramp-up: econ_gap растёт
-            step = min(JOBLOSS_RAMP_STEP, b)
-            econ_gap[i] = min(1.0, econ_gap[i] + step)
-            bonus[i] = max(0.0, b - step)
-            # После исчерпания ramp-up переходим в ramp-down
-            if bonus[i] < 0.001:
-                bonus[i] = -JOBLOSS_RAMP_DOWN_TICKS * JOBLOSS_RAMP_STEP
-        elif b < -0.001:
-            # Фаза ramp-down: econ_gap возвращается
-            step = min(JOBLOSS_RAMP_STEP, -b)
-            econ_gap[i] = max(0.0, econ_gap[i] - step)
-            bonus[i] = min(0.0, b + step)
-            if bonus[i] > -0.001:
-                bonus[i] = 0.0
+    # ── Фаза ramp-up: bonus > 0.001 ─────────────────────────────────────
+    ramp_up = bonus > 0.001
+    if ramp_up.any():
+        step_up = np.minimum(JOBLOSS_RAMP_STEP, bonus[ramp_up])
+        econ_gap[ramp_up] = np.minimum(1.0, econ_gap[ramp_up] + step_up)
+        bonus[ramp_up] = np.maximum(0.0, bonus[ramp_up] - step_up)
+        # После исчерпания ramp-up переходим в ramp-down
+        exhausted = bonus < 0.001
+        bonus[ramp_up & exhausted] = -JOBLOSS_RAMP_DOWN_TICKS * JOBLOSS_RAMP_STEP
+
+    # ── Фаза ramp-down: bonus < -0.001 ──────────────────────────────────
+    ramp_down = bonus < -0.001
+    if ramp_down.any():
+        step_down = np.minimum(JOBLOSS_RAMP_STEP, -bonus[ramp_down])
+        econ_gap[ramp_down] = np.maximum(0.0, econ_gap[ramp_down] - step_down)
+        bonus[ramp_down] = np.minimum(0.0, bonus[ramp_down] + step_down)
+        # Обнуление при завершении
+        done = bonus > -0.001
+        bonus[ramp_down & done] = 0.0
 
     df["econ_gap"] = econ_gap
     df["jobloss_econ_gap_bonus"] = bonus
@@ -1621,11 +1639,18 @@ def tick(
     old_econ_gaps = df["econ_gap"].values
 
     # Build mapping: district → {industry: wage}
-    # Pre-compute per-agent industry wage in their workplace
+    # Pre-compute per-agent industry wage in their workplace (ВЕКТОРИЗОВАНО)
     industry_wages_wp = np.full(n, NATIONAL_AVG_WAGE, dtype=float)
-    for i in range(n):
-        wp = wp_districts[i]
-        industry_wages_wp[i] = _industry_wage_in_district(G, wp, agent_inds[i])
+    # Строим словарь для уникальных пар (district, industry)
+    unique_pairs = set(zip(wp_districts, agent_inds))
+    wage_lookup = {}
+    for wp, ind in unique_pairs:
+        wage_lookup[(wp, ind)] = _industry_wage_in_district(G, wp, ind)
+    # Векторизованное заполнение через list comprehension (быстрее .apply)
+    industry_wages_wp = np.array([
+        wage_lookup.get((wp_districts[i], agent_inds[i]), NATIONAL_AVG_WAGE)
+        for i in range(n)
+    ], dtype=float)
 
     target_econ_gap = np.where(
         (agent_wages > 0) & (industry_wages_wp > 0),
@@ -1641,30 +1666,40 @@ def tick(
     # v2: Обработка LOST_JOB ramp (econ_gap + jobloss_econ_gap_bonus)
     _process_jobloss_ramp(df)
 
-    # ── place_deficit_penalty: накопление штрафа за неудовлетворённость местом ─
+    # ── place_deficit_penalty: накопление штрафа за неудовлетворённость местом (ВЕКТОРИЗОВАНО) ─
     res_districts = df["district"].values
     agent_wages = df["wage"].values
+    domain_futures = df["domain_future_place"].values
+    old_penalties = df["place_deficit_penalty"].values.copy()
 
-    old_penalties = df["place_deficit_penalty"].values
+    # Предвычисляем housing_price и infra_score для всех уникальных районов
+    unique_res = set(res_districts)
+    hp_map = {d: get_effective_housing_price(G, d) for d in unique_res}
+    infra_map = {d: float(G.nodes[d].get("infrastructure_score", 0.5)) for d in unique_res}
+
+    # Векторизованный расчёт place_reality для всех агентов
+    housing_prices = np.array([hp_map[d] for d in res_districts], dtype=float)
+    infra_scores = np.array([infra_map[d] for d in res_districts], dtype=float)
+    safe_wages = np.maximum(agent_wages, 1.0)
+    monthly_costs = housing_prices * 50.0 * 0.004
+    burdens = monthly_costs / safe_wages
+    affordability = np.maximum(0.0, 1.0 - burdens / 0.35)
+    place_reality = 0.6 * affordability + 0.4 * infra_scores
+
+    # Штраф при domain_future > place_reality
+    deficit_mask = domain_futures > place_reality
     new_penalties = old_penalties.copy()
 
-    for i in range(n):
-        res_attr = G.nodes.get(res_districts[i], {})
-        housing_price = get_effective_housing_price(G, res_districts[i])
-        infra_score = res_attr.get("infrastructure_score", 0.5)
+    if deficit_mask.any():
+        gap_pct = (domain_futures[deficit_mask] - place_reality[deficit_mask]) / np.maximum(place_reality[deficit_mask], 0.001)
+        new_penalties[deficit_mask] = np.clip(
+            old_penalties[deficit_mask] + gap_pct * 0.02 / 6.0, 0.0, 0.2
+        )
 
-        monthly_cost = housing_price * 50 * 0.004
-        burden = monthly_cost / max(agent_wages[i], 1.0)
-        affordability = max(0.0, 1.0 - burden / 0.35)
-        place_reality = 0.6 * affordability + 0.4 * infra_score
-
-        dfp = df.at[i, "domain_future_place"]
-        if dfp > place_reality:
-            gap_pct = (dfp - place_reality) / max(place_reality, 0.001)
-            new_penalties[i] = np.clip(old_penalties[i] + gap_pct * 0.02 / 6.0, 0.0, 0.2)
-        else:
-            # Затухание если место устраивает
-            new_penalties[i] = max(0.0, old_penalties[i] - 0.01)
+    # Затухание если место устраивает
+    satisfied_mask = ~deficit_mask
+    if satisfied_mask.any():
+        new_penalties[satisfied_mask] = np.maximum(0.0, old_penalties[satisfied_mask] - 0.01)
 
     df["place_deficit_penalty"] = new_penalties
 
