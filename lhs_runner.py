@@ -126,12 +126,29 @@ class ParamPatcher:
 
     # Маппинг: имя в LHS → (модуль, имя_константы_в_модуле)
     MAPPING = {
-        # ── TWO_BARRIER_MODEL ─────────────────────────────────────────────
+        # ── BARRIER_1 ─────────────────────────────────────────────────────
         "aspirations_alpha":             ("engine", "ASPIRATIONS_ALPHA"),
         "signal_decay":                  ("engine", "SIGNAL_DECAY"),
         "gap_adapt_lambda":              ("engine", "GAP_ADAPT_LAMBDA"),
         "sat_smoothing":                 ("engine", "SAT_SMOOTHING"),
-        "national_avg_wage":             ("engine", "NATIONAL_AVG_WAGE"),
+
+        "hub_weak_ties_bonus":           ("engine", "HUB_WEAK_TIES_BONUS"),
+        "move_weak_ties_penalty":        ("engine", "MOVE_WEAK_TIES_PENALTY"),
+
+        # ── BARRIER_2 ─────────────────────────────────────────────────────
+        "migration_pressure_p_min":      ("engine", "MIGRATION_PRESSURE_P_MIN"),
+        "migration_pressure_p_max":      ("engine", "MIGRATION_PRESSURE_P_MAX"),
+        "migration_pressure_divisor":    ("engine", "MIGRATION_PRESSURE_DIVISOR"),
+        "pc_d_perceived_modifier":       ("engine", "PC_D_PERCEIVED_MODIFIER"),
+        "migration_cooldown_ticks":      ("engine", "MIGRATION_COOLDOWN_TICKS"),
+        "sb_move_total_ticks":           ("engine", "SB_MOVE_TOTAL_TICKS"),
+        "social_boost_decay":            ("engine", "SOCIAL_BOOST_DECAY"),
+
+        # ── DECAY (затухание динамических переменных) ──────────────────
+        "decay_social_boost_move":        ("engine", "SB_MOVE_DECAY_PER_TICK"),
+        "decay_inertia_mobility":         ("engine", "INERTIA_MOB_DECAY_PER_TICK"),
+        "decay_econ_penalty":             ("engine", "ECON_PENALTY_DECAY_PER_TICK"),
+        "jobloss_ramp_step":              ("engine", "JOBLOSS_RAMP_STEP"),
 
         # ── HEURISTIC_SEARCH ──────────────────────────────────────────────
         "max_jobs_pressure":             ("engine", "MAX_JOBS_PRESSURE"),
@@ -148,16 +165,13 @@ class ParamPatcher:
         "unemployed_wage_floor":         ("engine", "UNEMPLOYED_WAGE_FLOOR"),
         "unemployed_wage_ceil":          ("engine", "UNEMPLOYED_WAGE_CEIL"),
 
-        # ── DECAY (затухание динамических переменных) ──────────────────
-        "decay_social_boost_move":        ("engine", "SB_MOVE_DECAY_PER_TICK"),
-        "decay_inertia_mobility":         ("engine", "INERTIA_MOB_DECAY_PER_TICK"),
-        "decay_econ_penalty":             ("engine", "ECON_PENALTY_DECAY_PER_TICK"),
-
-        # ── GRAPH_ENVIRONMENT ─────────────────────────────────────────────
+        # ── ENVIRONMENT (graph) ───────────────────────────────────────────
         "housing_alpha":                 ("graph", "HOUSING_ALPHA"),
         "wage_alpha":                    ("graph", "WAGE_ALPHA"),
-        "hub_weak_ties_bonus":           ("engine", "HUB_WEAK_TIES_BONUS"),
-        "move_weak_ties_penalty":        ("engine", "MOVE_WEAK_TIES_PENALTY"),
+        "national_avg_wage":             ("engine", "NATIONAL_AVG_WAGE"),
+        "spillover_weight":              ("graph", "SPILLOVER_WEIGHT"),
+        "agent_housing_footprint":       ("graph", "AGENT_HOUSING_FOOTPRINT"),
+        "housing_remaining_floor":       ("graph", "HOUSING_REMAINING_FLOOR"),
 
         # ── AGENT_CREATION (Rogers-Castro — константы модуля agents) ──────
         "rogers_castro_a1":              ("agents", "RC_A1"),
@@ -391,6 +405,59 @@ def collect_metrics(df_final: pd.DataFrame, snapshots: Dict,
     if "tpb_active" in df.columns:
         metrics["tpb_active_share"] = float(df["tpb_active"].mean())
 
+    # ── ИНЕРЦИЯ (inertia) ────────────────────────────────────────────────
+    if "inertia" in df.columns:
+        metrics["avg_inertia"] = float(df["inertia"].mean())
+    if "inertia_social" in df.columns:
+        metrics["avg_inertia_social"] = float(df["inertia_social"].mean())
+    if "inertia_mobility_penalty" in df.columns:
+        metrics["avg_inertia_mob_penalty"] = float(df["inertia_mobility_penalty"].mean())
+
+    # ── НЕДОВОЛЬСТВО (dissatisfaction / gaps) ────────────────────────────
+    if "migration_pressure" in df.columns:
+        metrics["avg_migration_pressure"] = float(df["migration_pressure"].mean())
+    if "econ_gap" in df.columns:
+        metrics["avg_econ_gap"] = float(df["econ_gap"].mean())
+    if "place_deficit_penalty" in df.columns:
+        metrics["avg_place_deficit_penalty"] = float(df["place_deficit_penalty"].mean())
+    if "signal_reduction" in df.columns:
+        metrics["avg_signal_reduction"] = float(df["signal_reduction"].mean())
+
+    # ── ВОЗМОЖНОСТИ (capabilities / perceived_control / weak_ties) ───────
+    if "perceived_control" in df.columns:
+        metrics["avg_perceived_control"] = float(df["perceived_control"].mean())
+    if "econ_perceived_control" in df.columns:
+        metrics["avg_econ_perceived_control"] = float(df["econ_perceived_control"].mean())
+    if "weak_ties_utility" in df.columns:
+        metrics["avg_weak_ties_utility"] = float(df["weak_ties_utility"].mean())
+    if "info_quality" in df.columns:
+        metrics["avg_info_quality"] = float(df["info_quality"].mean())
+    if "job_flexibility" in df.columns:
+        metrics["avg_job_flexibility"] = float(df["job_flexibility"].mean())
+    if "internal_mig_thr" in df.columns:
+        metrics["avg_internal_mig_thr"] = float(df["internal_mig_thr"].mean())
+
+    # ── ЖЕЛАНИЯ (aspirations / domain_future_place / social_boost) ───────
+    if "domain_future_place" in df.columns:
+        metrics["avg_domain_future_place"] = float(df["domain_future_place"].mean())
+    if "social_boost" in df.columns:
+        metrics["avg_social_boost"] = float(df["social_boost"].mean())
+    if "soc_calibration_signal" in df.columns:
+        metrics["avg_soc_calibration_signal"] = float(df["soc_calibration_signal"].mean())
+
+    # Сводный dissatisfaction (среднее по 4 доменам)
+    sat_cols = ["sat_economic", "sat_social", "sat_family", "sat_place"]
+    thr_cols = ["thr_economic", "thr_social", "thr_family", "thr_place"]
+    w_cols   = ["w_economic", "w_social", "w_family", "w_future"]
+    dissat_vals = []
+    for sv, tv, wv in zip(sat_cols, thr_cols, w_cols):
+        if sv in df.columns and tv in df.columns and wv in df.columns:
+            gap = np.maximum(0, df[tv].values - df[sv].values) / np.maximum(df[tv].values, 0.01)
+            dissat_vals.append((df[wv].values * gap) ** 2)
+    if dissat_vals:
+        combined = np.clip(np.sqrt(sum(dissat_vals)), 0.0, 1.0)
+        metrics["avg_dissatisfaction_weighted"] = float(combined.mean())
+
     # Динамические переменные v2
     for col in ["econ_penalty", "infra_bonus", "inertia_mobility_penalty", "jobloss_econ_gap_bonus"]:
         if col in df.columns:
@@ -428,6 +495,15 @@ def collect_metrics(df_final: pd.DataFrame, snapshots: Dict,
         metrics["jobs_pressure_max_final"] = float(last_tick.get("jobs_pressure_max", 0.0))
         metrics["avg_dissat_final"] = float(last_tick.get("avg_dissat", 0.0))
         metrics["n_unemployed_final"] = int(last_tick.get("n_unemployed", 0))
+        metrics["avg_inertia_final"] = float(last_tick.get("avg_inertia", 0.0))
+        metrics["avg_aspirations_final"] = float(last_tick.get("avg_aspirations", 0.0))
+        metrics["avg_signal_red_final"] = float(last_tick.get("avg_signal_red", 0.0))
+        metrics["avg_age_final"] = float(last_tick.get("avg_age", 0.0))
+        metrics["avg_wage_final"] = float(last_tick.get("avg_wage", 0.0))
+        # Средние за всю симуляцию
+        metrics["avg_inertia_sim"] = float(np.mean([s.get("avg_inertia", 0.0) for s in tick_stats]))
+        metrics["avg_dissat_sim"] = float(np.mean([s.get("avg_dissat", 0.0) for s in tick_stats]))
+        metrics["avg_aspirations_sim"] = float(np.mean([s.get("avg_aspirations", 0.0) for s in tick_stats]))
 
     return metrics
 
