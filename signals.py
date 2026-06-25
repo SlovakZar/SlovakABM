@@ -136,9 +136,9 @@ class Signal:
         """Применяет сигнал к DataFrame (и опционально к графу G).
 
         v3: если graph_op задан — модифицирует industry_jobs в узлах графа.
+        v4: БЕЗ df.copy() — модификация in-place. flush() передаёт df
+            по цепочке, копирование на каждом сигнале избыточно.
         """
-        df = df.copy()
-
         # ── Агентная часть (df) ──────────────────────────────────────────
         if self.mode:
             if callable(self.target_mask):
@@ -147,7 +147,7 @@ class Signal:
                 mask = self.target_mask
 
             if mask.any():
-                col = df[self.field].values.copy()
+                col = df[self.field].values
 
                 if self.mode == "set":
                     col[mask] = self.value if self.value is not None else self.delta
@@ -163,8 +163,6 @@ class Signal:
                         col[mask] = col[mask] * per_agent_delta[mask]
 
                     col[mask] = np.clip(col[mask], self.clip_min, self.clip_max)
-
-                df[self.field] = col
 
         # ── v3: Граф-операция ────────────────────────────────────────────
         if self.graph_op and G is not None and self.graph_district:
@@ -590,7 +588,7 @@ class EventBus:
         return df
 
     def _update_sb_pending(self, df: pd.DataFrame, sig: Signal) -> None:
-        """Обновляет sb_pending для отслеживания linear-decay social_boost."""
+        """Обновляет sb_pending для отслеживания linear-decay social_boost. (ВЕКТОРИЗОВАНО)"""
         import numpy as np
 
         if callable(sig.target_mask):
@@ -603,23 +601,27 @@ class EventBus:
 
         et = sig.event_type
         if et == EventType.AGENT_MOVED:
-            # MOVE: +0.06, decay -0.01/тик × 6
             suffix = "M6"
         elif et == EventType.AGENT_COMMUTE_STARTED:
-            # COMMUTE: +0.02, сброс через 3 тика
             suffix = "C3"
         else:
             return
 
-        # Обновляем sb_pending для затронутых агентов
+        # Векторизовано: работаем только с затронутыми агентами (маска), не со всеми n
         current = df["sb_pending"].values.copy()
-        for i in range(len(df)):
-            if mask[i]:
-                existing = str(current[i])
-                if existing and existing != "nan" and existing != "":
-                    current[i] = existing + "," + suffix
-                else:
-                    current[i] = suffix
+        affected = current[mask]
+        # Маска для пустых/NaN значений среди затронутых
+        empty_mask = np.array([
+            v is None or str(v) in ("", "nan", "None")
+            for v in affected
+        ], dtype=bool)
+        new_vals = affected.copy()
+        new_vals[empty_mask] = suffix
+        if (~empty_mask).any():
+            new_vals[~empty_mask] = np.array(
+                [str(v) + "," + suffix for v in affected[~empty_mask]]
+            )
+        current[mask] = new_vals
         df["sb_pending"] = current
 
     def schedule(self, event: Event, deliver_at_tick: int) -> None:
