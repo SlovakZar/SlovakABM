@@ -3,6 +3,10 @@
         "/^python -c \"import engine; import signals; print\\('OK: engine \\+ signals imported successfully'\\)\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python -c \"import engine; print\\('OK'\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

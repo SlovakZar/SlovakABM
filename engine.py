@@ -352,97 +352,100 @@ def _two_barrier_activation(
         infra_bonuses=infra_bonuses,
     )
 
-    # ── Поагентный цикл (только stateful-логика барьеров) ────────────────
-    for i in range(n):
-        # Пропускаем студентов
-        if statuses[i] == "student":
-            continue
+    # ── ВЕКТОРИЗОВАННАЯ двухбарьерная логика (замена per-agent цикла) ──
+    # Шаг 1: маски исключений
+    skip_student = (statuses == "student")
+    skip_recent  = (moved_ticks < 9)
+    skip_age     = (ages < 18) | (ages > 62)
+    skip_mask    = skip_student | skip_recent | skip_age
+    active_mask  = ~skip_mask
 
-        # Пропускаем агентов с недавним переездом (< 9 тиков)
-        if moved_ticks[i] < 9:
-            tpb_active[i] = False
-            migr_pressure[i] = 0.0
-            continue
+    # Сброс состояния для исключённых агентов
+    tpb_active[skip_mask] = False
+    migr_pressure[skip_mask] = 0.0
 
-        # Пропускаем слишком старых/молодых
-        if ages[i] < 18 or ages[i] > 62:
-            tpb_active[i] = False
-            migr_pressure[i] = 0.0
-            continue
+    if active_mask.any():
+        # Индексы активных агентов
+        act_idx = np.where(active_mask)[0]
 
-        # Берём предвычисленные D-значения для этого агента
-        D_inst = float(D_inst_all[i])
-        D_econ = float(D_econ_all[i])
-        D_place = float(D_place_all[i])
+        # Шаг 2: aspirations EWMA (векторизовано)
+        asp_act = aspirations[act_idx]
+        D_inst_act = D_inst_all[act_idx]
+        aspirations[act_idx] = np.where(
+            asp_act < 0.01,
+            D_inst_act,
+            ASPIRATIONS_ALPHA * D_inst_act + (1.0 - ASPIRATIONS_ALPHA) * asp_act,
+        )
 
-        # ── Обновление aspirations (EWMA, с холодным стартом) ────────────
-        if aspirations[i] < 0.01:
-            aspirations[i] = D_inst
-        else:
-            aspirations[i] = ASPIRATIONS_ALPHA * D_inst + (1.0 - ASPIRATIONS_ALPHA) * aspirations[i]
+        # Шаг 3: capabilities (векторизовано)
+        income_index = np.minimum(wages[act_idx] / (2.0 * NATIONAL_AVG_WAGE), 1.0)
+        edu_vals = np.full(len(act_idx), 0.55, dtype=float)
+        edu_vals[educations[act_idx] == "low"]    = 0.25
+        edu_vals[educations[act_idx] == "medium"] = 0.55
+        edu_vals[educations[act_idx] == "high"]   = 0.85
+        capabilities = income_index + (edu_vals + weak_ties[act_idx]) / 2.0
 
-        # ── Capabilities ──────────────────────────────────────────────────
-        income_index = min(wages[i] / (2.0 * NATIONAL_AVG_WAGE), 1.0)
-        edu_map = {"low": 0.25, "medium": 0.55, "high": 0.85}
-        education_index = edu_map.get(educations[i], 0.55)
-        capabilities = income_index + (education_index + weak_ties[i]) / 2.0
+        # Шаг 4: динамический порог (векторизовано)
+        dynamic_threshold = (internal_thrs[act_idx] + mob_penalties[act_idx]) * np.maximum(0.15, 1.0 - signal_red[act_idx])
 
-        # ── Динамический порог (v3: internal_mig_thr вместо inertia, граница 0.15) ─
-        dynamic_threshold = (internal_thrs[i] + mob_penalties[i]) * max(0.15, 1.0 - signal_red[i])
+        # Шаг 5: БАРЬЕР 1 — маска прошедших
+        b1_pass = (aspirations[act_idx] * capabilities) > dynamic_threshold
 
-        # ── БАРЬЕР 1: Потенциал vs Динамический порог ────────────────────
-        if aspirations[i] * capabilities > dynamic_threshold:
-            # ── БАРЬЕР 2: D_perceived — накопительное давление + монетка ─
-            if not tpb_active[i]:
-                # Первый вход — определяем доминантный домен
-                tpb_active[i] = True
-                if D_econ >= D_place:
-                    activation_domains[i] = "economic"
-                else:
-                    activation_domains[i] = "place"
+        # Барьер 1 не пройден → сброс
+        fail_idx = act_idx[~b1_pass]
+        if len(fail_idx) > 0:
+            tpb_active[fail_idx] = False
+            migr_pressure[fail_idx] = np.maximum(0.0, migr_pressure[fail_idx] - 0.02)
 
-            # Каждый тик пока active — вычисляем D_perceived и копим давление
-            if tpb_active[i]:
-                # Attribution (PC модифицирован PC_D_PERCEIVED_MODIFIER)
-                pc_scaled = percontrols[i] * PC_D_PERCEIVED_MODIFIER
-                helplessness = float(np.clip(
-                    1.0 - pc_scaled - weak_ties[i] * 0.3, 0.0, 1.0
-                ))
-                attribution = percontrols[i] * (1.0 - helplessness)
+        # Шаг 6: БАРЬЕР 2 — только для прошедших барьер 1
+        pass_idx = act_idx[b1_pass]
+        n_pass = len(pass_idx)
 
-                # SocialCalibration
-                social_calibration = 1.0 + net_susc[i] * soc_cal_signals[i]
+        if n_pass > 0:
+            # 6a. Первый вход: определение доминантного домена
+            just_activated = ~tpb_active[pass_idx]
+            tpb_active[pass_idx] = True
 
-                # D_perceived
-                D_perceived = D_inst * attribution * social_calibration
-
-                # Динамическая инерция
-                dynamic_inertia_s2 = inertias[i] * max(0.15, 1.0 - social_boosts[i])
-
-                # Копим давление: зазор между воспринятым дискомфортом и инерцией
-                gap = max(0.0, D_perceived - dynamic_inertia_s2)
-                migr_pressure[i] += gap
-
-                # Вероятность «сорваться»: давление / инерция, с границами
-                p_act = np.clip(
-                    migr_pressure[i] / max(inertias[i], MIGRATION_PRESSURE_DIVISOR),
-                    MIGRATION_PRESSURE_P_MIN,
-                    MIGRATION_PRESSURE_P_MAX,
+            if just_activated.any():
+                ja_idx = pass_idx[just_activated]
+                activation_domains[ja_idx] = np.where(
+                    D_econ_all[ja_idx] >= D_place_all[ja_idx], "economic", "place"
                 )
 
-                # Бросаем монетку
-                if rng.random() < p_act:
-                    dom = activation_domains[i]
-                    if dom == "economic":
-                        intention_states[i] = "seeking_work"
-                    elif dom == "place":
-                        intention_states[i] = "seeking_residence"
-                    # Давление сбрасывается при исполнении (_execute_*)
-                # Иначе — остаёмся active, давление копится дальше
-        else:
-            # Барьер 1 не пройден — сбрасываем состояние
-            tpb_active[i] = False
-            migr_pressure[i] = max(0.0, migr_pressure[i] - 0.02)  # медленное затухание
+            # 6b. Attribution (векторизовано)
+            pc_scaled = percontrols[pass_idx] * PC_D_PERCEIVED_MODIFIER
+            helplessness = np.clip(1.0 - pc_scaled - weak_ties[pass_idx] * 0.3, 0.0, 1.0)
+            attribution = percontrols[pass_idx] * (1.0 - helplessness)
+
+            # 6c. SocialCalibration
+            social_calibration = 1.0 + net_susc[pass_idx] * soc_cal_signals[pass_idx]
+
+            # 6d. D_perceived
+            D_perceived = D_inst_all[pass_idx] * attribution * social_calibration
+
+            # 6e. Динамическая инерция (s2)
+            dynamic_inertia_s2 = inertias[pass_idx] * np.maximum(0.15, 1.0 - social_boosts[pass_idx])
+
+            # 6f. Накопление давления
+            gap = np.maximum(0.0, D_perceived - dynamic_inertia_s2)
+            migr_pressure[pass_idx] += gap
+
+            # 6g. Вероятность действия
+            p_act = np.clip(
+                migr_pressure[pass_idx] / np.maximum(inertias[pass_idx], MIGRATION_PRESSURE_DIVISOR),
+                MIGRATION_PRESSURE_P_MIN,
+                MIGRATION_PRESSURE_P_MAX,
+            )
+
+            # 6h. Бросаем монетку (один вызов rng.random на всех)
+            do_act = rng.random(n_pass) < p_act
+
+            if do_act.any():
+                act_now_idx = pass_idx[do_act]
+                intention_states[act_now_idx] = np.where(
+                    activation_domains[act_now_idx] == "economic",
+                    "seeking_work", "seeking_residence"
+                )
 
     # ── Запись обратно в DataFrame ────────────────────────────────────────
     df["aspirations"]        = np.clip(aspirations, 0.0, 1.0)
