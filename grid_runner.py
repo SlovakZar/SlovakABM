@@ -229,13 +229,11 @@ def grid_run(
         # Метрики
         metrics = collect_metrics(df_final, snapshots, tick_stats, all_action_log)
 
-        # Метка: все 6 варьируемых параметров
-        label = (f"sbm{plan['social_boost_move']}_"
+        # Метка: все 4 варьируемых параметра
+        label = (f"inmob{plan['inertia_mobility_penalty_move']}_"
+                 f"sbm{plan['social_boost_move']}_"
                  f"bamin{plan['base_appetite_min']}_"
-                 f"inmob{plan['inertia_mobility_penalty_move']}_"
-                 f"mjp{plan['max_jobs_pressure']}_"
-                 f"mwc{plan['max_work_candidates']}_"
-                 f"pdp{plan['place_deficit_penalty_move']}")
+                 f"mwc{plan['max_work_candidates']}")
 
         row = {
             "run_id": run_idx,
