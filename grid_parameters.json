@@ -1,10 +1,5 @@
 {
-  "_description": "Сетка прогонов для калибровки 6 ключевых параметров (по дельта-анализу). Остальные 28 параметров — на дефолтах из engine.py.",
-  "_version": "1.0",
-  "_method": "grid",
-
   "fixed": {
-    "_description": "Параметры, зафиксированные на дефолтах (не варьируются).",
     "aspirations_alpha": 0.08,
     "signal_decay": 0.85,
     "gap_adapt_lambda": 0.05,
@@ -15,7 +10,6 @@
     "neighbor_signal_coef": 0.04,
     "inertia_loss_jobloss": -0.25,
     "econ_gap_jobloss": 0.25,
-    "place_deficit_penalty_move": 0.03,
     "infra_bonus_delta": 0.05,
     "aspirations_closed_employer": 0.08,
     "hub_weak_ties_bonus": 0.005,
@@ -31,7 +25,6 @@
     "decay_inertia_mobility": 0.01,
     "decay_econ_penalty": 0.01,
     "jobloss_ramp_step": 0.05,
-    "max_jobs_pressure": 1.20,
     "move_stress_factor": 0.80,
     "housing_budget_ratio": 0.35,
     "adapt_flex_threshold": 0.65,
@@ -39,6 +32,7 @@
     "min_desired_raise": 0.05,
     "unemployed_wage_floor": 0.70,
     "unemployed_wage_ceil": 0.20,
+    "commuter_gate_ref": 0.50,
     "job_flex_gate_ref": 0.50,
     "housing_alpha": 0.03,
     "wage_alpha": 0.04,
@@ -56,20 +50,13 @@
   },
 
   "grid": {
-    "_description": "Сетка значений для варьируемых параметров. Полный факторный план: 3×3×2 = 18 ядерных + до 9 спец.",
-
     "core": {
-      "_description": "Ядерные параметры (влияют на все выходы).",
-      "base_appetite_min":     [0.05, 0.10, 0.15],
-      "social_boost_move":     [0.03, 0.09, 0.18],
-      "max_work_candidates":   [6, 20]
-    },
-
-    "specialized": {
-      "_description": "Специализированные (варьируются по одному, ядерные — на средних).",
-      "base_appetite_max":             [0.10, 0.20, 0.30],
-      "commuter_gate_ref":             [0.35, 0.50, 0.65],
-      "inertia_mobility_penalty_move": [0.03, 0.06, 0.12]
+      "social_boost_move":             [0.03, 0.15],
+      "base_appetite_min":             [0.05, 0.15],
+      "inertia_mobility_penalty_move": [0.02, 0.20],
+      "max_jobs_pressure":             [1.10, 1.40],
+      "max_work_candidates":           [6, 24],
+      "place_deficit_penalty_move":    [0.01, 0.15]
     }
   }
 }

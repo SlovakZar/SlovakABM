@@ -13,12 +13,10 @@ import argparse
 import json
 import sys
 import time
-import numpy as np
 import pandas as pd
 from pathlib import Path
 from itertools import product
-from typing import Dict, List, Optional
-from dataclasses import dataclass
+from typing import Dict, List
 
 SIM_DIR = Path(__file__).parent
 sys.path.insert(0, str(SIM_DIR))
@@ -39,15 +37,13 @@ def load_grid_spec(spec_path: str = "grid_parameters.json") -> dict:
 def build_grid_plan(spec: dict) -> List[Dict[str, float]]:
     """
     Строит список словарей параметров: полный факторный план.
-    18 ядерных комбинаций + 9 специализированных.
+    2^6 = 64 комбинации (low/high для каждого из 6 параметров).
     """
     fixed = spec["fixed"]
     core = spec["grid"]["core"]
-    specialized = spec["grid"]["specialized"]
 
     plans = []
 
-    # ── Ядерная сетка: 3×3×2 = 18 комбинаций ───────────────────────────
     core_keys = list(core.keys())
     core_values = [core[k] for k in core_keys]
 
@@ -55,23 +51,7 @@ def build_grid_plan(spec: dict) -> List[Dict[str, float]]:
         plan = dict(fixed)
         for k, v in zip(core_keys, combo):
             plan[k] = v
-        # Специализированные — на дефолтах (из fixed уже есть)
-        plan["_group"] = "core"
         plans.append(plan)
-
-    # ── Специализированные: варьируем по одному, ядерные на дефолтах ───
-    core_defaults = {
-        "base_appetite_min": 0.10,
-        "social_boost_move": 0.06,
-        "max_work_candidates": 12,
-    }
-    for spec_name, spec_values in specialized.items():
-        for val in spec_values:
-            plan = dict(fixed)
-            plan.update(core_defaults)
-            plan[spec_name] = val
-            plan["_group"] = f"specialized:{spec_name}"
-            plans.append(plan)
 
     return plans
 
@@ -87,71 +67,17 @@ from lhs_runner import ParamPatcher, create_patched_dispatcher
 # 3. Таблица по 79 районам
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Карта: район → регион (8 краёв) — копия из agents.py для автономности
-DISTRICT_TO_REGION = {
-    "District of Bratislava I": "BA", "District of Bratislava II": "BA",
-    "District of Bratislava III": "BA", "District of Bratislava IV": "BA",
-    "District of Bratislava V": "BA", "District of Malacky": "BA",
-    "District of Pezinok": "BA", "District of Senec": "BA",
-    "District of Trnava": "TT", "District of Dunajská Streda": "TT",
-    "District of Galanta": "TT", "District of Hlohovec": "TT",
-    "District of Piešťany": "TT", "District of Senica": "TT",
-    "District of Skalica": "TT",
-    "District of Trenčín": "TN", "District of Bánovce nad Bebravou": "TN",
-    "District of Ilava": "TN", "District of Myjava": "TN",
-    "District of Nové Mesto nad Váhom": "TN", "District of Partizánske": "TN",
-    "District of Považská Bystrica": "TN", "District of Púchov": "TN",
-    "District of Prievidza": "TN",
-    "District of Nitra": "NR", "District of Komárno": "NR",
-    "District of Levice": "NR", "District of Nové Zámky": "NR",
-    "District of Šaľa": "NR", "District of Topoľčany": "NR",
-    "District of Zlaté Moravce": "NR",
-    "District of Žilina": "ZA", "District of Bytča": "ZA",
-    "District of Čadca": "ZA", "District of Dolný Kubín": "ZA",
-    "District of Kysucké Nové Mesto": "ZA", "District of Liptovský Mikuláš": "ZA",
-    "District of Martin": "ZA", "District of Námestovo": "ZA",
-    "District of Ružomberok": "ZA", "District of Turčianske Teplice": "ZA",
-    "District of Tvrdošín": "ZA",
-    "District of Banská Bystrica": "BB", "District of Banská Štiavnica": "BB",
-    "District of Brezno": "BB", "District of Detva": "BB",
-    "District of Krupina": "BB", "District of Lučenec": "BB",
-    "District of Poltár": "BB", "District of Revúca": "BB",
-    "District of Rimavská Sobota": "BB", "District of Veľký Krtíš": "BB",
-    "District of Zvolen": "BB", "District of Žiar nad Hronom": "BB",
-    "District of Žarnovica": "BB",
-    "District of Prešov": "PO", "District of Bardejov": "PO",
-    "District of Humenné": "PO", "District of Kežmarok": "PO",
-    "District of Levoča": "PO", "District of Medzilaborce": "PO",
-    "District of Poprad": "PO", "District of Sabinov": "PO",
-    "District of Snina": "PO", "District of Stará Ľubovňa": "PO",
-    "District of Stropkov": "PO", "District of Svidník": "PO",
-    "District of Vranov nad Topľou": "PO",
-    "District of Košice I": "KE", "District of Košice II": "KE",
-    "District of Košice III": "KE", "District of Košice IV": "KE",
-    "District of Košice-okolie": "KE", "District of Gelnica": "KE",
-    "District of Rožňava": "KE", "District of Sobrance": "KE",
-    "District of Spišská Nová Ves": "KE", "District of Trebišov": "KE",
-    "District of Michalovce": "KE",
-    # Альтернативные написания
-    "District of Košice - okolie": "KE",
-    "District of Śaľa": "NR",
-}
-
 
 def build_district_table(
     snapshots: dict,
     run_id: int,
     run_label: str,
-    fixed_params: Dict[str, float],
     variant_params: Dict[str, float],
     all_action_log: List[dict],
     district_col: str = "district",
 ) -> pd.DataFrame:
     """
-    Строит таблицу: один район = одна строка, столбцы:
-      district, region, pop_tick0, pop_tickN, delta_abs, delta_pct,
-      n_moved_in, n_moved_out, net_flow,
-      run_id, run_label, ...параметры...
+    Строит таблицу: один район = одна строка.
     """
     ticks = sorted(snapshots.keys())
     if len(ticks) < 2:
@@ -161,11 +87,9 @@ def build_district_table(
     df0 = snapshots[t0]
     dfN = snapshots[tN]
 
-    # Население по районам
     pop0 = df0[district_col].value_counts()
     popN = dfN[district_col].value_counts()
 
-    # Потоки из лога действий
     moved_in = {}
     moved_out = {}
     for a in all_action_log:
@@ -177,6 +101,9 @@ def build_district_table(
             if dst:
                 moved_in[dst] = moved_in.get(dst, 0) + 1
 
+    # Только параметры, не начинающиеся с _
+    clean_params = {k: v for k, v in variant_params.items() if not k.startswith("_")}
+
     all_districts = sorted(set(pop0.index) | set(popN.index))
     rows = []
     for d in all_districts:
@@ -184,11 +111,9 @@ def build_district_table(
         pN = popN.get(d, 0)
         delta_abs = pN - p0
         delta_pct = round(delta_abs / max(p0, 1) * 100, 2)
-        region = DISTRICT_TO_REGION.get(d, "??")
 
         rows.append({
             "district": d,
-            "region": region,
             "pop_tick0": p0,
             f"pop_tick{tN}": pN,
             "delta_abs": delta_abs,
@@ -198,7 +123,7 @@ def build_district_table(
             "net_flow": moved_in.get(d, 0) - moved_out.get(d, 0),
             "run_id": run_id,
             "run_label": run_label,
-            **{f"p_{k}": v for k, v in variant_params.items()},
+            **{f"p_{k}": v for k, v in clean_params.items()},
         })
 
     return pd.DataFrame(rows)
@@ -238,10 +163,8 @@ def grid_run(
     fixed = spec["fixed"]
 
     if verbose:
-        n_core = sum(1 for p in plans if p["_group"] == "core")
-        n_spec = n_runs - n_core
-        print(f"План прогонов: {n_core} ядерных + {n_spec} специализированных = {n_runs} всего")
-        print(f"Агентов: {n_agents:,}  |  Тиков: {n_ticks}  |  Seed: {seed}\n")
+        print(f"Параметров: {len(spec['grid']['core'])}  |  Комбинаций: {n_runs}  |  "
+              f"Агентов: {n_agents:,}  |  Тиков: {n_ticks}  |  Seed: {seed}\n")
 
     # Однократно строим граф
     if verbose:
@@ -260,19 +183,21 @@ def grid_run(
     all_district_rows = []
 
     for run_idx, plan in enumerate(plans):
-        group = plan.pop("_group")
         t_run = time.time()
 
-        # Разделяем фиксированные и варьируемые
-        variant = {k: v for k, v in plan.items() if k not in fixed or plan[k] != fixed.get(k)}
-        # Определяем, какие параметры реально варьируются
-        variant_names = sorted(variant.keys())
+        # Варьируемые = всё, что не в fixed
+        variant = {}
+        for k, v in plan.items():
+            if k.startswith("_"):
+                continue  # пропускаем служебные ключи
+            if k not in fixed or plan[k] != fixed.get(k):
+                variant[k] = v
 
         # Патчим
         patcher = ParamPatcher(plan)
         signal_params = patcher.apply()
 
-        # Создаём агентов
+        # Создаём агентов (один seed — чистое сравнение параметров)
         df = create_agents(
             str(SIM_DIR / "agent_init_distributions.json"),
             str(SIM_DIR / "agent_params_from_survey.json"),
@@ -304,16 +229,17 @@ def grid_run(
         # Метрики
         metrics = collect_metrics(df_final, snapshots, tick_stats, all_action_log)
 
-        # Формируем метку прогона
-        if group == "core":
-            label = f"core_bamin{plan['base_appetite_min']}_sbm{plan['social_boost_move']}_mwc{plan['max_work_candidates']}"
-        else:
-            label = group.replace(":", "_")
+        # Метка: все 6 варьируемых параметров
+        label = (f"sbm{plan['social_boost_move']}_"
+                 f"bamin{plan['base_appetite_min']}_"
+                 f"inmob{plan['inertia_mobility_penalty_move']}_"
+                 f"mjp{plan['max_jobs_pressure']}_"
+                 f"mwc{plan['max_work_candidates']}_"
+                 f"pdp{plan['place_deficit_penalty_move']}")
 
         row = {
             "run_id": run_idx,
             "run_label": label,
-            "group": group,
             **{f"v_{k}": v for k, v in variant.items()},
             **metrics,
         }
@@ -321,7 +247,7 @@ def grid_run(
 
         # Таблица по районам
         dist_table = build_district_table(
-            snapshots, run_idx, label, fixed, variant, all_action_log
+            snapshots, run_idx, label, variant, all_action_log
         )
         all_district_rows.append(dist_table)
 
@@ -332,15 +258,15 @@ def grid_run(
         if verbose:
             moves = metrics.get("n_moved_economic", 0) + metrics.get("n_moved_place", 0)
             commutes = metrics.get("n_commute_started", 0)
-            print(f"  [{run_idx+1:3d}/{n_runs}] {label:<55} "
+            print(f"  [{run_idx+1:3d}/{n_runs}] {label:<65} "
                   f"moves={moves:5d}  commutes={commutes:4d}  "
                   f"time={elapsed:.1f}s")
 
     # ── Сохраняем ──────────────────────────────────────────────────────────
     metrics_df = pd.DataFrame(all_metrics)
 
-    # Переставляем колонки: run_*, group, v_*, затем метрики
-    meta_cols = [c for c in metrics_df.columns if c.startswith(("run_", "group", "v_"))]
+    # Переставляем колонки: run_*, v_*, затем метрики
+    meta_cols = [c for c in metrics_df.columns if c.startswith(("run_", "v_"))]
     metric_cols = [c for c in metrics_df.columns if c not in meta_cols]
     metrics_df = metrics_df[meta_cols + metric_cols]
 
@@ -369,7 +295,7 @@ def grid_run(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Сеточные прогоны SlovakABM по ключевым параметрам")
-    parser.add_argument("--agents", type=int, default=5000, help="Агентов на прогон")
+    parser.add_argument("--agents", dest="n_agents", type=int, default=5000, help="Агентов на прогон")
     parser.add_argument("--ticks", type=int, default=36, help="Тиков на прогон")
     parser.add_argument("--seed", type=int, default=42, help="Базовый seed")
     parser.add_argument("--output", default="grid_results", help="Префикс выходных файлов")
