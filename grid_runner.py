@@ -157,7 +157,73 @@ from lhs_runner import collect_metrics
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5. Главный цикл
+# 5. Worker для параллельных прогонов (picklable, module-level)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _run_single_plan(args: tuple) -> tuple:
+    """Запускает один прогон. Вызывается в дочернем процессе."""
+    (run_idx, plan, fixed, n_agents, seed, n_ticks,
+     sim_dir, env_path, comm_path, agent_dist_path,
+     agent_params_path, dist_path_str) = args
+
+    import sys
+    sys.path.insert(0, sim_dir)
+
+    from graph import build_graph, sync_industry_jobs_to_graph, initialize_industry_pressure_from_agents
+    from agents import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
+    from engine import run_simulation
+    from signals import EventBus
+    from lhs_runner import ParamPatcher, create_patched_dispatcher, collect_metrics
+    import __main__ as main_mod  # при fork-е build_district_table уже в __main__
+    import json
+
+    # Каждый worker строит свой граф (fork → copy-on-write)
+    G = build_graph(env_path, comm_path)
+
+    with open(dist_path_str) as f:
+        init_dists = json.load(f).get("districts", {})
+
+    patcher = ParamPatcher(plan)
+    signal_params = patcher.apply()
+
+    df = create_agents(agent_dist_path, agent_params_path, comm_path,
+                       n_agents=n_agents, seed=seed)
+
+    sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
+    initialize_industry_pressure_from_agents(G, df)
+
+    dispatcher = create_patched_dispatcher(signal_params)
+    bus = EventBus(dispatcher=dispatcher)
+
+    snapshot_ticks = sorted(set([0] + list(range(6, n_ticks, 6)) + [n_ticks]))
+    df_final, snapshots, tick_stats, all_action_log = run_simulation(
+        df, G, n_ticks=n_ticks, snapshot_ticks=snapshot_ticks,
+        seed=seed, verbose=False, jobs_capacity=JOBS_CAPACITY,
+        init_dists=init_dists, bus=bus, scenario=None,
+    )
+
+    metrics = collect_metrics(df_final, snapshots, tick_stats, all_action_log)
+
+    label = (f"inmob{plan['inertia_mobility_penalty_move']}_"
+             f"sbm{plan['social_boost_move']}_"
+             f"bamin{plan['base_appetite_min']}_"
+             f"mwc{plan['max_work_candidates']}")
+
+    variant = {k: v for k, v in plan.items()
+               if not k.startswith("_") and (k not in fixed or plan[k] != fixed.get(k))}
+
+    row = {"run_id": run_idx, "run_label": label,
+           **{f"v_{k}": v for k, v in variant.items()}, **metrics}
+
+    dist_table = main_mod.build_district_table(snapshots, run_idx, label, variant, all_action_log)
+
+    patcher.restore()
+
+    return row, dist_table
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 6. Главный цикл
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def grid_run(
@@ -167,6 +233,7 @@ def grid_run(
     spec_path: str = "grid_parameters.json",
     scenarios_path: str = None,
     output_prefix: str = "grid_results",
+    parallel: bool = False,
     verbose: bool = True,
 ):
     from graph import build_graph
@@ -179,8 +246,7 @@ def grid_run(
 
     # Загружаем план
     if scenarios_path:
-        # Режим ручных сценариев
-        spec = load_grid_spec(spec_path)  # только для fixed
+        spec = load_grid_spec(spec_path)
         scenarios = load_scenarios(scenarios_path)
         plans = build_scenario_plans(scenarios, spec["fixed"])
         n_runs = len(plans)
@@ -193,103 +259,118 @@ def grid_run(
         fixed = spec["fixed"]
         mode = "сетка"
 
+    n_workers = 4 if parallel else 1
     if verbose:
         print(f"Режим: {mode}  |  Прогонов: {n_runs}  |  "
+              f"Воркеров: {n_workers}  |  "
               f"Агентов: {n_agents:,}  |  Тиков: {n_ticks}  |  Seed: {seed}\n")
 
-    # Однократно строим граф
-    if verbose:
-        print("Строим граф Словакии...")
-    G = build_graph(
-        str(SIM_DIR / "environment.json"),
-        str(SIM_DIR / "commuting_filtered_with_travel.csv"),
-    )
-
-    # Загружаем init_dists
-    dist_path = SIM_DIR / "agent_init_distributions.json"
-    with open(dist_path, encoding="utf-8") as f:
-        init_dists = json.load(f).get("districts", {})
-
-    all_metrics = []
-    all_district_rows = []
-
-    for run_idx, plan in enumerate(plans):
-        t_run = time.time()
-
-        # Варьируемые = всё, что не в fixed
-        variant = {}
-        for k, v in plan.items():
-            if k.startswith("_"):
-                continue  # пропускаем служебные ключи
-            if k not in fixed or plan[k] != fixed.get(k):
-                variant[k] = v
-
-        # Патчим
-        patcher = ParamPatcher(plan)
-        signal_params = patcher.apply()
-
-        # Создаём агентов (один seed — чистое сравнение параметров)
-        df = create_agents(
-            str(SIM_DIR / "agent_init_distributions.json"),
-            str(SIM_DIR / "agent_params_from_survey.json"),
-            str(SIM_DIR / "commuting_filtered_with_travel.csv"),
-            n_agents=n_agents,
-            seed=seed,
-        )
-
-        sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
-        initialize_industry_pressure_from_agents(G, df)
-
-        dispatcher = create_patched_dispatcher(signal_params)
-        bus = EventBus(dispatcher=dispatcher)
-
-        # Снимки: тик 0, каждый 6-й тик, последний тик
-        snapshot_ticks = sorted(set([0] + list(range(6, n_ticks, 6)) + [n_ticks]))
-        df_final, snapshots, tick_stats, all_action_log = run_simulation(
-            df, G,
-            n_ticks=n_ticks,
-            snapshot_ticks=snapshot_ticks,
-            seed=seed,
-            verbose=False,
-            jobs_capacity=JOBS_CAPACITY,
-            init_dists=init_dists,
-            bus=bus,
-            scenario=None,
-        )
-
-        # Метрики
-        metrics = collect_metrics(df_final, snapshots, tick_stats, all_action_log)
-
-        # Метка: все 4 варьируемых параметра
-        label = (f"inmob{plan['inertia_mobility_penalty_move']}_"
-                 f"sbm{plan['social_boost_move']}_"
-                 f"bamin{plan['base_appetite_min']}_"
-                 f"mwc{plan['max_work_candidates']}")
-
-        row = {
-            "run_id": run_idx,
-            "run_label": label,
-            **{f"v_{k}": v for k, v in variant.items()},
-            **metrics,
-        }
-        all_metrics.append(row)
-
-        # Таблица по районам
-        dist_table = build_district_table(
-            snapshots, run_idx, label, variant, all_action_log
-        )
-        all_district_rows.append(dist_table)
-
-        # Восстанавливаем
-        patcher.restore()
-
-        elapsed = time.time() - t_run
+    if not parallel:
+        # ── Последовательный режим ──────────────────────────────────────
         if verbose:
-            moves = metrics.get("n_moved_economic", 0) + metrics.get("n_moved_place", 0)
-            commutes = metrics.get("n_commute_started", 0)
-            print(f"  [{run_idx+1:3d}/{n_runs}] {label:<65} "
-                  f"moves={moves:5d}  commutes={commutes:4d}  "
-                  f"time={elapsed:.1f}s")
+            print("Строим граф Словакии...")
+        G = build_graph(
+            str(SIM_DIR / "environment.json"),
+            str(SIM_DIR / "commuting_filtered_with_travel.csv"),
+        )
+
+        dist_path = SIM_DIR / "agent_init_distributions.json"
+        with open(dist_path, encoding="utf-8") as f:
+            init_dists = json.load(f).get("districts", {})
+
+        all_metrics = []
+        all_district_rows = []
+
+        for run_idx, plan in enumerate(plans):
+            t_run = time.time()
+
+            variant = {k: v for k, v in plan.items()
+                       if not k.startswith("_") and (k not in fixed or plan[k] != fixed.get(k))}
+
+            patcher = ParamPatcher(plan)
+            signal_params = patcher.apply()
+
+            df = create_agents(
+                str(SIM_DIR / "agent_init_distributions.json"),
+                str(SIM_DIR / "agent_params_from_survey.json"),
+                str(SIM_DIR / "commuting_filtered_with_travel.csv"),
+                n_agents=n_agents, seed=seed,
+            )
+
+            sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
+            initialize_industry_pressure_from_agents(G, df)
+
+            dispatcher = create_patched_dispatcher(signal_params)
+            bus = EventBus(dispatcher=dispatcher)
+
+            snapshot_ticks = sorted(set([0] + list(range(6, n_ticks, 6)) + [n_ticks]))
+            df_final, snapshots, tick_stats, all_action_log = run_simulation(
+                df, G, n_ticks=n_ticks, snapshot_ticks=snapshot_ticks,
+                seed=seed, verbose=False, jobs_capacity=JOBS_CAPACITY,
+                init_dists=init_dists, bus=bus, scenario=None,
+            )
+
+            metrics = collect_metrics(df_final, snapshots, tick_stats, all_action_log)
+
+            label = (f"inmob{plan['inertia_mobility_penalty_move']}_"
+                     f"sbm{plan['social_boost_move']}_"
+                     f"bamin{plan['base_appetite_min']}_"
+                     f"mwc{plan['max_work_candidates']}")
+
+            row = {"run_id": run_idx, "run_label": label,
+                   **{f"v_{k}": v for k, v in variant.items()}, **metrics}
+            all_metrics.append(row)
+
+            dist_table = build_district_table(snapshots, run_idx, label, variant, all_action_log)
+            all_district_rows.append(dist_table)
+
+            patcher.restore()
+
+            elapsed = time.time() - t_run
+            if verbose:
+                moves = metrics.get("n_moved_economic", 0) + metrics.get("n_moved_place", 0)
+                commutes = metrics.get("n_commute_started", 0)
+                print(f"  [{run_idx+1:3d}/{n_runs}] {label:<65} "
+                      f"moves={moves:5d}  commutes={commutes:4d}  "
+                      f"time={elapsed:.1f}s")
+
+    else:
+        # ── Параллельный режим (4 воркера) ──────────────────────────────
+        import concurrent.futures
+        import multiprocessing as mp
+
+        sim_dir_str = str(SIM_DIR)
+        env_path = str(SIM_DIR / "environment.json")
+        comm_path = str(SIM_DIR / "commuting_filtered_with_travel.csv")
+        agent_dist_path = str(SIM_DIR / "agent_init_distributions.json")
+        agent_params_path = str(SIM_DIR / "agent_params_from_survey.json")
+        dist_path_str = str(SIM_DIR / "agent_init_distributions.json")
+
+        args_list = [
+            (run_idx, plan, fixed, n_agents, seed, n_ticks,
+             sim_dir_str, env_path, comm_path,
+             agent_dist_path, agent_params_path, dist_path_str)
+            for run_idx, plan in enumerate(plans)
+        ]
+
+        all_metrics = [None] * n_runs
+        all_district_rows = [None] * n_runs
+
+        with mp.get_context("fork").Pool(processes=4) as pool:
+            results = pool.imap_unordered(_run_single_plan, args_list)
+            done = 0
+            for row, dist_table in results:
+                all_metrics[row["run_id"]] = row
+                all_district_rows[row["run_id"]] = dist_table
+                done += 1
+                if verbose:
+                    print(f"  [{done:3d}/{n_runs}] {row['run_label']:<65} "
+                          f"moves={row.get('n_moved_economic', 0) + row.get('n_moved_place', 0):5d}  "
+                          f"commutes={row.get('n_commute_started', 0):4d}")
+
+        # Восстанавливаем порядок
+        all_metrics = [m for m in all_metrics if m is not None]
+        all_district_rows = [d for d in all_district_rows if d is not None]
 
     # ── Сохраняем ──────────────────────────────────────────────────────────
     metrics_df = pd.DataFrame(all_metrics)
@@ -330,6 +411,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="grid_results", help="Префикс выходных файлов")
     parser.add_argument("--spec", default="grid_parameters.json", help="JSON-спецификация сетки")
     parser.add_argument("--scenarios", default=None, help="Файл со списком ручных сценариев")
+    parser.add_argument("--parallel", action="store_true", help="Параллельный режим (4 воркера)")
     args = parser.parse_args()
 
     grid_run(
@@ -339,4 +421,5 @@ if __name__ == "__main__":
         spec_path=args.spec,
         scenarios_path=args.scenarios,
         output_prefix=args.output,
+        parallel=args.parallel,
     )
