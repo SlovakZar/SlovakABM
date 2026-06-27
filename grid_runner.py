@@ -37,7 +37,6 @@ def load_grid_spec(spec_path: str = "grid_parameters.json") -> dict:
 def build_grid_plan(spec: dict) -> List[Dict[str, float]]:
     """
     Строит список словарей параметров: полный факторный план.
-    2^6 = 64 комбинации (low/high для каждого из 6 параметров).
     """
     fixed = spec["fixed"]
     core = spec["grid"]["core"]
@@ -53,6 +52,27 @@ def build_grid_plan(spec: dict) -> List[Dict[str, float]]:
             plan[k] = v
         plans.append(plan)
 
+    return plans
+
+
+def load_scenarios(scenarios_path: str) -> list:
+    """Загружает список ручных сценариев из JSON."""
+    p = Path(scenarios_path)
+    if not p.exists():
+        p = SIM_DIR / scenarios_path
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def build_scenario_plans(scenarios: list, fixed: dict) -> List[Dict[str, float]]:
+    """
+    Строит планы из списка сценариев: каждый сценарий = fixed + специфичные параметры.
+    """
+    plans = []
+    for sc in scenarios:
+        plan = dict(fixed)
+        plan.update(sc)
+        plans.append(plan)
     return plans
 
 
@@ -145,6 +165,7 @@ def grid_run(
     n_ticks: int = 36,
     seed: int = 42,
     spec_path: str = "grid_parameters.json",
+    scenarios_path: str = None,
     output_prefix: str = "grid_results",
     verbose: bool = True,
 ):
@@ -157,13 +178,23 @@ def grid_run(
     t_start = time.time()
 
     # Загружаем план
-    spec = load_grid_spec(spec_path)
-    plans = build_grid_plan(spec)
-    n_runs = len(plans)
-    fixed = spec["fixed"]
+    if scenarios_path:
+        # Режим ручных сценариев
+        spec = load_grid_spec(spec_path)  # только для fixed
+        scenarios = load_scenarios(scenarios_path)
+        plans = build_scenario_plans(scenarios, spec["fixed"])
+        n_runs = len(plans)
+        fixed = spec["fixed"]
+        mode = "сценариев"
+    else:
+        spec = load_grid_spec(spec_path)
+        plans = build_grid_plan(spec)
+        n_runs = len(plans)
+        fixed = spec["fixed"]
+        mode = "сетка"
 
     if verbose:
-        print(f"Параметров: {len(spec['grid']['core'])}  |  Комбинаций: {n_runs}  |  "
+        print(f"Режим: {mode}  |  Прогонов: {n_runs}  |  "
               f"Агентов: {n_agents:,}  |  Тиков: {n_ticks}  |  Seed: {seed}\n")
 
     # Однократно строим граф
@@ -298,6 +329,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Базовый seed")
     parser.add_argument("--output", default="grid_results", help="Префикс выходных файлов")
     parser.add_argument("--spec", default="grid_parameters.json", help="JSON-спецификация сетки")
+    parser.add_argument("--scenarios", default=None, help="Файл со списком ручных сценариев")
     args = parser.parse_args()
 
     grid_run(
@@ -305,5 +337,6 @@ if __name__ == "__main__":
         n_ticks=args.ticks,
         seed=args.seed,
         spec_path=args.spec,
+        scenarios_path=args.scenarios,
         output_prefix=args.output,
     )
