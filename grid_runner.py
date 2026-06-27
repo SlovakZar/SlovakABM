@@ -259,7 +259,7 @@ def grid_run(
         fixed = spec["fixed"]
         mode = "сетка"
 
-    n_workers = 4 if parallel else 1
+    n_workers = 6 if parallel else 1
     if verbose:
         print(f"Режим: {mode}  |  Прогонов: {n_runs}  |  "
               f"Воркеров: {n_workers}  |  "
@@ -356,7 +356,7 @@ def grid_run(
         all_metrics = [None] * n_runs
         all_district_rows = [None] * n_runs
 
-        with mp.get_context("fork").Pool(processes=4) as pool:
+        with mp.get_context("fork").Pool(processes=6) as pool:
             results = pool.imap_unordered(_run_single_plan, args_list)
             done = 0
             for row, dist_table in results:
@@ -411,7 +411,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="grid_results", help="Префикс выходных файлов")
     parser.add_argument("--spec", default="grid_parameters.json", help="JSON-спецификация сетки")
     parser.add_argument("--scenarios", default=None, help="Файл со списком ручных сценариев")
-    parser.add_argument("--parallel", action="store_true", help="Параллельный режим (4 воркера)")
+    parser.add_argument("--parallel", action="store_true", help="Параллельный режим (6 воркеров)")
     args = parser.parse_args()
 
     grid_run(
