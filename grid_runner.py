@@ -174,7 +174,6 @@ def _run_single_plan(args: tuple) -> tuple:
     from engine import run_simulation
     from signals import EventBus
     from lhs_runner import ParamPatcher, create_patched_dispatcher, collect_metrics
-    import __main__ as main_mod  # при fork-е build_district_table уже в __main__
     import json
 
     # Каждый worker строит свой граф (fork → copy-on-write)
@@ -215,7 +214,8 @@ def _run_single_plan(args: tuple) -> tuple:
     row = {"run_id": run_idx, "run_label": label,
            **{f"v_{k}": v for k, v in variant.items()}, **metrics}
 
-    dist_table = main_mod.build_district_table(snapshots, run_idx, label, variant, all_action_log)
+    from grid_runner import build_district_table
+    dist_table = build_district_table(snapshots, run_idx, label, variant, all_action_log)
 
     patcher.restore()
 
