@@ -181,10 +181,11 @@ def seed_run(
 
     if verbose:
         print(f"Кандидат: {CANDIDATE_LABEL}")
-        print(f"Параметры: inertia_mobility_penalty_move={CANDIDATE['inertia_mobility_penalty_move']}, "
-              f"social_boost_move={CANDIDATE['social_boost_move']}, "
-              f"base_appetite_min={CANDIDATE['base_appetite_min']}, "
-              f"max_work_candidates={CANDIDATE['max_work_candidates']}")
+        if CANDIDATE:
+            print(f"Параметры: inertia_mobility_penalty_move={CANDIDATE.get('inertia_mobility_penalty_move', 'default')}, "
+                  f"social_boost_move={CANDIDATE.get('social_boost_move', 'default')}, "
+                  f"base_appetite_min={CANDIDATE.get('base_appetite_min', 'default')}, "
+                  f"max_work_candidates={CANDIDATE.get('max_work_candidates', 'default')}")
         print(f"Прогонов: {n_runs}  |  Сиды: {seeds[0]}…{seeds[-1]}  |  "
               f"Агентов: {n_agents:,}  |  Тиков: {n_ticks}\n")
 
