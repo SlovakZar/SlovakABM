@@ -1,14 +1,10 @@
 """
-seed_runner.py — Многопрогонный анализ с разными сидами для фиксированного кандидата.
+seed_runner.py — Многопрогонный анализ с разными сидами для параметров по умолчанию.
 
 Использование:
   python seed_runner.py --agents 5000 --ticks 36 --runs 30 --output seed_results
 
-Параметры кандидата (inmob0.01_sbm0.01_bamin0.2_mwc3):
-  inertia_mobility_penalty_move = 0.01
-  social_boost_move             = 0.01
-  base_appetite_min             = 0.20
-  max_work_candidates           = 3
+Используются параметры из engine.py / signals.py (значения по умолчанию).
 
 На выходе:
   seed_results.csv          — метрики по прогонам (одна строка = один прогон)
@@ -39,19 +35,14 @@ from grid_runner import build_district_table
 # Кандидат
 # ═══════════════════════════════════════════════════════════════════════════════
 
-CANDIDATE = {
-    "inertia_mobility_penalty_move": 0.01,
-    "social_boost_move":             0.01,
-    "base_appetite_min":             0.20,
-    "max_work_candidates":           3,
-}
+CANDIDATE = {}
 
-CANDIDATE_LABEL = "inmob0.01_sbm0.01_bamin0.2_mwc3"
+CANDIDATE_LABEL = "default_params"
 
 # Фиксированные параметры (из grid_parameters.json, на случай если нужны для патча)
 FIXED_PARAMS = {
-    "aspirations_alpha": 0.08,
-    "signal_decay": 0.85,
+    "aspirations_alpha": 0.15,
+    "signal_decay": 0.70,
     "gap_adapt_lambda": 0.05,
     "sat_smoothing": 0.88,
     "social_boost_commute": 0.02,
@@ -70,8 +61,8 @@ FIXED_PARAMS = {
     "pc_d_perceived_modifier": 2.0,
     "migration_cooldown_ticks": 9,
     "sb_move_total_ticks": 6,
-    "social_boost_decay": 0.80,
-    "decay_social_boost_move": 0.01,
+    "social_boost_decay": 0.60,
+    "decay_social_boost_move": 0.005,
     "decay_inertia_mobility": 0.01,
     "decay_econ_penalty": 0.01,
     "jobloss_ramp_step": 0.05,

@@ -272,11 +272,11 @@ def create_patched_dispatcher(signal_params: Dict[str, float]):
 
     sp = signal_params
 
-    social_boost_move          = sp.get("social_boost_move", 0.06)
+    social_boost_move          = sp.get("social_boost_move", 0.01)
     social_boost_commute       = sp.get("social_boost_commute", 0.02)
     unemployed_signal          = sp.get("unemployed_signal", 0.35)
     neighbor_signal_coef       = sp.get("neighbor_signal_coef", 0.04)
-    inertia_mob_pen_move       = sp.get("inertia_mobility_penalty_move", 0.06)
+    inertia_mob_pen_move       = sp.get("inertia_mobility_penalty_move", 0.01)
     inertia_loss_jobloss       = sp.get("inertia_loss_jobloss", -0.25)
     econ_gap_jobloss           = sp.get("econ_gap_jobloss", 0.25)
     place_deficit_pen_move     = sp.get("place_deficit_penalty_move", 0.03)

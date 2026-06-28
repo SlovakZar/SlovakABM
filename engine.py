@@ -47,7 +47,7 @@ from signals import EventBus, Event, EventType, Dispatcher, set_settlement_map
 
 # Фильтр 2 — дерево занятости
 MAX_JOBS_PRESSURE        = 1.20   # район считается перегруженным выше этого порога
-MAX_WORK_CANDIDATES      = 12     # максимум районов для скрининга
+MAX_WORK_CANDIDATES      = 6      # максимум районов для скрининга
 
 HOUSING_BUDGET_RATIO     = 0.35   # жильё не должно превышать X доли зарплаты (×100м²)
 MOVE_STRESS_FACTOR       = 0.80   # satisfaction после переезда × этот множитель
@@ -78,8 +78,8 @@ SAT_SMOOTHING            = 0.88
 NATIONAL_AVG_WAGE        = 1614.0
 
 # ── Двухбарьерная модель: константы ──────────────────────────────────────────
-ASPIRATIONS_ALPHA        = 0.08   # скорость EWMA-накопления aspirations из D_instant
-SIGNAL_DECAY             = 0.85   # затухание signal_reduction за тик
+ASPIRATIONS_ALPHA        = 0.15   # скорость EWMA-накопления aspirations из D_instant
+SIGNAL_DECAY             = 0.70   # затухание signal_reduction за тик
 MIGRATION_COOLDOWN_TICKS = 9      # тиков задержки после переезда до новой активации
 
 # v4: Накопительное давление и вероятностный триггер (замена жёсткой задержки)
@@ -1363,7 +1363,7 @@ def _execute_housing_shock(
 # ── Главный tick ──────────────────────────────────────────────────────────────
 
 # v2: Константы decay
-SB_MOVE_DECAY_PER_TICK = 0.01     # затухание social_boost MOVE за тик
+SB_MOVE_DECAY_PER_TICK = 0.005    # затухание social_boost MOVE за тик
 SB_MOVE_TOTAL_TICKS    = 6        # длительность MOVE decay
 SB_COMMUTE_TOTAL_TICKS = 3        # длительность COMMUTE до сброса
 ECON_PENALTY_DECAY_PER_TICK = 0.01  # затухание econ_penalty за тик
@@ -1501,7 +1501,7 @@ def _process_jobloss_ramp(df: pd.DataFrame) -> None:
 
 # ── Главный tick ──────────────────────────────────────────────────────────────
 
-SOCIAL_BOOST_DECAY = 0.80   # множитель затухания social_boost за тик
+SOCIAL_BOOST_DECAY = 0.60   # множитель затухания social_boost за тик
 
 
 def tick(
