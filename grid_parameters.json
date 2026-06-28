@@ -1,8 +1,10 @@
 {
   "fixed": {
-    "aspirations_alpha": 0.08,
-    "signal_decay": 0.85,
-    "gap_adapt_lambda": 0.05,
+    "inertia_mobility_penalty_move": 0.01,
+    "social_boost_move":             0.01,
+    "base_appetite_min":             0.20,
+    "max_work_candidates":           3,
+
     "sat_smoothing": 0.88,
     "social_boost_commute": 0.02,
     "social_boost_new_employer": 0.05,
@@ -20,8 +22,6 @@
     "pc_d_perceived_modifier": 2.0,
     "migration_cooldown_ticks": 9,
     "sb_move_total_ticks": 6,
-    "social_boost_decay": 0.80,
-    "decay_social_boost_move": 0.01,
     "decay_inertia_mobility": 0.01,
     "decay_econ_penalty": 0.01,
     "jobloss_ramp_step": 0.05,
@@ -53,10 +53,11 @@
 
   "grid": {
     "core": {
-      "inertia_mobility_penalty_move": [0.01, 0.03, 0.06, 0.09, 0.15],
-      "social_boost_move":             [0.01, 0.03, 0.06, 0.09, 0.15],
-      "base_appetite_min":             [0.02, 0.05, 0.10, 0.15, 0.20],
-      "max_work_candidates":           [3, 6, 12, 18, 24]
+      "signal_decay":             [0.70, 0.85, 0.95],
+      "aspirations_alpha":        [0.04, 0.08, 0.15],
+      "social_boost_decay":       [0.60, 0.80, 0.95],
+      "gap_adapt_lambda":         [0.02, 0.05, 0.12],
+      "decay_social_boost_move":  [0.005, 0.01, 0.02]
     }
   }
 }
