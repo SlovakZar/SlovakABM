@@ -781,7 +781,7 @@ def agent_behavior_audit(action_log: Optional[List[dict]], sample_size: int = 30
         desired_str = f"{desired:.1%}" if desired else "—"
 
         lines.append(
-            f"  {ag_id:<6} | {ag_type:<12} | {act_domain:<10} | {decision:<9} | "
+            f"  {ag_id:<6} | {act_domain:<10} | {decision:<9} | "
             f"{res_flow:<28} | {work_flow:<28} | "
             f"{wage_str:>8} | {industry:<18} | {desired_str:>8}"
         )
