@@ -304,8 +304,20 @@ def _district_heatmap(
     if delta_range == 0:
         return "\n  [Нет изменения населения — тепловая карта не сгенерирована]"
 
-    # 2. Позиции узлов (силовой layout, фиксированный seed)
-    pos = nx.spring_layout(G, seed=42, k=0.5, iterations=50)
+    # 2. Позиции узлов на основе commuting матрицы
+    #    Создаём временный граф с весом = 1/travel_time (близкие по времени — рядом)
+    H = G.copy()
+    for u, v, data in H.edges(data=True):
+        tt = data.get("travel_time_min", 30)
+        data["commute_weight"] = 1.0 / max(tt, 1.0)
+    pos = nx.spring_layout(H, seed=42, k=2.0, iterations=100, weight="commute_weight")
+
+    # Центрируем: Bratislavský kraj (Bratislava I) → (0, 0)
+    center_node = "District of Bratislava I"
+    if center_node in pos:
+        cx, cy = pos[center_node]
+        for node in pos:
+            pos[node] = (pos[node][0] - cx, pos[node][1] - cy)
 
     # 3. Цвета: красный(-) → белый(0) → зелёный(+)
     vmin_d = min(deltas)
@@ -477,9 +489,6 @@ def demographic_portrait(
     tick_num: Optional[int] = None,
     exclude_students: bool = True,
     detail: bool = False,
-    tick_stats: Optional[list] = None,
-    all_action_log: Optional[list] = None,
-    G=None,
 ) -> str:
     """
     Демографический портрет с приоритезацией метрик.
@@ -499,9 +508,9 @@ def demographic_portrait(
       - Психологические параметры по типам
       - Топ-10 маятниковых маршрутов
 
-    v6:
-      - tick_stats: таблица регионов по тикам (население по краям)
-      - all_action_log: топ-10 направлений переездов и новых commute
+    v7:
+      - tick_stats, all_action_log, G — больше не используются напрямую
+        (топ-10 и таблица регионов только в итоговом summary_report)
     """
     lines = []
     total_all = len(df)
@@ -704,25 +713,6 @@ def demographic_portrait(
                     lines.append(f"  {r_name:<22} →  {w_name:<22} | {count:>6,}")
             else:
                 lines.append("  [Маятниковые связи между районами не обнаружены]")
-
-    # ═══ v6: ТАБЛИЦА РЕГИОНОВ ПО ТИКАМ ═════════════════════════════════════
-    if tick_stats is not None and G is not None:
-        region_ts = _build_region_time_series(tick_stats, G)
-        if region_ts:
-            lines.append(region_ts)
-
-    # ═══ v6: ТОП-10 ПЕРЕЕЗДОВ И COMMUTE (ИЗ ACTION_LOG) ═══════════════════
-    if all_action_log is not None:
-        # Топ-10 переездов (всегда, если есть данные)
-        top_moves = _top_move_routes(all_action_log, top_n=10)
-        if top_moves:
-            lines.append(top_moves)
-
-        # Топ-10 новых commute (только при detail=True)
-        if detail:
-            top_comm = _top_commute_routes(all_action_log, top_n=10)
-            if top_comm:
-                lines.append(top_comm)
 
     lines.append("\n" + "=" * 78)
     return "\n".join(lines)
@@ -1815,9 +1805,6 @@ def summary_report(
         tick_num=None,
         exclude_students=True,
         detail=detail,
-        tick_stats=tick_stats,
-        all_action_log=all_action_log,
-        G=G,
     ))
 
     # 2. Сводка динамики
@@ -1833,7 +1820,17 @@ def summary_report(
     if G is not None and tick_stats:
         parts.append(master_district_table(tick_stats, G, all_action_log, snapshots=snapshots))
 
-    # 5. ТЕПЛОВАЯ КАРТА (всегда, если есть данные)
+    # 5. ТОП-10 ПЕРЕЕЗДОВ И COMMUTE (ОДИН РАЗ В КОНЦЕ)
+    if all_action_log is not None:
+        top_moves = _top_move_routes(all_action_log, top_n=10)
+        if top_moves:
+            parts.append(top_moves)
+        if detail:
+            top_comm = _top_commute_routes(all_action_log, top_n=10)
+            if top_comm:
+                parts.append(top_comm)
+
+    # 6. ТЕПЛОВАЯ КАРТА (всегда, если есть данные)
     if G is not None and tick_stats:
         heatmap_block = _district_heatmap(tick_stats, G, snapshots=snapshots)
         if heatmap_block:

@@ -104,10 +104,7 @@ def run(
 
     for t in sorted(snapshots.keys()):
         label = {0: "НАЧАЛО"}.get(t, f"Тик {t}")
-        portrait = demographic_portrait(
-            snapshots[t], label=label, tick_num=t, detail=detail,
-            tick_stats=tick_stats, all_action_log=all_action_log, G=G,
-        )
+        portrait = demographic_portrait(snapshots[t], label=label, tick_num=t, detail=detail)
         report_parts.append(portrait)
 
     # Итоговая сводка
