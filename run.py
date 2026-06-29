@@ -25,7 +25,7 @@ from agents  import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
 from engine  import run_simulation
 from signals import EventBus, create_default_dispatcher
 from scenario import Scenario
-from report  import demographic_portrait, compare_snapshots, summary_report, agent_parameters_table, industry_jobs_snapshot
+from report  import summary_report, agent_parameters_table, industry_jobs_snapshot
 
 
 def run(
@@ -92,28 +92,21 @@ def run(
     if verbose:
         print(f"\n[4/4] Генерируем отчёт...")
 
-    # Снимки по тикам (демографические портреты)
+    # Сборка итогового отчёта
     report_parts = []
 
     # ═══ МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ: Тик 0 → Тик 6 ═══
-    agent_table = agent_parameters_table(snapshots, G=G, n_show=20, tick_a=0, tick_b=6, seed=seed)
-    report_parts.append(agent_table)
+    if sections is None or sections.get("agent_params", True):
+        agent_table = agent_parameters_table(snapshots, G=G, n_show=20, tick_a=0, tick_b=6, seed=seed)
+        report_parts.append(agent_table)
 
     # ═══ v3: СНИМОК INDUSTRY JOBS (occupied/vacant) ═══
     jobs_snap = industry_jobs_snapshot(G, df=df_final)
     report_parts.append(jobs_snap)
 
-    for t in sorted(snapshots.keys()):
-        label = {0: "НАЧАЛО"}.get(t, f"Тик {t}")
-        portrait = demographic_portrait(snapshots[t], label=label, tick_num=t, detail=detail)
-        report_parts.append(portrait)
-
-    # Итоговая сводка
+    # ═══ Итоговая сводка (демография + тренды + таблицы + карта) ═══
     final_summary = summary_report(df_final, tick_stats, all_action_log, snapshots, detail=detail, G=G, sections=sections)
     report_parts.append(final_summary)
-    # Также межрегиональный баланс (compare_snapshots)
-    comparison = compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail)
-    report_parts.append(comparison)
 
     full_report = "\n\n".join(report_parts)
     elapsed = time.time() - t0
