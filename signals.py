@@ -678,12 +678,12 @@ def create_default_dispatcher() -> Dispatcher:
     # ═══════════════════════════════════════════════════════════════════════
     # AGENT_MOVED — v2: social_boost +0.06 (было 0.08), новый decay
     # ═══════════════════════════════════════════════════════════════════════
-    # Соседи по старому району: social_boost +0.01 (MOVE decay: −0.005×6)
+    # Соседи по старому району: social_boost +0.02 (MOVE decay: −0.005×6)
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_RESIDENCE_NEIGHBORS,
         field="social_boost",
-        base_delta=0.01,
+        base_delta=0.02,
     ))
     # Соседи по старому району: inertia_mobility_penalty −0.01 (decay: −0.005×6)
     # Отрицательный знак: переезд соседа понижает инерцию, делая миграцию более вероятной
@@ -695,14 +695,6 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=-1.0,
         clip_max=1.0,
     ))
-    # Соседи по новому району: позитивный сигнал → social_boost +0.01
-    d.add_rule(Rule(
-        event_type=EventType.AGENT_MOVED,
-        target_scope=SCOPE_TARGET_NEIGHBORS,
-        field="social_boost",
-        base_delta=0.01,
-    ))
-
     # ── AGENT_MOVED (place): place_deficit_penalty соседям того же settlement ─
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
@@ -769,12 +761,6 @@ def create_default_dispatcher() -> Dispatcher:
     # ═══════════════════════════════════════════════════════════════════════
     # JOB_CHANGED
     # ═══════════════════════════════════════════════════════════════════════
-    d.add_rule(Rule(
-        event_type=EventType.JOB_CHANGED,
-        target_scope=SCOPE_WORKPLACE_COLLEAGUES,
-        field="social_boost",
-        base_delta=EVENT_SOCIAL_BOOST * 0.8,       # 0.064
-    ))
     # ── v3: JOB_CHANGED → soc_calibration_signal коллегам ─────────────────
     d.add_rule(Rule(
         event_type=EventType.JOB_CHANGED,
