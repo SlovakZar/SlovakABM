@@ -263,10 +263,11 @@ def _district_heatmap(
     output_path: str = "heatmap.png",
 ) -> str:
     """
-    Рисует тепловую карту-граф 79 районов:
+    Рисует тепловую карту-граф 79 районов по real координатам:
       - Цвет узла: зелёный = прирост населения, красный = убыль
       - Размер узла: население района
       - Толщина ребра: интенсивность commuting потока
+      - Позиции: из valid_districts_coords.csv (lon/lat), центр — Bratislava I (0,0)
 
     Сохраняет PNG, возвращает Markdown-строку для вставки в отчёт.
     """
@@ -304,20 +305,29 @@ def _district_heatmap(
     if delta_range == 0:
         return "\n  [Нет изменения населения — тепловая карта не сгенерирована]"
 
-    # 2. Позиции узлов на основе commuting матрицы
-    #    Создаём временный граф с весом = 1/travel_time (близкие по времени — рядом)
-    H = G.copy()
-    for u, v, data in H.edges(data=True):
-        tt = data.get("travel_time_min", 30)
-        data["commute_weight"] = 1.0 / max(tt, 1.0)
-    pos = nx.spring_layout(H, seed=42, k=2.0, iterations=100, weight="commute_weight")
-
-    # Центрируем: Bratislavský kraj (Bratislava I) → (0, 0)
-    center_node = "District of Bratislava I"
-    if center_node in pos:
-        cx, cy = pos[center_node]
-        for node in pos:
-            pos[node] = (pos[node][0] - cx, pos[node][1] - cy)
+    # 2. Позиции узлов из valid_districts_coords.csv
+    #    lon → x, lat → y, центрируем на Bratislava I
+    import os
+    _coords_path = os.path.join(os.path.dirname(__file__), "valid_districts_coords.csv")
+    pos = {}
+    if os.path.exists(_coords_path):
+        df_coords = pd.read_csv(_coords_path)
+        coord_map = {}
+        for _, row in df_coords.iterrows():
+            key = row["district"].replace(" - ", "-")  # "Košice - okolie" → "Košice-okolie"
+            coord_map[key] = (float(row["lon"]), float(row["lat"]))
+        for d in districts:
+            if d in coord_map:
+                pos[d] = coord_map[d]
+        # Центрируем на Bratislava I: вычитаем её координаты
+        center_node = "District of Bratislava I"
+        if center_node in pos:
+            cx, cy = pos[center_node]
+            for node in pos:
+                pos[node] = (pos[node][0] - cx, pos[node][1] - cy)
+    if not pos:
+        # fallback: если CSV нет, простой круговой layout
+        pos = nx.circular_layout(G)
 
     # 3. Цвета: красный(-) → белый(0) → зелёный(+)
     vmin_d = min(deltas)
