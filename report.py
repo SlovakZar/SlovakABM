@@ -1786,6 +1786,18 @@ def master_district_table(
 # 7. SUMMARY REPORT — обёртка для полного отчёта
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ── Секции отчёта (флаги для Colab чекбоксов) ──────────────────────────────
+DEFAULT_SECTIONS = {
+    "agent_params":     True,   # Матрица параметров агентов (tick0→tick6)
+    "demographic":      True,   # Демографический портрет финала
+    "migration_trends": True,   # Сводка динамики + годовые тренды
+    "region_balance":   True,   # Межрегиональный баланс населения
+    "master_table":     True,   # Мастер-таблица 79 районов + жильё
+    "top_routes":       True,   # Топ-10 переездов и commute
+    "heatmap":          True,   # Тепловая карта
+    "behavior_audit":   False,  # Поведенческий аудит (только detail)
+}
+
 def summary_report(
     df_final: pd.DataFrame,
     tick_stats: list,
@@ -1793,45 +1805,48 @@ def summary_report(
     snapshots: Optional[dict] = None,
     detail: bool = False,
     G=None,
+    sections: Optional[dict] = None,
 ) -> str:
     """
-    Итоговый отчёт: демографический портрет финального состояния +
-    сводка динамики + опционально межрегиональный баланс и аудит.
+    Итоговый отчёт с посекционным контролем через `sections`.
 
-    Режимы:
-      detail=False (default) — критические и важные метрики, ~2-3 экрана.
-      detail=True — полный отчёт с аудитом и дополнительными метриками.
+    sections — словарь {имя_секции: bool}, где ключи из DEFAULT_SECTIONS.
+    Если None — используются DEFAULT_SECTIONS.
     """
+    if sections is None:
+        sections = DEFAULT_SECTIONS
     parts = []
 
-    # 0. МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ (если есть снимки с тиками 0 и 6)
-    if snapshots and 0 in snapshots and 6 in snapshots:
+    # 0. МАТРИЦА ПАРАМЕТРОВ АГЕНТОВ
+    if sections.get("agent_params", True) and snapshots and 0 in snapshots and 6 in snapshots:
         parts.append(agent_parameters_table(snapshots, G=G, n_show=20, tick_a=0, tick_b=6))
 
     # 1. Демографический портрет финального состояния
-    parts.append(demographic_portrait(
-        df_final,
-        label="ФИНАЛ",
-        tick_num=None,
-        exclude_students=True,
-        detail=detail,
-    ))
+    if sections.get("demographic", True):
+        parts.append(demographic_portrait(
+            df_final,
+            label="ФИНАЛ",
+            tick_num=None,
+            exclude_students=True,
+            detail=detail,
+        ))
 
     # 2. Сводка динамики
-    parts.append(migration_summary(tick_stats))
+    if sections.get("migration_trends", True):
+        parts.append(migration_summary(tick_stats))
 
-    # 3. Межрегиональный баланс (если есть снимки)
-    if snapshots and len(snapshots) >= 2:
+    # 3. Межрегиональный баланс
+    if sections.get("region_balance", True) and snapshots and len(snapshots) >= 2:
         parts.append(compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail))
-    elif detail and all_action_log:
+    elif detail and all_action_log and sections.get("behavior_audit", False):
         parts.append(agent_behavior_audit(all_action_log, sample_size=30))
 
-    # 4. МАСТЕР-ТАБЛИЦА ПО 79 РАЙОНАМ (всегда в конце)
-    if G is not None and tick_stats:
+    # 4. МАСТЕР-ТАБЛИЦА ПО 79 РАЙОНАМ
+    if sections.get("master_table", True) and G is not None and tick_stats:
         parts.append(master_district_table(tick_stats, G, all_action_log, snapshots=snapshots))
 
-    # 5. ТОП-10 ПЕРЕЕЗДОВ И COMMUTE (ОДИН РАЗ В КОНЦЕ)
-    if all_action_log is not None:
+    # 5. ТОП-10 ПЕРЕЕЗДОВ И COMMUTE
+    if sections.get("top_routes", True) and all_action_log is not None:
         top_moves = _top_move_routes(all_action_log, top_n=10)
         if top_moves:
             parts.append(top_moves)
@@ -1840,8 +1855,8 @@ def summary_report(
             if top_comm:
                 parts.append(top_comm)
 
-    # 6. ТЕПЛОВАЯ КАРТА (всегда, если есть данные)
-    if G is not None and tick_stats:
+    # 6. ТЕПЛОВАЯ КАРТА
+    if sections.get("heatmap", True) and G is not None and tick_stats:
         heatmap_block = _district_heatmap(tick_stats, G, snapshots=snapshots)
         if heatmap_block:
             parts.append(heatmap_block)

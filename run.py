@@ -38,6 +38,7 @@ def run(
     output_file:    str  = None,
     verbose:        bool = True,
     detail:         bool = False,
+    sections:       dict = None,
 ) -> tuple:
     t0 = time.time()
 
@@ -108,7 +109,7 @@ def run(
         report_parts.append(portrait)
 
     # Итоговая сводка
-    final_summary = summary_report(df_final, tick_stats, all_action_log, snapshots, detail=detail, G=G)
+    final_summary = summary_report(df_final, tick_stats, all_action_log, snapshots, detail=detail, G=G, sections=sections)
     report_parts.append(final_summary)
     # Также межрегиональный баланс (compare_snapshots)
     comparison = compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail)
