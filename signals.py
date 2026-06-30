@@ -336,7 +336,7 @@ def _wage_pressure_mask(df: pd.DataFrame, G, event: "Event",
     result = base_mask.copy()
     wages = df["wage"].values[indices].astype(float)
     if ind_wage > 0:
-        wp = np.where(wages > 0, ind_wage / wages, 1.0)
+        wp = np.divide(ind_wage, wages, out=np.ones_like(wages, dtype=float), where=wages > 0)
         # Оставляем только агентов с wage_pressure > 1
         keep = wp > 1.0
         result[indices[~keep]] = False
