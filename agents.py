@@ -563,7 +563,7 @@ def _sample_workplace(
 
 def create_agents(
     dist_path: str = "agent_init_distributions.json",
-    survey_path: str = "agent_params_from_survey.json",
+    survey_path: str = "data/agent_params_from_survey.json",
     commuting_path: str = "data/commuting_filtered_with_travel.csv",
     n_agents: int = 70000,
     seed: int = 42,
