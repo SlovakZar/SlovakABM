@@ -18,7 +18,7 @@ from pathlib import Path
 from itertools import product
 from typing import Dict, List
 
-SIM_DIR = Path(__file__).parent
+SIM_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(SIM_DIR))
 
 
@@ -270,11 +270,11 @@ def grid_run(
         if verbose:
             print("Строим граф Словакии...")
         G = build_graph(
-            str(SIM_DIR / "environment.json"),
-            str(SIM_DIR / "commuting_filtered_with_travel.csv"),
+            str(SIM_DIR / "data" / "environment.json"),
+            str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv"),
         )
 
-        dist_path = SIM_DIR / "agent_init_distributions.json"
+        dist_path = SIM_DIR / "data" / "agent_init_distributions.json"
         with open(dist_path, encoding="utf-8") as f:
             init_dists = json.load(f).get("districts", {})
 
@@ -291,9 +291,9 @@ def grid_run(
             signal_params = patcher.apply()
 
             df = create_agents(
-                str(SIM_DIR / "agent_init_distributions.json"),
-                str(SIM_DIR / "agent_params_from_survey.json"),
-                str(SIM_DIR / "commuting_filtered_with_travel.csv"),
+                str(SIM_DIR / "data" / "agent_init_distributions.json"),
+                str(SIM_DIR / "data" / "agent_params_from_survey.json"),
+                str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv"),
                 n_agents=n_agents, seed=seed,
             )
 
@@ -340,11 +340,11 @@ def grid_run(
         import multiprocessing as mp
 
         sim_dir_str = str(SIM_DIR)
-        env_path = str(SIM_DIR / "environment.json")
-        comm_path = str(SIM_DIR / "commuting_filtered_with_travel.csv")
-        agent_dist_path = str(SIM_DIR / "agent_init_distributions.json")
-        agent_params_path = str(SIM_DIR / "agent_params_from_survey.json")
-        dist_path_str = str(SIM_DIR / "agent_init_distributions.json")
+        env_path = str(SIM_DIR / "data" / "environment.json")
+        comm_path = str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv")
+        agent_dist_path = str(SIM_DIR / "data" / "agent_init_distributions.json")
+        agent_params_path = str(SIM_DIR / "data" / "agent_params_from_survey.json")
+        dist_path_str = str(SIM_DIR / "data" / "agent_init_distributions.json")
 
         args_list = [
             (run_idx, plan, fixed, n_agents, seed, n_ticks,

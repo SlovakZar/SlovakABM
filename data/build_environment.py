@@ -123,8 +123,8 @@ def _collapse_education(edu_counts: dict) -> dict:
 def build(
     master_path: str = "districts_master.csv",
     dist_path: str = "agent_distributions_with_industry.csv",
-    env_out: str = "environment.json",
-    dist_out: str = "agent_init_distributions.json",
+    env_out: str = "data/environment.json",
+    dist_out: str = "data/agent_init_distributions.json",
 ):
     print("Загрузка данных...")
     dm = pd.read_csv(master_path, sep=";")
@@ -352,9 +352,9 @@ if __name__ == "__main__":
                         help="Имя файла districts_master.csv (относительно data_dir)")
     parser.add_argument("--distributions", default="agent_distributions_with_industry.csv",
                         help="Имя файла agent_distributions_with_industry.csv")
-    parser.add_argument("--env_out", default="environment.json",
+    parser.add_argument("--env_out", default="data/environment.json",
                         help="Выходной файл environment.json")
-    parser.add_argument("--dist_out", default="agent_init_distributions.json",
+    parser.add_argument("--dist_out", default="data/agent_init_distributions.json",
                         help="Выходной файл agent_init_distributions.json")
 
     # Разрешаем неизвестные аргументы (например, -f из Colab)

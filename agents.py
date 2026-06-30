@@ -180,7 +180,7 @@ JOBS_CAPACITY: dict = {}
 INDUSTRY_JOBS_CAPACITY: dict[str, dict[str, dict[str, int]]] = {}
 
 
-def _get_init_dists(path="agent_init_distributions.json"):
+def _get_init_dists(path="data/agent_init_distributions.json"):
     global _INIT_DISTS
     if _INIT_DISTS is None:
         p = Path(path)
@@ -191,7 +191,7 @@ def _get_init_dists(path="agent_init_distributions.json"):
     return _INIT_DISTS
 
 
-def _get_survey(path="agent_params_from_survey.json"):
+def _get_survey(path="data/agent_params_from_survey.json"):
     global _SURVEY
     if _SURVEY is None:
         p = Path(path)
@@ -202,7 +202,7 @@ def _get_survey(path="agent_params_from_survey.json"):
     return _SURVEY
 
 
-def _get_commuting(path="commuting_filtered_with_travel.csv"):
+def _get_commuting(path="data/commuting_filtered_with_travel.csv"):
     """
     Загружает commuting-матрицу и строит два словаря:
       outflow_probs[origin] = {destination: probability}  — вероятности по flow_work
@@ -368,7 +368,7 @@ _SCHOOL_OUTFLOW = None
 _ENROLLMENT_RATES: dict = {}   # {district: {age_bin: rate}}
 
 
-def _compute_school_outflow(path="commuting_filtered_with_travel.csv"):
+def _compute_school_outflow(path="data/commuting_filtered_with_travel.csv"):
     """
     Строит два словаря на основе flow_school:
       school_outflow[origin] = {destination: probability}
@@ -564,7 +564,7 @@ def _sample_workplace(
 def create_agents(
     dist_path: str = "agent_init_distributions.json",
     survey_path: str = "agent_params_from_survey.json",
-    commuting_path: str = "commuting_filtered_with_travel.csv",
+    commuting_path: str = "data/commuting_filtered_with_travel.csv",
     n_agents: int = 70000,
     seed: int = 42,
 ) -> pd.DataFrame:

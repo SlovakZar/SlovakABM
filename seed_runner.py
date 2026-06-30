@@ -20,15 +20,15 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, List
 
-SIM_DIR = Path(__file__).parent.parent
+SIM_DIR = Path(__file__).parent
 sys.path.insert(0, str(SIM_DIR))
 
-from lhs_runner import ParamPatcher, create_patched_dispatcher, collect_metrics
+from utilities.lhs_runner import ParamPatcher, create_patched_dispatcher, collect_metrics
 from graph import build_graph, sync_industry_jobs_to_graph, initialize_industry_pressure_from_agents
 from agents import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
 from engine import run_simulation
 from signals import EventBus
-from grid_runner import build_district_table
+from utilities.grid_runner import build_district_table
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -110,8 +110,8 @@ def _run_single_seed(args: tuple) -> tuple:
     from agents import create_agents, JOBS_CAPACITY, INDUSTRY_JOBS_CAPACITY
     from engine import run_simulation
     from signals import EventBus
-    from lhs_runner import ParamPatcher, create_patched_dispatcher, collect_metrics
-    from grid_runner import build_district_table
+    from utilities.lhs_runner import ParamPatcher, create_patched_dispatcher, collect_metrics
+    from utilities.grid_runner import build_district_table
     import json
 
     # Каждый worker строит свой граф (fork → copy-on-write)
@@ -195,7 +195,7 @@ def seed_run(
             print("Строим граф Словакии...")
         G = build_graph(
             str(SIM_DIR / "data" / "environment.json"),
-            str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv"),
+            str(SIM_DIR / "commuting_filtered_with_travel.csv"),
         )
 
         dist_path = SIM_DIR / "data" / "agent_init_distributions.json"
@@ -217,7 +217,7 @@ def seed_run(
             df = create_agents(
                 str(SIM_DIR / "data" / "agent_init_distributions.json"),
                 str(SIM_DIR / "data" / "agent_params_from_survey.json"),
-                str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv"),
+                str(SIM_DIR / "commuting_filtered_with_travel.csv"),
                 n_agents=n_agents, seed=seed_val,
             )
 
@@ -265,11 +265,11 @@ def seed_run(
         import multiprocessing as mp
 
         sim_dir_str = str(SIM_DIR)
-        env_path = str(SIM_DIR / "data" / "environment.json")
-        comm_path = str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv")
-        agent_dist_path = str(SIM_DIR / "data" / "agent_init_distributions.json")
-        agent_params_path = str(SIM_DIR / "data" / "agent_params_from_survey.json")
-        dist_path_str = str(SIM_DIR / "data" / "agent_init_distributions.json")
+        env_path = str(SIM_DIR / "environment.json")
+        comm_path = str(SIM_DIR / "commuting_filtered_with_travel.csv")
+        agent_dist_path = str(SIM_DIR / "agent_init_distributions.json")
+        agent_params_path = str(SIM_DIR / "agent_params_from_survey.json")
+        dist_path_str = str(SIM_DIR / "agent_init_distributions.json")
 
         args_list = [
             (run_idx, seed_val, n_agents, n_ticks,

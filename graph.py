@@ -180,8 +180,8 @@ def get_effective_infrastructure(G: nx.DiGraph, district: str) -> float:
 
 
 def build_graph(
-    env_path: str = "environment.json",
-    commuting_path: str = "commuting_filtered_with_travel.csv",
+    env_path: str = "data/environment.json",
+    commuting_path: str = "data/commuting_filtered_with_travel.csv",
 ) -> nx.DiGraph:
     """
     Строит направленный граф Словакии из commuting-матрицы.

@@ -29,9 +29,9 @@ from report  import summary_report, agent_parameters_table, industry_jobs_snapsh
 
 
 def run(
-    env_path:       str  = "environment.json",
-    commuting_path: str  = "commuting_filtered_with_travel.csv",
-    agent_dist_path: str = "agent_init_distributions.json",
+    env_path:       str  = "data/environment.json",
+    commuting_path: str  = "data/commuting_filtered_with_travel.csv",
+    agent_dist_path: str = "data/agent_init_distributions.json",
     n_agents:       int  = 70000,
     n_ticks:        int  = 60,
     seed:           int  = 42,
@@ -127,9 +127,9 @@ def run(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ABM Миграция — Словакия")
-    parser.add_argument("--env",       default="environment.json")
-    parser.add_argument("--commuting", default="commuting_filtered_with_travel.csv")
-    parser.add_argument("--agent_dist", default="agent_init_distributions.json")
+    parser.add_argument("--env",       default="data/environment.json")
+    parser.add_argument("--commuting", default="data/commuting_filtered_with_travel.csv")
+    parser.add_argument("--agent_dist", default="data/agent_init_distributions.json")
     parser.add_argument("--agents",    type=int, default=70000)
     parser.add_argument("--ticks",     type=int, default=60)
     parser.add_argument("--seed",      type=int, default=42)

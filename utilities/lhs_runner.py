@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 
 # ── Путь к проекту ───────────────────────────────────────────────────────────
-SIM_DIR = Path(__file__).parent
+SIM_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(SIM_DIR))
 
 
@@ -560,14 +560,14 @@ def lhs_test(
     if verbose:
         print("\nСтроим граф Словакии (однократно)...")
     G = build_graph(
-        str(SIM_DIR / "environment.json"),
-        str(SIM_DIR / "commuting_filtered_with_travel.csv"),
+        str(SIM_DIR / "data" / "environment.json"),
+        str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv"),
     )
     if verbose:
         print(f"  Узлов: {G.number_of_nodes()}, Рёбер: {G.number_of_edges()}")
 
     # Загружаем init_dists для graduation
-    dist_path = SIM_DIR / "agent_init_distributions.json"
+    dist_path = SIM_DIR / "data" / "agent_init_distributions.json"
     with open(dist_path, encoding="utf-8") as f:
         init_dists = json.load(f).get("districts", {})
 
@@ -586,9 +586,9 @@ def lhs_test(
 
         # Создаём агентов
         df = create_agents(
-            str(SIM_DIR / "agent_init_distributions.json"),
-            str(SIM_DIR / "agent_params_from_survey.json"),
-            str(SIM_DIR / "commuting_filtered_with_travel.csv"),
+            str(SIM_DIR / "data" / "agent_init_distributions.json"),
+            str(SIM_DIR / "data" / "agent_params_from_survey.json"),
+            str(SIM_DIR / "data" / "commuting_filtered_with_travel.csv"),
             n_agents=n_agents,
             seed=run_seed,
         )
