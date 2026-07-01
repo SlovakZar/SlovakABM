@@ -349,8 +349,11 @@ def _init_industry_jobs(init_dists: dict, n_agents: int, G: "nx.DiGraph | None" 
         new_industry_jobs[district] = district_jobs
         new_jobs_capacity[district] = max(1, district_total_capacity)
 
-    INDUSTRY_JOBS_CAPACITY = new_industry_jobs
-    JOBS_CAPACITY = new_jobs_capacity
+    # v5: мутируем существующие словари (не перевязываем, чтобы импорты не сломались)
+    INDUSTRY_JOBS_CAPACITY.clear()
+    INDUSTRY_JOBS_CAPACITY.update(new_industry_jobs)
+    JOBS_CAPACITY.clear()
+    JOBS_CAPACITY.update(new_jobs_capacity)
 
     # Диагностика
     total_occ = sum(
