@@ -7,12 +7,12 @@ scenario.py — Сценарные события по расписанию.
 
 Формат JSON:
   [
-    {"tick": 6, "type": "FACTORY_CLOSED",
+    {"tick": 6, "type": "CLOSED_EMPLOYER",
      "district": "District of Žilina",
-     "industry": "Manufacturing", "magnitude": 0.8, "n_agents": 400},
-    {"tick": 18, "type": "EMPLOYER_OPENED",
+     "industry": "Manufacturing", "size": "medium"},
+    {"tick": 18, "type": "NEW_EMPLOYER",
      "district": "District of Bratislava I",
-     "industry": "ICT", "magnitude": 0.6, "n_agents": 200}
+     "industry": "ICT", "size": "big"}
   ]
 """
 

@@ -270,21 +270,24 @@ def _scale_jobs_capacity(n_agents: int):
     }
 
 
-def _init_industry_jobs(init_dists: dict, n_agents: int):
+def _init_industry_jobs(init_dists: dict, n_agents: int, G: "nx.DiGraph | None" = None):
     """
-    v3: Инициализирует INDUSTRY_JOBS_CAPACITY с разделением на occupied/vacant.
+    v5: Инициализирует INDUSTRY_JOBS_CAPACITY с разделением на occupied/vacant.
 
-    Для каждого района:
-      occupied_by_industry = scaled_population × employed_share × industry_share
-      vacant_by_industry   = occupied / (1 − unemployed_share) − occupied
+    Если передан граф G с business-данными:
+      capacity = Σ(small×25 + medium×130 + large×400)
+      vacant = max(0, capacity × industry_share − occupied)
 
-    Итого job_capacity по отрасли = occupied + vacant.
+    Иначе (fallback):
+      vacant = occupied / (1 − unemployed_share) − occupied
 
-    Также обновляет глобальный JOBS_CAPACITY (сумма по всем отраслям).
+    Также обновляет глобальный JOBS_CAPACITY.
     """
     global INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY
 
-    # Суммарная популяция 18–65 по всем районам (из init_dists)
+    # v5: константы размера компаний (синхронизированы с graph.py)
+    SIZE_EMP = {"small": 25, "medium": 130, "large": 400}
+
     total_pop = sum(
         d["population"] for d in init_dists.values()
     )
@@ -308,25 +311,37 @@ def _init_industry_jobs(init_dists: dict, n_agents: int):
         if not industry_shares:
             industry_shares = {"Other": 1.0}
 
-        # Нормализуем доли отраслей
         total_share = sum(industry_shares.values())
         if total_share == 0:
             total_share = 1.0
+
+        # ── v5: Ёмкость от компаний, если есть граф ──────────────────────
+        total_capacity_from_business = 0
+        if G is not None and district in G.nodes:
+            biz = G.nodes[district].get("business", {})
+            if biz:
+                total_capacity_from_business = (
+                    biz.get("small_companies", 0) * SIZE_EMP["small"] +
+                    biz.get("medium_companies", 0) * SIZE_EMP["medium"] +
+                    biz.get("large_companies", 0) * SIZE_EMP["large"]
+                )
 
         district_jobs: dict[str, dict[str, int]] = {}
         district_total_capacity = 0
 
         for industry, share in industry_shares.items():
             norm_share = share / total_share
-
-            # Занятые места в отрасли
             occupied = max(1, int(scaled_pop * employed_share * norm_share))
 
-            # Вакантные места = occupied / (1 − u) − occupied
-            # При unemployed_share → 1 избегаем деления на 0
-            safe_unemp = max(unemployed_share, 0.005)
-            total_positions = occupied / max(1.0 - safe_unemp, 0.01)
-            vacant = max(0, int(round(total_positions - occupied)))
+            if total_capacity_from_business > 0:
+                # v5: capacity от компаний
+                capacity_ind = max(1, int(total_capacity_from_business * norm_share))
+                vacant = max(0, capacity_ind - occupied)
+            else:
+                # fallback: старая формула
+                safe_unemp = max(unemployed_share, 0.005)
+                total_positions = occupied / max(1.0 - safe_unemp, 0.01)
+                vacant = max(0, int(round(total_positions - occupied)))
 
             district_jobs[industry] = {"occupied": occupied, "vacant": vacant}
             district_total_capacity += occupied + vacant
@@ -567,6 +582,7 @@ def create_agents(
     commuting_path: str = "data/commuting_filtered_with_travel.csv",
     n_agents: int = 70000,
     seed: int = 42,
+    G: "nx.DiGraph | None" = None,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
 
@@ -934,7 +950,7 @@ def create_agents(
     # из данных init_dists (population, employed_share, unemployed_share, industry shares).
     # Это заменяет старый _scale_jobs_capacity — отраслевая структура точнее,
     # а commuting-матрица используется только для распределения агентов по workplace.
-    _init_industry_jobs(init_dists, n_agents)
+    _init_industry_jobs(init_dists, n_agents, G=G)
 
     return df
 

@@ -654,8 +654,8 @@ EVENT_SOCIAL_BOOST    = 0.08   # базовая добавка social_boost от
 UNEMPLOYED_SIGNAL     = 0.35   # добавка к signal_reduction при потере работы
 NEIGHBOR_SIGNAL_COEF  = 0.04   # коэфф. сигнала от переехавшего соседа
 
-# v3: размеры компаний → рабочие места
-_SIZE_TO_JOBS = {"small": 50, "medium": 250, "big": 1000}
+# v5: размеры компаний → рабочие места (синхронизированы с graph.py)
+_SIZE_TO_JOBS = {"small": 25, "medium": 130, "big": 400}
 
 
 def _size_to_jobs(size: str) -> int:
@@ -854,16 +854,9 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # NEW_EMPLOYER — v3: граф-сигнал (vacant_jobs) + агент-сигналы (social_boost, econ_penalty)
+    # NEW_EMPLOYER — v5: граф меняется через _execute_new_employer(),
+    # здесь только агент-сигналы (social_boost, econ_penalty)
     # ═══════════════════════════════════════════════════════════════════════
-    # Граф: добавляем вакансии в отрасли района
-    d.add_rule(Rule(
-        event_type=EventType.NEW_EMPLOYER,
-        target_scope=SCOPE_SELF,           # игнорируется для graph_op
-        field="",                           # нет поля df
-        graph_op="add_vacant",
-        graph_delta=50,                     # переопределяется из Event.size
-    ))
     # Агенты всего региона: social_boost
     d.add_rule(Rule(
         event_type=EventType.NEW_EMPLOYER,
@@ -893,16 +886,9 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # CLOSED_EMPLOYER — v3: граф-сигнал (occupied_jobs) + агент-сигналы
+    # CLOSED_EMPLOYER — v5: граф меняется через _execute_closed_employer(),
+    # здесь только агент-сигналы (aspirations, soc_calibration)
     # ═══════════════════════════════════════════════════════════════════════
-    # Граф: уменьшаем занятые места в отрасли района
-    d.add_rule(Rule(
-        event_type=EventType.CLOSED_EMPLOYER,
-        target_scope=SCOPE_SELF,
-        field="",
-        graph_op="sub_occupied",
-        graph_delta=50,                     # переопределяется из Event.size / n_agents_affected
-    ))
     # Агенты всего региона (занятые): aspirations ↑
     d.add_rule(Rule(
         event_type=EventType.CLOSED_EMPLOYER,
@@ -921,14 +907,13 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
-    # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty сброс
+    # Агенты той же отрасли в том же районе: econ_penalty сброс
     d.add_rule(Rule(
         event_type=EventType.CLOSED_EMPLOYER,
         target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
         field="econ_penalty",
         mode="set",
         value=0.0,
-        filter_wage_pressure=True,
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -967,38 +952,9 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # Старые правила для обратной совместимости (FACTORY_CLOSED, HOUSING_SHOCK,
+    # Старые правила для обратной совместимости (HOUSING_SHOCK,
     # EMPLOYER_OPENED)
     # ═══════════════════════════════════════════════════════════════════════
-
-    # ── FACTORY_CLOSED ─────────────────────────────────────────────────────
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_WHOLE_REGION,
-        field="aspirations",
-        base_delta=0.12,
-        filter_status="employed",
-    ))
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_WHOLE_REGION,
-        field="inertia",
-        base_delta=-0.08,
-        filter_status="employed",
-    ))
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
-        field="aspirations",
-        base_delta=0.20,
-        filter_status="employed",
-    ))
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
-        field="signal_reduction",
-        base_delta=0.25,
-    ))
 
     # ── HOUSING_SHOCK ─────────────────────────────────────────────────────
     d.add_rule(Rule(

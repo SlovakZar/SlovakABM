@@ -50,7 +50,7 @@ def run(
 
     if verbose:
         print(f"\n[2/4] Создаём агентов (n={n_agents:,}, seed={seed})...")
-    df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed, commuting_path=commuting_path)
+    df = create_agents(agent_dist_path, n_agents=n_agents, seed=seed, commuting_path=commuting_path, G=G)
 
     # v3: Синхронизируем industry_jobs (occupied+vacant) и jobs_capacity в узлы графа.
     # INDUSTRY_JOBS_CAPACITY заполняется в create_agents → _init_industry_jobs.

@@ -46,7 +46,7 @@ from signals import EventBus, Event, EventType, Dispatcher, set_settlement_map
 # ── Константы ─────────────────────────────────────────────────────────────────
 
 # Фильтр 2 — дерево занятости
-MAX_JOBS_PRESSURE        = 1.20   # район считается перегруженным выше этого порога
+MAX_JOBS_PRESSURE        = 1.00   # v5: ratio-порог (>1.0 = переполнен)
 MAX_WORK_CANDIDATES      = 6      # максимум районов для скрининга
 
 HOUSING_BUDGET_RATIO     = 0.35   # жильё не должно превышать X доли зарплаты (×100м²)
@@ -479,12 +479,13 @@ def _execute_commute(
     old_wp = df.at[idx, "workplace_district"]
     agent_industry = str(df.at[idx, "industry"])
     
-    # v4: Вычитаем давление из старого района/отрасли
+    # v5: Вычитаем давление из старого района/отрасли (capacity-based)
     if old_wp and old_wp in G.nodes and df.at[idx, "is_employed"]:
         ind_jobs = G.nodes[old_wp].get("industry_jobs", {})
         if ind_jobs and agent_industry in ind_jobs:
-            vacant_old = ind_jobs[agent_industry].get("vacant", 1)
-            delta_old = -1.0 / max(vacant_old, 1)
+            cap_old = ind_jobs[agent_industry].get("capacity",
+                       ind_jobs[agent_industry].get("occupied", 0) + ind_jobs[agent_industry].get("vacant", 1))
+            delta_old = -1.0 / max(cap_old, 1)
             update_industry_pressure_delta(G, old_wp, agent_industry, delta_old)
     
     df.at[idx, "workplace_district"] = new_workplace
@@ -519,12 +520,13 @@ def _execute_commute(
         df.at[idx, "weak_ties_utility"] + 0.04, 0.0, 1.0
     ))
     
-    # v4: Добавляем давление в новый район/отрасль
+    # v5: Добавляем давление в новый район/отрасль (capacity-based)
     if new_workplace in G.nodes:
         ind_jobs = G.nodes[new_workplace].get("industry_jobs", {})
         if ind_jobs and agent_industry in ind_jobs:
-            vacant_new = ind_jobs[agent_industry].get("vacant", 1)
-            delta_new = 1.0 / max(vacant_new, 1)
+            cap_new = ind_jobs[agent_industry].get("capacity",
+                       ind_jobs[agent_industry].get("occupied", 0) + ind_jobs[agent_industry].get("vacant", 1))
+            delta_new = 1.0 / max(cap_new, 1)
             update_industry_pressure_delta(G, new_workplace, agent_industry, delta_new)
 
 
@@ -553,12 +555,13 @@ def _execute_move(
     old_workplace = str(df.at[idx, "workplace_district"])
     agent_industry = str(df.at[idx, "industry"])
     
-    # v4: Вычитаем давление из старого района/отрасли
+    # v5: Вычитаем давление из старого района/отрасли (capacity-based)
     if old_workplace and old_workplace in G.nodes and df.at[idx, "is_employed"]:
         ind_jobs = G.nodes[old_workplace].get("industry_jobs", {})
         if ind_jobs and agent_industry in ind_jobs:
-            vacant_old = ind_jobs[agent_industry].get("vacant", 1)
-            delta_old = -1.0 / max(vacant_old, 1)
+            cap_old = ind_jobs[agent_industry].get("capacity",
+                       ind_jobs[agent_industry].get("occupied", 0) + ind_jobs[agent_industry].get("vacant", 1))
+            delta_old = -1.0 / max(cap_old, 1)
             update_industry_pressure_delta(G, old_workplace, agent_industry, delta_old)
 
     df.at[idx, "district"]           = new_residence
@@ -600,12 +603,13 @@ def _execute_move(
     new_wage = float(max(0, rng.normal(base_wage, base_wage * 0.18)))
     df.at[idx, "wage"] = new_wage
     
-    # v4: Добавляем давление в новый район/отрасль
+    # v5: Добавляем давление в новый район/отрасль (capacity-based)
     if new_workplace in G.nodes:
         ind_jobs = G.nodes[new_workplace].get("industry_jobs", {})
         if ind_jobs and agent_industry in ind_jobs:
-            vacant_new = ind_jobs[agent_industry].get("vacant", 1)
-            delta_new = 1.0 / max(vacant_new, 1)
+            cap_new = ind_jobs[agent_industry].get("capacity",
+                       ind_jobs[agent_industry].get("occupied", 0) + ind_jobs[agent_industry].get("vacant", 1))
+            delta_new = 1.0 / max(cap_new, 1)
             update_industry_pressure_delta(G, new_workplace, agent_industry, delta_new)
 
     # Стресс переезда
@@ -1264,25 +1268,48 @@ def _fft_pipeline(
 
 # ── Исполнение сценарных событий ──────────────────────────────────────────────
 
-def _execute_factory_closed(
-    df: pd.DataFrame,
-    scenario_event: "ScenarioEvent",
+def _execute_new_employer(
+    district: str,
+    industry: str,
+    size: str,
     G: nx.DiGraph,
+    industry_shares: dict,
+    tick_num: int = 0,
+) -> int:
+    """
+    v5: Открытие нового работодателя.
+
+    1. +1 компания размера size в G.nodes[district][\"business\"]
+    2. Пересчёт ёмкости (capacity растёт → vacant растёт)
+    3. Возвращает примерное число добавленных рабочих мест.
+    """
+    from graph import change_company_count
+    n_jobs = change_company_count(G, district, size, +1, industry_shares)
+    return n_jobs
+
+
+def _execute_closed_employer(
+    df: pd.DataFrame,
+    district: str,
+    industry: str,
+    size: str,
+    G: nx.DiGraph,
+    industry_shares: dict,
     rng: np.random.Generator,
     bus: "Optional[EventBus]" = None,
     tick_num: int = 0,
-) -> None:
+) -> int:
     """
-    Прямое увольнение агентов для FACTORY_CLOSED.
+    v5: Закрытие работодателя.
 
-    v3: Граф-модификация (occupied_jobs) теперь идёт через signals (CLOSED_EMPLOYER),
-    здесь только выбор N случайных агентов и перевод в unemployed + LOST_JOB.
+    1. Увольнение агентов в district × industry (до SIZE_EMPLOYEES[size] человек)
+    2. −1 компания размера size → пересчёт ёмкости (capacity падает)
+    3. LOST_JOB каждому уволенному
+    4. Возвращает число уволенных.
     """
-    import numpy as np
+    from graph import change_company_count, SIZE_EMPLOYEES
 
-    district = scenario_event.district
-    industry = scenario_event.industry
-    n_target = scenario_event.n_agents_affected
+    n_target = SIZE_EMPLOYEES.get(size, 25)
 
     # Маска: занятые агенты в нужной отрасли и районе
     mask = (
@@ -1292,44 +1319,51 @@ def _execute_factory_closed(
         (df["status"].values != "student")
     )
     candidates = np.where(mask)[0]
-    if len(candidates) == 0:
-        return
+    n_fired = 0
 
-    n_actual = min(n_target, len(candidates))
-    chosen = rng.choice(candidates, size=n_actual, replace=False)
+    if len(candidates) > 0:
+        n_actual = min(n_target, len(candidates))
+        chosen = rng.choice(candidates, size=n_actual, replace=False)
 
-    for idx in chosen:
-        agent_id = int(df.at[idx, "id"])
-        residence = str(df.at[idx, "district"])
-        agent_industry = str(df.at[idx, "industry"])
-        old_workplace = str(df.at[idx, "workplace_district"])
-        
-        # v4: Вычитаем давление из старого района/отрасли перед потерей работы
-        if old_workplace and old_workplace in G.nodes and df.at[idx, "is_employed"]:
-            ind_jobs = G.nodes[old_workplace].get("industry_jobs", {})
-            if ind_jobs and agent_industry in ind_jobs:
-                vacant_old = ind_jobs[agent_industry].get("vacant", 1)
-                delta_old = -1.0 / max(vacant_old, 1)
-                update_industry_pressure_delta(G, old_workplace, agent_industry, delta_old)
+        for idx in chosen:
+            agent_id = int(df.at[idx, "id"])
+            residence = str(df.at[idx, "district"])
+            agent_industry = str(df.at[idx, "industry"])
+            old_workplace = str(df.at[idx, "workplace_district"])
 
-        df.at[idx, "status"] = "unemployed"
-        df.at[idx, "is_employed"] = False
-        df.at[idx, "intention_state"] = "seeking_work"
-        df.at[idx, "tpb_active"] = False
-        df.at[idx, "intention_delay"] = 0
-        df.at[idx, "workplace_district"] = df.at[idx, "district"]
+            # v5: Вычитаем давление (capacity-based)
+            if old_workplace and old_workplace in G.nodes and df.at[idx, "is_employed"]:
+                ind_jobs = G.nodes[old_workplace].get("industry_jobs", {})
+                if ind_jobs and agent_industry in ind_jobs:
+                    cap_old = ind_jobs[agent_industry].get("capacity",
+                               ind_jobs[agent_industry].get("occupied", 0) + ind_jobs[agent_industry].get("vacant", 1))
+                    delta_old = -1.0 / max(cap_old, 1)
+                    update_industry_pressure_delta(G, old_workplace, agent_industry, delta_old)
 
-        # v2: эмиссия LOST_JOB для сигнальной системы
-        if bus is not None:
-            bus.emit(Event(
-                event_type=EventType.LOST_JOB,
-                tick_emitted=tick_num,
-                source_agent_id=agent_id,
-                source_district=residence,
-                industry=industry,
-                magnitude=0.8,
-            ))
-            df.at[idx, "jobloss_econ_gap_bonus"] = 0.25
+            df.at[idx, "status"] = "unemployed"
+            df.at[idx, "is_employed"] = False
+            df.at[idx, "intention_state"] = "seeking_work"
+            df.at[idx, "tpb_active"] = False
+            df.at[idx, "intention_delay"] = 0
+            df.at[idx, "workplace_district"] = df.at[idx, "district"]
+
+            if bus is not None:
+                bus.emit(Event(
+                    event_type=EventType.LOST_JOB,
+                    tick_emitted=tick_num,
+                    source_agent_id=agent_id,
+                    source_district=residence,
+                    industry=industry,
+                    magnitude=0.8,
+                ))
+                df.at[idx, "jobloss_econ_gap_bonus"] = 0.25
+
+            n_fired += 1
+
+    # Убираем компанию → capacity падает
+    change_company_count(G, district, size, -1, industry_shares)
+
+    return n_fired
 
 
 def _execute_housing_shock(
@@ -1358,6 +1392,10 @@ def _execute_housing_shock(
         print(f"  [tick {tick_num}] HOUSING_SHOCK {district}: "
               f"жильё {direction} на {abs(delta):.1f} "
               f"(magnitude={magnitude:.2f}, остаток={G.nodes[district]['housing_remaining']:.1f})")
+
+
+# ── v5: маппинг размера компании → рабочие места ────────────────────────────
+_SIZE_LABEL_TO_JOBS = {"small": 25, "medium": 130, "big": 400}
 
 
 # ── Главный tick ──────────────────────────────────────────────────────────────
@@ -1526,16 +1564,53 @@ def tick(
 
     # ── COLLECT: сценарные события ──────────────────────────────────────────
     if scenario is not None:
+        # v5: industry_shares для пересчёта ёмкости (из init_dists)
+        industry_shares_map = {}
+        if init_dists:
+            for d, data in init_dists.items():
+                shares = data.get("industry", {})
+                if shares:
+                    industry_shares_map[d] = shares
+
         for se in scenario.get_events(tick_num):
-            # v3: Все события — в шину. Signals обрабатывает и агентов (df),
-            # и среду (G — industry_jobs, vacant/occupied).
+            # v5: Все события — в шину (агент-сигналы: social_boost, aspirations, etc.)
             if bus is not None:
                 bus.emit(se.to_event(tick_num))
 
-            # Прямое увольнение агентов для FACTORY_CLOSED (batch-операция —
-            # выбор N случайных агентов не укладывается в модель «сигнал-маска»).
-            if se.event_type == "FACTORY_CLOSED" and se.n_agents_affected > 0:
-                _execute_factory_closed(df, se, G, rng, bus=bus, tick_num=tick_num)
+            # v5: NEW_EMPLOYER — прямой обработчик графа
+            if se.event_type == "NEW_EMPLOYER":
+                size_label = se.size or "small"
+                shares = industry_shares_map.get(se.district, {})
+                n_jobs = _execute_new_employer(
+                    district=se.district,
+                    industry=se.industry,
+                    size=size_label,
+                    G=G,
+                    industry_shares=shares,
+                    tick_num=tick_num,
+                )
+                print(f"  [tick {tick_num}] NEW_EMPLOYER  {se.district}: "
+                      f"отрасль={se.industry}, размер={size_label}, "
+                      f"+{n_jobs} рабочих мест")
+
+            # v5: CLOSED_EMPLOYER — прямой обработчик: увольнение + граф
+            if se.event_type == "CLOSED_EMPLOYER":
+                size_label = se.size or "small"
+                shares = industry_shares_map.get(se.district, {})
+                n_fired = _execute_closed_employer(
+                    df=df,
+                    district=se.district,
+                    industry=se.industry,
+                    size=size_label,
+                    G=G,
+                    industry_shares=shares,
+                    rng=rng,
+                    bus=bus,
+                    tick_num=tick_num,
+                )
+                print(f"  [tick {tick_num}] CLOSED_EMPLOYER {se.district}: "
+                      f"отрасль={se.industry}, размер={size_label}, "
+                      f"−{n_fired} уволено")
 
             # v11: Прямое изменение жилья для HOUSING_SHOCK
             if se.event_type == "HOUSING_SHOCK":

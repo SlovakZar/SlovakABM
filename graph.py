@@ -45,6 +45,68 @@ WAGE_ALPHA    = 0.02
 AGENT_HOUSING_FOOTPRINT = 1.1   # один агент занимает ~1.1 условных квартир
 HOUSING_REMAINING_FLOOR = 1.5   # пол для remaining (порог остановки роста цены)
 
+# ── v5: Ёмкость рынка от компаний ────────────────────────────────────────────
+SIZE_EMPLOYEES = {"small": 25, "medium": 130, "large": 400}
+
+
+def recompute_industry_jobs(G: nx.DiGraph, district: str, industry_shares: dict) -> None:
+    """
+    v5: Пересчитывает industry_jobs[district] на основе текущего числа компаний.
+
+    capacity = Σ(size × employees_per_size)
+    По отраслям: capacity_ind = capacity × industry_share
+    vacant = max(0, capacity_ind − occupied)
+
+    Вызывается после change_company_count() и при инициализации.
+    """
+    biz = G.nodes[district].get("business", {})
+    if not biz:
+        return
+
+    total_cap = (biz.get("small_companies", 0) * SIZE_EMPLOYEES["small"] +
+                 biz.get("medium_companies", 0) * SIZE_EMPLOYEES["medium"] +
+                 biz.get("large_companies", 0) * SIZE_EMPLOYEES["large"])
+    if total_cap <= 0:
+        return
+
+    ind_jobs = G.nodes[district].get("industry_jobs", {})
+    if not ind_jobs or not industry_shares:
+        return
+
+    total_share = sum(industry_shares.values()) or 1.0
+    for ind, share in industry_shares.items():
+        if ind not in ind_jobs:
+            continue
+        norm_share = share / total_share
+        cap_ind = max(1, int(total_cap * norm_share))
+        occ = ind_jobs[ind].get("occupied", 0)
+        ind_jobs[ind]["vacant"] = max(0, cap_ind - occ)
+        ind_jobs[ind]["capacity"] = cap_ind
+
+    G.nodes[district]["jobs_capacity"] = max(1, total_cap)
+
+
+def change_company_count(G: nx.DiGraph, district: str, size: str, delta: int,
+                         industry_shares: dict) -> int:
+    """
+    v5: +1 или −1 компанию размера size. Пересчитывает ёмкость.
+
+    Возвращает примерное число затронутых рабочих мест.
+    """
+    if district not in G.nodes:
+        return 0
+    biz = G.nodes[district].get("business")
+    if not biz:
+        return 0
+
+    key = f"{size}_companies"
+    old_val = biz.get(key, 0)
+    biz[key] = max(0, old_val + delta)
+
+    n_jobs = SIZE_EMPLOYEES.get(size, 25)
+    recompute_industry_jobs(G, district, industry_shares)
+    return n_jobs
+
 # ── Spillover инфраструктуры ─────────────────────────────────────────────────
 SPILLOVER_WEIGHT = 0.25         # вес бонуса от соседей (0 = выключен)
 SPILLOVER_TIME_MAX = 90.0       # макс. время в пути (мин), после которого spillover = 0
@@ -513,61 +575,55 @@ def update_industry_pressure(G: nx.DiGraph, df=None):
 
 def initialize_industry_pressure_from_agents(G: nx.DiGraph, df: pd.DataFrame) -> None:
     """
-    v4: Инициализирует industry_pressure с учетом начального распределения агентов.
-    
+    v5: Инициализирует industry_pressure как ratio: agents / capacity.
+
     Вызывается один раз после создания агентов и sync_industry_jobs_to_graph.
-    Обновляет pressure для каждого (district, industry) на основе количества
-    занятых агентов в каждой отрасли.
+    pressure > 1.0 → рынок переполнен.
     """
-    # Подсчитываем занятых агентов по (workplace_district, industry)
     employed = df[df["is_employed"]]
     wp_ind_counts = (employed
                      .groupby(["workplace_district", "industry"])["id"]
                      .count()
                      .to_dict())
-    
+
     for district in G.nodes:
         ind_jobs = G.nodes[district].get("industry_jobs", {})
         pressure_dict = G.nodes[district].get("industry_pressure", {})
-        
+
         if ind_jobs and pressure_dict:
-            # Для каждой отрасли в этом районе добавляем delta за каждого агента
             for industry in ind_jobs.keys():
                 cnt = wp_ind_counts.get((district, industry), 0)
-                if cnt > 0:
-                    vacant = ind_jobs[industry].get("vacant", 1)
-                    # Добавляем delta за каждого агента
-                    delta_per_agent = 1.0 / max(vacant, 1)
-                    pressure_dict[industry] = 1.0 + (cnt * delta_per_agent)
+                cap = ind_jobs[industry].get("capacity",
+                       ind_jobs[industry].get("occupied", 1) + ind_jobs[industry].get("vacant", 0))
+                pressure_dict[industry] = cnt / max(cap, 1)
 
 
 def update_industry_pressure_delta(G: nx.DiGraph, district: str, industry: str, 
                                     delta: float) -> None:
     """
-    v4: Обновляет industry_pressure по накопительной системе.
-    
-    При заполнении вакансии: delta = +1 / max(vacant, 1)
-    При освобождении: delta = -1 / max(vacant, 1)
-    
+    v5: Обновляет industry_pressure по ratio-системе.
+
+    При заполнении: delta = +1 / max(capacity, 1)
+    При освобождении: delta = -1 / max(capacity, 1)
+
+    capacity = occupied + vacant из industry_jobs.
+
     Вызывается из engine.py при событиях COMMUTE/JOB_CHANGE/AGENT_MOVED.
     """
     if district not in G.nodes:
         return
-    
+
     pressure_dict = G.nodes[district].get("industry_pressure", {})
     if not pressure_dict:
-        # Инициализируем если не было
         capacity = G.nodes[district].get("industry_capacity", {})
-        pressure_dict = {ind: 1.0 for ind in capacity.keys()}
+        pressure_dict = {ind: 0.0 for ind in capacity.keys()}
         G.nodes[district]["industry_pressure"] = pressure_dict
-    
+
     if industry in pressure_dict:
-        # Обновляем с ограничением снизу
         new_pressure = pressure_dict[industry] + delta
         pressure_dict[industry] = max(0.0, new_pressure)
     else:
-        # Если отрасли нет в давлении — инициализируем
-        pressure_dict[industry] = 1.0 + delta
+        pressure_dict[industry] = max(0.0, delta)
 
 
 def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacity: dict):
