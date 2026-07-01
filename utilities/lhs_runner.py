@@ -594,7 +594,7 @@ def lhs_test(
         )
 
         # v3: Синхронизируем industry_jobs (occupied+vacant) и jobs_capacity
-        sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
+        sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY, n_agents=n_agents)
 
         # Создаём шину с кастомным dispatcher
         dispatcher = create_patched_dispatcher(signal_params)

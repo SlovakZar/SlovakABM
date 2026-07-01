@@ -57,17 +57,25 @@ def recompute_industry_jobs(G: nx.DiGraph, district: str, industry_shares: dict)
     По отраслям: capacity_ind = capacity × industry_share
     vacant = max(0, capacity_ind − occupied)
 
+    ВНИМАНИЕ: business-данные хранятся в реальных величинах (на ~5.4M жителей),
+    поэтому ёмкость масштабируется через G.graph["agent_scale"].
+    Если scale не задан (нет в графе), используется 1.0 (без масштабирования).
+
     Вызывается после change_company_count() и при инициализации.
     """
     biz = G.nodes[district].get("business", {})
     if not biz:
         return
 
+    scale = G.graph.get("agent_scale", 1.0)
+
     total_cap = (biz.get("small_companies", 0) * SIZE_EMPLOYEES["small"] +
                  biz.get("medium_companies", 0) * SIZE_EMPLOYEES["medium"] +
                  biz.get("large_companies", 0) * SIZE_EMPLOYEES["large"])
     if total_cap <= 0:
         return
+
+    total_cap = max(1, int(total_cap * scale))
 
     ind_jobs = G.nodes[district].get("industry_jobs", {})
     if not ind_jobs or not industry_shares:
@@ -626,9 +634,13 @@ def update_industry_pressure_delta(G: nx.DiGraph, district: str, industry: str,
         pressure_dict[industry] = max(0.0, delta)
 
 
-def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacity: dict):
+def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacity: dict,
+                                 n_agents: int = 0):
     """
-    v3: Синхронизирует INDUSTRY_JOBS_CAPACITY и JOBS_CAPACITY в узлы графа.
+    v3/v5: Синхронизирует INDUSTRY_JOBS_CAPACITY и JOBS_CAPACITY в узлы графа.
+
+    Также устанавливает G.graph["agent_scale"] = n_agents / real_population
+    для масштабирования business-ёмкости (recompute_industry_jobs).
 
     Вызывается из run.py после create_agents().
     """
@@ -640,6 +652,13 @@ def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacit
             }
         if district in jobs_capacity:
             G.nodes[district]["jobs_capacity"] = jobs_capacity[district]
+
+    # Устанавливаем scale-фактор для бизнес-данных
+    if n_agents > 0:
+        total_real_pop = sum(
+            G.nodes[d].get("real_population", 0) for d in G.nodes
+        )
+        G.graph["agent_scale"] = n_agents / max(total_real_pop, 1)
 
 
 def print_graph_summary(G: nx.DiGraph):

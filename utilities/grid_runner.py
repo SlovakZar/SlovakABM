@@ -188,7 +188,7 @@ def _run_single_plan(args: tuple) -> tuple:
     df = create_agents(agent_dist_path, agent_params_path, comm_path,
                        n_agents=n_agents, seed=seed)
 
-    sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
+    sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY, n_agents=n_agents)
     initialize_industry_pressure_from_agents(G, df)
 
     dispatcher = create_patched_dispatcher(signal_params)
@@ -297,7 +297,7 @@ def grid_run(
                 n_agents=n_agents, seed=seed,
             )
 
-            sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY)
+            sync_industry_jobs_to_graph(G, INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY, n_agents=n_agents)
             initialize_industry_pressure_from_agents(G, df)
 
             dispatcher = create_patched_dispatcher(signal_params)

@@ -316,6 +316,10 @@ def _init_industry_jobs(init_dists: dict, n_agents: int, G: "nx.DiGraph | None" 
             total_share = 1.0
 
         # ── v5: Ёмкость от компаний, если есть граф ──────────────────────
+        # ВНИМАНИЕ: capacity масштабируется под n_agents (scale = n_agents / total_pop),
+        # так как business-данные отражают реальную популяцию (~5.4M),
+        # а не модельную (обычно 70k). Без scale вакансии получаются
+        # непропорционально большими (см. issue #...).
         total_capacity_from_business = 0
         if G is not None and district in G.nodes:
             biz = G.nodes[district].get("business", {})
@@ -325,6 +329,7 @@ def _init_industry_jobs(init_dists: dict, n_agents: int, G: "nx.DiGraph | None" 
                     biz.get("medium_companies", 0) * SIZE_EMP["medium"] +
                     biz.get("large_companies", 0) * SIZE_EMP["large"]
                 )
+                total_capacity_from_business = max(1, int(total_capacity_from_business * scale))
 
         district_jobs: dict[str, dict[str, int]] = {}
         district_total_capacity = 0

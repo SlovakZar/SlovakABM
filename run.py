@@ -55,7 +55,7 @@ def run(
 
     # v3: Синхронизируем industry_jobs (occupied+vacant) и jobs_capacity в узлы графа.
     # INDUSTRY_JOBS_CAPACITY заполняется в create_agents → _init_industry_jobs.
-    sync_industry_jobs_to_graph(G, _ag.INDUSTRY_JOBS_CAPACITY, _ag.JOBS_CAPACITY)
+    sync_industry_jobs_to_graph(G, _ag.INDUSTRY_JOBS_CAPACITY, _ag.JOBS_CAPACITY, n_agents=n_agents)
     
     # v4: Инициализируем industry_pressure с учетом начального распределения агентов
     initialize_industry_pressure_from_agents(G, df)

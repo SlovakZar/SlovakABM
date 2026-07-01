@@ -11,11 +11,14 @@ v7 (тепловая карта регионов):
   - Устойчивость к старым данным: все поля проверяются через .get().
 """
 
+import math
 import pandas as pd
 import numpy as np
 from typing import Optional, List, Dict
 from collections import Counter, defaultdict
 import networkx as nx
+
+from agents import DISTRICT_TO_REGION_CODE
 
 
 
@@ -329,13 +332,38 @@ def _district_heatmap(
         # fallback: если CSV нет, простой круговой layout
         pos = nx.circular_layout(G)
 
+    # ── Коррекция пропорций Словакии ──────────────────────────────────────
+    # Словакия вытянута с З→В: размах lon ~5.3°, lat ~1.6°.
+    # На широте ~48.15° градус долготы короче градуса широты в cos(48.15°) ≈ 0.667 раз.
+    # Сжимаем x (lon) на cos(center_lat), чтобы получить приблизительно равные
+    # физические расстояния по осям.
+    center_lat_deg = 48.15  # средняя широта Словакии
+    lat_correction = math.cos(math.radians(center_lat_deg))
+    for node in pos:
+        x, y = pos[node]
+        pos[node] = (x * lat_correction, y)
+
+    # Вычисляем пропорции для figsize
+    xs = [p[0] for p in pos.values()]
+    ys = [p[1] for p in pos.values()]
+    x_range = max(xs) - min(xs) if xs else 1
+    y_range = max(ys) - min(ys) if ys else 1
+    # Добавляем небольшой запас по краям (15%)
+    pad = 0.15
+    x_range *= (1 + pad)
+    y_range *= (1 + pad)
+
     # 3. Цвета: красный(-) → белый(0) → зелёный(+)
     vmin_d = min(deltas)
     vmax_d = max(deltas)
     cmap = plt.cm.RdYlGn
 
-    # 4. Рисуем
-    fig, ax = plt.subplots(1, 1, figsize=(24, 20))
+    # 4. Рисуем — размер фигуры по пропорциям Словакии
+    base_width = 20
+    aspect = x_range / max(y_range, 0.01)
+    fig_h = base_width / aspect
+    fig, ax = plt.subplots(1, 1, figsize=(base_width, fig_h))
+    ax.set_aspect("equal")
 
     # Рёбра с прозрачностью по потоку
     edge_weights = []
@@ -490,6 +518,139 @@ def industry_jobs_snapshot(G, df=None, top_n: int = 12) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 7b. RANDOM REGION INDUSTRY JOBS — случайные регионы и отрасли
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Все возможные отрасли (для случайного выбора)
+ALL_INDUSTRIES = [
+    "Accommodation and food service activities",
+    "Administrative and support service activities",
+    "Agriculture, forestry and fishing",
+    "Construction",
+    "Human health and social work activities",
+    "Information and communication",
+    "Manufacturing total",
+    "Other",
+    "Professional, scientific and technical activities",
+    "Public administration and defence",
+    "Transportation and storage",
+    "Water supply; sewerage, waste management and remediation activities",
+    "Wholesale and retail trade; repair of motor vehicles and motorcycles",
+]
+
+
+def _random_region_industry_jobs(
+    G,
+    df: Optional[pd.DataFrame] = None,
+    n_regions: int = 3,
+    n_industries: int = 3,
+    seed: int = 42,
+) -> str:
+    """
+    Выбирает n_regions случайных регионов и n_industries случайных отраслей
+    для каждого, показывает занятые (occupied) и свободные (vacant) места.
+
+    Данные агрегируются по району (okres) → регион (kraj) через
+    DISTRICT_TO_REGION_CODE.
+
+    Если передан df, occupied считается по фактическим агентам в регионе.
+    """
+    lines = []
+    lines.append(_section(
+        f"СЛУЧАЙНЫЕ РЕГИОНЫ И ОТРАСЛИ: ЗАНЯТЫЕ И СВОБОДНЫЕ МЕСТА "
+        f"({n_regions} рег. × {n_industries} отр.)"
+    ))
+
+    if G is None:
+        lines.append("  [Граф не передан]")
+        return "\n".join(lines)
+
+    rng = np.random.default_rng(seed)
+
+    # 1. Агрегируем industry_jobs по регионам
+    region_data: dict[str, dict[str, dict[str, int]]] = {}
+    # {region: {industry: {"occupied": int, "vacant": int}}}
+
+    for district in G.nodes:
+        ind_jobs = G.nodes[district].get("industry_jobs", {})
+        if not ind_jobs:
+            continue
+        region_code = DISTRICT_TO_REGION_CODE.get(district, "XX")
+        if region_code not in region_data:
+            region_data[region_code] = {}
+        for industry, jobs in ind_jobs.items():
+            if industry not in region_data[region_code]:
+                region_data[region_code][industry] = {"occupied": 0, "vacant": 0}
+            region_data[region_code][industry]["occupied"] += jobs.get("occupied", 0)
+            region_data[region_code][industry]["vacant"]   += jobs.get("vacant", 0)
+
+    if not region_data:
+        lines.append("  [Нет данных industry_jobs в графе]")
+        return "\n".join(lines)
+
+    # 2. Фактические занятые по регионам из df (если передан)
+    actual_by_region_industry: dict[str, dict[str, int]] = {}
+    if df is not None and "workplace_district" in df.columns and "industry" in df.columns:
+        for _, agent in df.iterrows():
+            wp = agent.get("workplace_district", "")
+            ind = str(agent.get("industry", ""))
+            reg = DISTRICT_TO_REGION_CODE.get(wp, "XX")
+            if reg not in actual_by_region_industry:
+                actual_by_region_industry[reg] = {}
+            if ind not in actual_by_region_industry[reg]:
+                actual_by_region_industry[reg][ind] = 0
+            actual_by_region_industry[reg][ind] += 1
+
+    # 3. Выбираем случайные регионы
+    all_region_codes = sorted(region_data.keys())
+    if len(all_region_codes) < n_regions:
+        selected_regions = all_region_codes
+    else:
+        selected_regions = list(rng.choice(all_region_codes, n_regions, replace=False))
+
+    # 4. Для каждого региона выбираем случайные отрасли и выводим
+    for region_code in selected_regions:
+        region_name = REGION_NAMES.get(region_code, region_code)
+        industries = region_data[region_code]
+
+        # Все отрасли в этом регионе
+        all_inds = sorted(industries.keys())
+        n_sel = min(n_industries, len(all_inds))
+
+        if n_sel < n_industries:
+            selected_inds = all_inds  # меньше отраслей чем запрошено
+        else:
+            selected_inds = list(rng.choice(all_inds, n_sel, replace=False))
+
+        # Суммарные данные по региону
+        total_occ = sum(v["occupied"] for v in industries.values())
+        total_vac = sum(v["vacant"] for v in industries.values())
+        total_cap = total_occ + total_vac
+
+        lines.append(f"\n  ── {region_name} (код: {region_code}) ──")
+        lines.append(f"  Всего по региону: {total_occ:>8,} занято, "
+                     f"{total_vac:>8,} свободно, {total_cap:>8,} всего")
+        lines.append("")
+        lines.append(f"  {'Отрасль':<55} {'Occupied':>10} {'Vacant':>10} "
+                     f"{'Всего':>10} {'Факт':>10} {'Свободно%':>10}")
+        lines.append("  " + _hline(110))
+
+        for ind in selected_inds:
+            jobs = industries[ind]
+            occ = jobs["occupied"]
+            vac = jobs["vacant"]
+            cap = occ + vac
+            actual = actual_by_region_industry.get(region_code, {}).get(ind, occ)
+            free_pct = vac / max(cap, 1) * 100
+            ind_short = str(ind)[:53]
+            lines.append(f"  {ind_short:<55} {occ:>10,} {vac:>10,} "
+                         f"{cap:>10,} {actual:>10,} {free_pct:>9.1f}%")
+
+    lines.append("\n" + "=" * 78)
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 1. DEMOGRAPHIC PORTRAIT — основной портрет с приоритезацией метрик
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -610,58 +771,6 @@ def demographic_portrait(
 
     # ═══ ВАЖНЫЕ МЕТРИКИ ══════════════════════════════════════════════════════
     lines.append(_section("ВАЖНЫЕ МЕТРИКИ"))
-
-    # Satisfaction по доменам
-    lines.append("  SATISFACTION ПО ДОМЕНАМ (0–1, средние)")
-    sat_items = [
-        ("sat_economic", "Economic"),
-        ("sat_social",   "Social  "),
-        ("sat_family",   "Family  "),
-        ("sat_place",    "Place   "),
-    ]
-    sat_max = 0
-    sat_vals = {}
-    for col, label_d in sat_items:
-        if col in work_df.columns:
-            m = work_df[col].mean()
-            sat_vals[col] = m
-            if m > sat_max:
-                sat_max = m
-    for col, label_d in sat_items:
-        if col in sat_vals:
-            m = sat_vals[col]
-            bar = _bar(m, max(sat_max, 1.0), width=22)
-            lines.append(f"  {label_d}  {m:.4f}  {bar}")
-
-    # Gaps по доменам с разбивкой по статусам
-    lines.append(_section("ДЕФИЦИТЫ (GAPS) ПО ДОМЕНАМ × СТАТУСАМ ЗАНЯТОСТИ"))
-    domains = [
-        ("sat_economic", "thr_economic", "Economic"),
-        ("sat_social",   "thr_social",   "Social  "),
-        ("sat_family",   "thr_family",   "Family  "),
-        ("sat_place",    "thr_place",    "Place   "),
-    ]
-
-    statuses = ["stay", "commute", "unemployed"]
-    status_labels = {"stay": "Stay    ", "commute": "Commute ", "unemployed": "Unemp   "}
-
-    for sat_col, thr_col, dom_name in domains:
-        if sat_col not in work_df.columns or thr_col not in work_df.columns:
-            continue
-        lines.append(f"\n  ── {dom_name} ──")
-        lines.append(f"  {'Статус':<10} {'Gap средний':>12}  {'Gap медиана':>12}  {'Доля gap>0':>10}")
-
-        for st in statuses:
-            subset = work_df[work_df["status"] == st] if "status" in work_df.columns else pd.DataFrame()
-            if subset.empty:
-                continue
-            thr = subset[thr_col].clip(lower=0.01)
-            sat = subset[sat_col]
-            gaps = (thr - sat) / thr
-            gap_mean = gaps.mean()
-            gap_med  = gaps.median()
-            gap_pos  = (gaps > 0).mean()
-            lines.append(f"  {status_labels.get(st, st):<10} {gap_mean:>12.4f}  {gap_med:>12.4f}  {gap_pos:>9.1%}")
 
     # Топ-5 отраслей
     employed = work_df[work_df["is_employed"] == True] if "is_employed" in work_df.columns else work_df[work_df["status"].isin(["stay", "commute"])]
@@ -858,20 +967,14 @@ def migration_summary(tick_stats: list) -> str:
     yearly_total    = {}
     yearly_econ     = {}
     yearly_place    = {}
-    yearly_wage     = {}
-    yearly_dissat   = {}
     yearly_unemp    = {}
-    yearly_pressure = {}
 
     for s in tick_stats:
         year = (s["tick"] - 1) // 12 + 1
         yearly_total.setdefault(year, []).append(s.get("moves", 0))
         yearly_econ.setdefault(year, []).append(s.get("econ_driven_moves", 0))
         yearly_place.setdefault(year, []).append(s.get("place_driven_moves", 0))
-        yearly_wage.setdefault(year, []).append(s.get("avg_wage", 0))
-        yearly_dissat.setdefault(year, []).append(s.get("avg_dissat", 0))
         yearly_unemp.setdefault(year, []).append(s.get("n_unemployed", 0))
-        yearly_pressure.setdefault(year, []).append(s.get("jobs_pressure_max", 0))
 
     years = sorted(yearly_total.keys())
 
@@ -896,19 +999,6 @@ def migration_summary(tick_stats: list) -> str:
             bar = _bar(t, max_moves, width=22)
             lines.append(f"  Год {year:2d}  {t:>6,} актов переезда  {bar}")
 
-    # ── Тренд зарплат ───────────────────────────────────────────────────────
-    lines.append(_section("ТРЕНД СРЕДНЕЙ ЗАРПЛАТЫ ПО ГОДАМ"))
-    wage_vals = [sum(yearly_wage[y]) / len(yearly_wage[y]) if yearly_wage[y] else 0 for y in years]
-    wage_min = min(wage_vals) if wage_vals else 0
-    wage_max = max(wage_vals) if wage_vals else 1
-    wage_range = wage_max - wage_min if wage_max > wage_min else 1
-    lines.append(f"  {'Год':<6} {'Ср.зарплата':>12}  {'Норм':>6}  {'':30}")
-    lines.append("  " + _hline(60))
-    for year, w_avg in zip(years, wage_vals):
-        norm = (w_avg - wage_min) / wage_range if wage_range > 0 else 0.5
-        bar = _bar(norm, 1.0, width=30)
-        lines.append(f"  {year:<6} {w_avg:>10,.0f} €  {norm:>5.2f}  {bar}")
-
     # ── Тренд безработицы ───────────────────────────────────────────────────
     lines.append(_section("ТРЕНД БЕЗРАБОТИЦЫ ПО ГОДАМ"))
     unemp_vals = [sum(yearly_unemp[y]) / len(yearly_unemp[y]) if yearly_unemp[y] else 0 for y in years]
@@ -918,26 +1008,6 @@ def migration_summary(tick_stats: list) -> str:
     for year, u_avg in zip(years, unemp_vals):
         bar = _bar(u_avg, unemp_max, width=30) if unemp_max > 0 else " " * 30
         lines.append(f"  {year:<6} {u_avg:>10,.0f}  {bar}")
-
-    # ── Тренд dissatisfaction ───────────────────────────────────────────────
-    lines.append(_section("ТРЕНД НЕУДОВЛЕТВОРЁННОСТИ (DISSAT) ПО ГОДАМ"))
-    dissat_vals = [sum(yearly_dissat[y]) / len(yearly_dissat[y]) if yearly_dissat[y] else 0 for y in years]
-    dissat_max = max(dissat_vals) if dissat_vals else 1
-    lines.append(f"  {'Год':<6} {'Avg Dissat':>12}  {'':30}")
-    lines.append("  " + _hline(52))
-    for year, d_avg in zip(years, dissat_vals):
-        bar = _bar(d_avg, dissat_max, width=30) if dissat_max > 0 else " " * 30
-        lines.append(f"  {year:<6} {d_avg:>12.4f}  {bar}")
-
-    # ── Тренд jobs_pressure_max ─────────────────────────────────────────────
-    lines.append(_section("ТРЕНД МАКС. ДАВЛЕНИЯ НА РЫНОК ТРУДА (JOBS PRESSURE)"))
-    press_vals = [sum(yearly_pressure[y]) / len(yearly_pressure[y]) if yearly_pressure[y] else 0 for y in years]
-    press_max = max(press_vals) if press_vals else 1
-    lines.append(f"  {'Год':<6} {'Jobs Press. max':>16}  {'':30}")
-    lines.append("  " + _hline(56))
-    for year, p_avg in zip(years, press_vals):
-        bar = _bar(p_avg, press_max, width=30) if press_max > 0 else " " * 30
-        lines.append(f"  {year:<6} {p_avg:>16.2f}  {bar}")
 
     lines.append("=" * 78)
     return "\n".join(lines)
@@ -1795,6 +1865,7 @@ DEFAULT_SECTIONS = {
     "master_table":     True,   # Мастер-таблица 79 районов + жильё
     "top_routes":       True,   # Топ-10 переездов и commute
     "heatmap":          True,   # Тепловая карта
+    "random_industry":  True,   # Случайные регионы и отрасли
     "behavior_audit":   False,  # Поведенческий аудит (только detail)
 }
 
@@ -1845,7 +1916,11 @@ def summary_report(
     if sections.get("master_table", True) and G is not None and tick_stats:
         parts.append(master_district_table(tick_stats, G, all_action_log, snapshots=snapshots))
 
-    # 5. ТОП-10 ПЕРЕЕЗДОВ И COMMUTE
+    # 5. СЛУЧАЙНЫЕ РЕГИОНЫ И ОТРАСЛИ
+    if sections.get("random_industry", True) and G is not None:
+        parts.append(_random_region_industry_jobs(G, df=df_final, n_regions=3, n_industries=3))
+
+    # 6. ТОП-10 ПЕРЕЕЗДОВ И COMMUTE
     if sections.get("top_routes", True) and all_action_log is not None:
         top_moves = _top_move_routes(all_action_log, top_n=10)
         if top_moves:
@@ -1855,7 +1930,7 @@ def summary_report(
             if top_comm:
                 parts.append(top_comm)
 
-    # 6. ТЕПЛОВАЯ КАРТА
+    # 7. ТЕПЛОВАЯ КАРТА
     if sections.get("heatmap", True) and G is not None and tick_stats:
         heatmap_block = _district_heatmap(tick_stats, G, snapshots=snapshots)
         if heatmap_block:
