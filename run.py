@@ -84,7 +84,7 @@ def run(
         snapshot_ticks=snapshot_ticks,
         seed=seed,
         verbose=verbose,
-        jobs_capacity=JOBS_CAPACITY,
+        jobs_capacity=_ag.JOBS_CAPACITY,
         init_dists=init_dists,
         bus=bus,
         scenario=scenario,
