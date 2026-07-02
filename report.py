@@ -64,7 +64,7 @@ def _append_dynamic_vars_section(lines: list, df: pd.DataFrame) -> None:
         ("econ_penalty",             "Econ Penalty",           "penalty to D_econ"),
         ("infra_bonus",              "Infra Bonus",            "infrastructure bonus"),
         ("inertia_mobility_penalty", "Inertia Mobility Penalty", "inertia penalty from neighbors"),
-        ("jobloss_econ_gap_bonus",   "Jobloss Econ Gap Bonus", "ramp-bonus to econ_gap от LOST_JOB"),
+        ("jobloss_econ_gap_bonus",   "Jobloss Econ Gap Bonus", "ramp-bonus to econ_gap from LOST_JOB"),
         ("migration_pressure",       "Migration Pressure",     "accumulated migration pressure"),
     ]
 
@@ -128,7 +128,7 @@ def _build_region_time_series(tick_stats: list, G) -> str:
     """
     Builds table of all districts (okresy) by ticks: population, Δ.
 
-    district_counts из tick_stats по каждому району графа.
+    district_counts from tick_stats for each graph node.
     """
     if not tick_stats or G is None:
         return ""
@@ -147,7 +147,7 @@ def _build_region_time_series(tick_stats: list, G) -> str:
             district_series[d].append(dc.get(d, 0))
 
     lines = []
-    lines.append(_section(f"ALL DISTRICTS BY TICK: POPULATION ({len(all_districts)} okresov)"))
+    lines.append(_section(f"ALL DISTRICTS BY TICK: POPULATION ({len(all_districts)} districts)"))
     lines.append(f"  Ticks: {n_ticks}")
     lines.append("")
 
@@ -186,13 +186,13 @@ def _build_region_time_series(tick_stats: list, G) -> str:
 def _top_move_routes(all_action_log: list, top_n: int = 10) -> str:
     """
     Top-N physical move directions (move / satellite_move):
-    origin (origin) и куда пришли (destination).
+    origin (departure) and destination (arrival).
     """
     if not all_action_log:
         return ""
 
-    origins = Counter()   # откуда уехали
-    destinations = Counter()  # destination
+    origins = Counter()      # where they left from
+    destinations = Counter()  # where they arrived
 
     for entry in all_action_log:
         decision = entry.get("decision", "")
@@ -208,7 +208,7 @@ def _top_move_routes(all_action_log: list, top_n: int = 10) -> str:
         return ""
 
     lines = []
-    lines.append(_section(f"ТОП-{top_n} НАПРАВЛЕНИЙ ПЕРЕЕЗДОВ (MOVE / SATELLITE_MOVE)"))
+    lines.append(_section(f"TOP-{top_n} RELOCATION DIRECTIONS (MOVE / SATELLITE_MOVE)"))
     lines.append(f"  {'Origin (departed)':<28} {'Count':>8}    "
                  f"{'Destination (arrived)':<28} {'Count':>8}")
     lines.append("  " + _hline(76, "─"))
@@ -227,13 +227,13 @@ def _top_move_routes(all_action_log: list, top_n: int = 10) -> str:
 
 def _top_commute_routes(all_action_log: list, top_n: int = 10) -> str:
     """
-    Топ-N направлений new commutes (откуда → куда на работу).
+    Top-N new commute directions (where they live → where they work).
     Counts pairs (prev_residence, new_workplace) for commute decisions.
     """
     if not all_action_log:
         return ""
 
-    routes = Counter()  # (откуда живёт, куда на работу)
+    routes = Counter()  # (residence, workplace)
 
     for entry in all_action_log:
         if entry.get("decision") == "commute":
@@ -246,7 +246,7 @@ def _top_commute_routes(all_action_log: list, top_n: int = 10) -> str:
         return ""
 
     lines = []
-    lines.append(_section(f"ТОП-{top_n} НАПРАВЛЕНИЙ НОВОГО COMMUTE"))
+    lines.append(_section(f"TOP-{top_n} NEW COMMUTE DIRECTIONS"))
     lines.append(f"  {'Lives in district':<26} →  {'Works in district':<26} | {'Agents':>7}")
     lines.append("  " + _hline(68, "─"))
 
@@ -269,18 +269,18 @@ def _district_heatmap(
 ) -> str:
     """
     Draws district heatmap graph 79 districts by real coordinates:
-      - Цвет узла: зелёный = прирост population, красный = убыль
+      - Node color: green = population growth, red = decline
       - Node size: district population
       - Edge thickness: commuting flow intensity
       - Positions: from valid_districts_coords.csv (lon/lat), center — Bratislava I (0,0)
 
-    Saves PNG, returns Markdown string для вставки в отчёт.
+    Saves PNG, returns Markdown string for embedding in report.
     """
     try:
         import matplotlib.pyplot as plt
         import matplotlib.colors as mcolors
     except ImportError:
-        return "\n  [Heatmap unavailable — matplotlib не установлен]"
+        return "\n  [Heatmap unavailable — matplotlib not installed]"
 
     if not tick_stats or G is None:
         return ""
@@ -308,7 +308,7 @@ def _district_heatmap(
 
     delta_range = max(abs(d) for d in deltas) if deltas else 0
     if delta_range == 0:
-        return "\n  [Нет изменения population — heatmap not generated]"
+        return "\n  [No population change — heatmap not generated]"
 
     # 2. Node positions from valid_districts_coords.csv
     #    lon → x, lat → y, center on Bratislava I
@@ -399,8 +399,8 @@ def _district_heatmap(
 
     n_ticks = len(tick_stats)
     ax.set_title(
-        f"Δ population по районам Словакии (тики 1–{n_ticks})\n"
-        f"Зелёный = прирост, Красный = убыль | Размер узла = население",
+        f"Δ population by districts of Slovakia (ticks 1–{n_ticks})\n"
+        f"Green = growth, Red = decline | Node size = population",
         fontsize=14, fontweight="bold",
     )
     ax.axis("off")
@@ -417,7 +417,7 @@ def _district_heatmap(
     plt.close()
 
     return (
-        f"\n  🗺 Тепловая карта: `{output_path}`\n"
+        f"\n  🗺 Heatmap: `{output_path}`\n"
         f"  ![District Heatmap]({output_path})\n"
     )
 
@@ -429,17 +429,17 @@ def industry_jobs_snapshot(G, df=None, top_n: int = 12) -> str:
     v3: Industry jobs snapshot — occupied and vacant positions by industry.
 
     Shows for top-N districts (by total capacity) breakdown:
-      occupied — занятые moта (агенты с workplace=district)
-      vacant   — открытые вакансии
+      occupied — filled positions (agents with workplace=district)
+      vacant   — open vacancies
       pressure — occupied / (occupied + vacant)
 
     If df is passed, occupied is counted from actual agents.
     """
     lines = []
-    lines.append(_section("INDUSTRY JOBS: EMPLOYED И ВАКАНТНЫЕ МЕСТА ПО ОТРАСЛЯМ (v3)"))
+    lines.append(_section("INDUSTRY JOBS: OCCUPIED AND VACANT POSITIONS BY INDUSTRY (v3)"))
 
     if G is None:
-        lines.append("  [Граф не передан]")
+        lines.append("  [Graph not provided]")
         return "\n".join(lines)
 
     # Collect statistics by district
@@ -483,7 +483,7 @@ def industry_jobs_snapshot(G, df=None, top_n: int = 12) -> str:
         lines.append(f"  {name:<30} {occ:>10,} {vac:>10,} {cap:>10,} {press:>8.3f}")
 
     # ── Detailed by industry for top-3 districts ──────────────────────────
-    lines.append(f"\n  ДЕТАЛЬНО ПО ОТРАСЛЯМ (топ-3 района):")
+    lines.append(f"\n  DETAILED BY INDUSTRY (top-3 districts):")
     for d, _, _, _, _ in district_stats[:3]:
         name = d.replace("District of ", "")
         ind_jobs = G.nodes[d].get("industry_jobs", {})
@@ -549,22 +549,22 @@ def _random_region_industry_jobs(
     seed: int = 42,
 ) -> str:
     """
-    Selects n_regions random regions и n_industries случайных отраслей
+    Selects n_regions random regions and n_industries random industries
     for each, shows occupied and vacant positions.
 
-    Data aggregated by district (okres) → регион (kraj) через
+    Data aggregated by district (okres) → region (kraj) via
     DISTRICT_TO_REGION_CODE.
 
     If df is passed, occupied is counted from actual agents in region.
     """
     lines = []
     lines.append(_section(
-        f"RANDOM REGIONS AND INDUSTRIES: EMPLOYED И СВОБОДНЫЕ МЕСТА "
-        f"({n_regions} рег. × {n_industries} отр.)"
+        f"RANDOM REGIONS AND INDUSTRIES: OCCUPIED AND VACANT POSITIONS "
+        f"({n_regions} regions × {n_industries} industries)"
     ))
 
     if G is None:
-        lines.append("  [Граф не передан]")
+        lines.append("  [Graph not provided]")
         return "\n".join(lines)
 
     rng = np.random.default_rng(seed)
@@ -620,7 +620,7 @@ def _random_region_industry_jobs(
         n_sel = min(n_industries, len(all_inds))
 
         if n_sel < n_industries:
-            selected_inds = all_inds  # меньше отраслей чем запрошено
+            selected_inds = all_inds  # fewer industries than requested
         else:
             selected_inds = list(rng.choice(all_inds, n_sel, replace=False))
 
@@ -629,8 +629,8 @@ def _random_region_industry_jobs(
         total_vac = sum(v["vacant"] for v in industries.values())
         total_cap = total_occ + total_vac
 
-        lines.append(f"\n  ── {region_name} (код: {region_code}) ──")
-        lines.append(f"  Total по региону: {total_occ:>8,} occupied, "
+        lines.append(f"\n  ── {region_name} (code: {region_code}) ──")
+        lines.append(f"  Regional total: {total_occ:>8,} occupied, "
                      f"{total_vac:>8,} vacant, {total_cap:>8,} total")
         lines.append("")
         lines.append(f"  {'Industry':<55} {'Occupied':>10} {'Vacant':>10} "
@@ -664,26 +664,26 @@ def demographic_portrait(
     detail: bool = False,
 ) -> str:
     """
-    Демографический портрет с приоритезацией метрик.
+    Demographic portrait with metric prioritization.
 
-    Критические (всегда):
-      - Количество agents (без студентов), доля безработных
-      - Средняя зарплата (общая, медиана)
-      - Таблица регионов: население, средняя зарплата, уровень unemployment
+    Critical (always):
+      - Number of agents (excluding students), unemployment rate
+      - Average wage (mean, median)
+      - Regional table: population, average wage, unemployment rate
 
-    Важные (всегда):
-      - Satisfaction по 4 доменам
-      - Gaps по доменам с разбивкой по статусам occupiedсти
-      - Top-5 industries среди занятых и безработных
+    Important (always):
+      - Satisfaction across 4 domains
+      - Gaps by domain broken down by employment status
+      - Top-5 industries among employed and unemployed
 
-    Дополнительные (detail=True):
-      - Распределение типов agents
-      - Психологические параметры по типам
-      - Топ-10 маятниковых маршрутов
+    Additional (detail=True):
+      - Agent type distribution
+      - Psychological parameters by type
+      - Top-10 commuting routes
 
     v7:
-      - tick_stats, all_action_log, G — больше не используются напрямую
-        (топ-10 и таблица регионов только в итоговом summary_report)
+      - tick_stats, all_action_log, G — no longer used directly
+        (top-10 and regional table only in final summary_report)
     """
     lines = []
     total_all = len(df)
@@ -702,7 +702,7 @@ def demographic_portrait(
     if tick_num is not None:
         yr = tick_num // 12
         mo = tick_num % 12 or 12
-        title += f"  [тик {tick_num} / год {yr} mo {mo}]"
+        title += f"  [tick {tick_num} / year {yr} month {mo}]"
     lines += [header, title, header]
 
     lines.append(f"\n  Agents total: {total_all:,}")
@@ -720,10 +720,10 @@ def demographic_portrait(
         n_commuters = int((work_df["status"] == "commute").sum())
         n_stay = int((work_df["status"] == "stay").sum())
         lines.append(f"  Unemployed:        {n_unemp:>8,}  ({unemp_rate:.1%})")
-        lines.append(f"  Employed на moте:   {n_stay:>8,}  ({n_stay/total*100 if total else 0:.1f}%)")
-        lines.append(f"  Маятников:          {n_commuters:>8,}  ({n_commuters/total*100 if total else 0:.1f}%)")
+        lines.append(f"  Employed locally:   {n_stay:>8,}  ({n_stay/total*100 if total else 0:.1f}%)")
+        lines.append(f"  Commuters:          {n_commuters:>8,}  ({n_commuters/total*100 if total else 0:.1f}%)")
         bar_max = max(n_stay, n_commuters, n_unemp, 1)
-        lines.append(f"  {'Statusы:':<20}  {_bar(n_stay, bar_max)} stay")
+        lines.append(f"  {'Statuses:':<20}  {_bar(n_stay, bar_max)} stay")
         lines.append(f"  {'':20}  {_bar(n_commuters, bar_max)} commute")
         lines.append(f"  {'':20}  {_bar(n_unemp, bar_max)} unemployed")
 
@@ -814,7 +814,7 @@ def demographic_portrait(
         ]
         available_psych = [(c, l) for c, l in psych_params if c in work_df.columns]
         if available_psych:
-            lines.append(_section("PSYCHOLOGICAL PARAMETERS (ОБЩИЕ)"))
+            lines.append(_section("PSYCHOLOGICAL PARAMETERS (GENERAL)"))
             for col, label_p in available_psych:
                 m = work_df[col].mean()
                 lines.append(f"  {label_p:<24} {m:.4f}")
@@ -833,7 +833,7 @@ def demographic_portrait(
                     w_name = str(work).replace("District of ", "")[:20]
                     lines.append(f"  {r_name:<22} →  {w_name:<22} | {count:>6,}")
             else:
-                lines.append("  [Commuters связи между районами не обнаружены]")
+                lines.append("  [No commuter connections between districts found]")
 
     lines.append("\n" + "=" * 78)
     return "\n".join(lines)
@@ -845,13 +845,13 @@ def demographic_portrait(
 
 def agent_behavior_audit(action_log: Optional[List[dict]], sample_size: int = 30) -> str:
     """
-    Behavioral audit на основе action_log из FFT-pipeline.
+    Behavioral audit based on action_log from FFT-pipeline.
 
     Shown only in full report (detail=True / mode='full').
     """
     lines = [
         "\n" + "═" * 100,
-        f"  BEHAVIORAL AUDIT АГЕНТОВ (Slice up to {sample_size} random decisions from log)",
+        f"  BEHAVIORAL AUDIT OF AGENTS (Slice up to {sample_size} random decisions from log)",
         "═" * 100,
     ]
 
@@ -866,9 +866,9 @@ def agent_behavior_audit(action_log: Optional[List[dict]], sample_size: int = 30
     sampled = [action_log[i] for i in indices]
 
     lines.append(
-        f"  {'ID':<6} | {'Домен':<10} | {'Решение':<9} | "
-        f"{'Housing до→после':<28} | {'Работа до→после':<28} | "
-        f"{'Wage':>8} | {'Industry':<18} | {'Надбавка':>8}"
+        f"  {'ID':<6} | {'Domain':<10} | {'Decision':<9} | "
+        f"{'Housing before→after':<28} | {'Job before→after':<28} | "
+        f"{'Wage':>8} | {'Industry':<18} | {'Raise':>8}"
     )
     lines.append("  " + "─" * 97)
 
@@ -928,14 +928,14 @@ def agent_behavior_audit(action_log: Optional[List[dict]], sample_size: int = 30
 
 def migration_summary(tick_stats: list) -> str:
     """
-    Сводка динамики: переезды, активации + экономические тренды по годам.
+    Dynamics summary: moves, activations + economic trends by year.
 
-    Yearовые бары для:
-      - avg_wage (средняя зарплата)
-      - avg_dissat (средняя неудовyearsворённость)
-      - n_unemployed (число безработных)
-      - jobs_pressure_max (макс. давление на рынок труда)
-      - moves (переезды)
+    Yearly bars for:
+      - avg_wage (average wage)
+      - avg_dissat (average dissatisfaction)
+      - n_unemployed (unemployed count)
+      - jobs_pressure_max (max labor market pressure)
+      - moves (relocations)
     """
     if not tick_stats:
         return "No data."
@@ -1026,19 +1026,19 @@ def compare_snapshots(
     detail: bool = False,
 ) -> str:
     """
-    Межregional balance population с экономическими Δ.
+    Interregional population balance with economic deltas.
 
-    Для каждого снимка показывает:
-      - Ключевые цифры (население, безработица, средняя зарплата)
-      - Таблицу регионов с Δ population, unemployment, wage
+    For each snapshot shows:
+      - Key figures (population, unemployment, average wage)
+      - Regional table with Δ population, unemployment, wage
 
-    Затем migration_summary с трендами.
-    При detail=True — agent_behavior_audit.
+    Then migration_summary with trends.
+    With detail=True — agent_behavior_audit.
     """
     ticks = sorted(snapshots.keys())
     lines = [
         "\n" + "=" * 78,
-        "  INTERREGIONAL BALANCE НАСЕЛЕНИЯ (Regions of Slovakia)",
+        "  INTERREGIONAL POPULATION BALANCE (Regions of Slovakia)",
         "=" * 78,
     ]
 
@@ -1156,14 +1156,14 @@ def _compute_capabilities(agent_row) -> float:
 
 
 def _compute_dynamic_inertia(agent_row) -> float:
-    """v3: Динамическая инерция barrierа 2 = inertia × max(0.15, 1 − social_boost)."""
+    """v3: Dynamic inertia of barrier 2 = inertia × max(0.15, 1 − social_boost)."""
     inertia = float(agent_row.get("inertia", 0.5))
     social_boost = float(agent_row.get("social_boost", 0.0))
     return round(inertia * max(0.15, 1.0 - social_boost), 4)
 
 
 def _compute_dynamic_threshold_stage1(agent_row) -> float:
-    """v3: Динамический порог barrierа 1 = (internal_mig_thr + inertia_mob_penalty) × max(0.15, 1 − signal_reduction)."""
+    """v3: Dynamic threshold of barrier 1 = (internal_mig_thr + inertia_mob_penalty) × max(0.15, 1 − signal_reduction)."""
     internal_thr = float(agent_row.get("internal_mig_thr", 0.5))
     inertia_mob_pen = float(agent_row.get("inertia_mobility_penalty", 0.0))
     signal_red = float(agent_row.get("signal_reduction", 0.0))
@@ -1201,14 +1201,14 @@ def _compute_d_components(agent_row, G=None) -> dict:
     econ_penalty = float(agent_row.get("econ_penalty", 0.0))
     infra_bonus = float(agent_row.get("infra_bonus", 0.0))
 
-    # wage_pressure: насколько зарплата агента отстаёт от отраслевой в районе работы
+    # wage_pressure: how much the agent's wage lags behind the industry average in the workplace district
     industry_avg_wp = _industry_wage_in_district_report(G, workplace, industry)
     if wage > 0 and industry_avg_wp > 0:
         wage_pressure = industry_avg_wp / wage
     else:
         wage_pressure = 1.0  # unemployed → maximum pressure
 
-    # v3: econ_penalty — direct addition to D_econ (не сглаживается формулой)
+    # v3: econ_penalty — direct addition to D_econ (not smoothed by formula)
     D_econ = w_econ * wage_pressure * (econ_gap / max(job_flex, 0.01)) + econ_penalty
 
     # place_reality: housing and infrastructure quality (0–1) — v2
@@ -1273,11 +1273,11 @@ def agent_parameters_table(
     seed: int = 42,
 ) -> str:
     """
-    Матрица параметров agents: aspirations, D_econ/D_place и их составные,
+    Agent parameters matrix: aspirations, D_econ/D_place and their components,
     capabilities, inertia, dynamic_inertia, TPB, threshold, signal_reduction.
 
-    Compares tick_a (start) and tick_b (после N тиков) для одних и тех же agents.
-    Shows change dynamics в формате «value_0 → value_N».
+    Compares tick_a (start) and tick_b (after N ticks) for the same agents.
+    Shows change dynamics in «value_0 → value_N» format.
 
     Parameters:
       snapshots — dictionary {tick: DataFrame}
@@ -1317,45 +1317,45 @@ def agent_parameters_table(
 
     # ── Header ────────────────────────────────────────────────────────
     header = "═" * 160
-    title = f"  AGENT PARAMETERS MATRIX: Динамика Tick {tick_a} → Tick {tick_b} (n={n_sample})"
+    title = f"  AGENT PARAMETERS MATRIX: Dynamics Tick {tick_a} → Tick {tick_b} (n={n_sample})"
     lines += [header, title, header]
 
     # ── Legend ──────────────────────────────────────────────────────────
-    lines.append("  ═══ BARRIER 1 — Потенциал миграции (Aspirations × Capabilities vs Dynamic Inertia) ═══")
-    lines.append("  Aspirations — EWMA-накопление D_instant. Start=0 (холодный), на тике 1 = D_instant.")
-    lines.append("  D_econ      — экономическая неудовyearsворённость: w_econ × wage_pressure × econ_gap × (1−job_flex)")
-    lines.append("  wage_pr     — wage_pressure: отставание wage от отраслевой в районе работы (0–1)")
-    lines.append("  D_place     — жилищная неудовyearsворённость: w_future × gap × (dfp/pr) × (1+penalty)")
+    lines.append("  ═══ BARRIER 1 — Migration Potential (Aspirations × Capabilities vs Dynamic Inertia) ═══")
+    lines.append("  Aspirations — EWMA accumulation of D_instant. Start=0 (cold), at tick 1 = D_instant.")
+    lines.append("  D_econ      — economic dissatisfaction: w_econ × wage_pressure × econ_gap × (1−job_flex)")
+    lines.append("  wage_pr     — wage_pressure: wage lag behind industry average in workplace district (0–1)")
+    lines.append("  D_place     — housing dissatisfaction: w_future × gap × (dfp/pr) × (1+penalty)")
     lines.append("  place_r     — place_reality: 0.6×affordability + 0.4×infrastructure_score")
-    lines.append("  PlacePen    — place_deficit_penalty (накопленный штраф)")
-    lines.append("  EPen/IBonus — v2: econ_penalty / infra_bonus (динамические сигнальные переменные)")
-    lines.append("  InMobPen    — v2: inertia_mobility_penalty (штраф к инерции от переездов соседей)")
-    lines.append("  JlBonus     — v2: jobloss_econ_gap_bonus (ramp-бонус от LOST_JOB)")
+    lines.append("  PlacePen    — place_deficit_penalty (accumulated penalty)")
+    lines.append("  EPen/IBonus — v2: econ_penalty / infra_bonus (dynamic signal variables)")
+    lines.append("  InMobPen    — v2: inertia_mobility_penalty (inertia penalty from neighbors moving)")
+    lines.append("  JlBonus     — v2: jobloss_econ_gap_bonus (ramp-bonus from LOST_JOB)")
     lines.append("  Capab.      — capabilities: (income_index + education_index + weak_ties) / 3")
-    lines.append("  Inertia     — базовая инерция агента")
-    lines.append("  ═══ BARRIER 1: Потенциал vs Динамический порог ═══")
+    lines.append("  Inertia     — base agent inertia")
+    lines.append("  ═══ BARRIER 1: Potential vs Dynamic Threshold ═══")
     lines.append("  DynThr1     — dynamic threshold: (internal_mig_thr + InMobPen) × max(0.15, 1 − signal_reduction)")
-    lines.append("  Thr_mig     — internal_mig_threshold (базовый порог barrierа 1)")
+    lines.append("  Thr_mig     — internal_mig_threshold (base barrier 1 threshold)")
     lines.append("  SignRed     — signal_reduction (accumulated signal effect lowering the threshold)")
-    lines.append("  ═══ BARRIER 2: D_perceived vs Динамическая инерция ═══")
+    lines.append("  ═══ BARRIER 2: D_perceived vs Dynamic Inertia ═══")
     lines.append("  D_perc      — D_perceived = D_instant × Attribution × SocialCalibration")
     lines.append("  Attrib      — Attribution = PC × (1 − helplessness)")
     lines.append("  Help        — helplessness = clip(1 − PC − weak_ties × 0.3, 0, 1)")
     lines.append("  SocCal      — SocialCalibration = 1 + net_signal_susc × soc_calibration_signal")
-    lines.append("  DynInert    — динамическая инерция S2 = inertia × max(0.15, 1 − social_boost)")
+    lines.append("  DynInert    — dynamic inertia S2 = inertia × max(0.15, 1 − social_boost)")
     lines.append("  MigrPress   — v4: accumulated migration pressure (0–2)")
-    lines.append("  TPB         — флаг активности / счётчик задержки намерения")
+    lines.append("  TPB         — activity flag / intention delay counter")
     lines.append("  IntState    — intention_state (none | seeking_work | seeking_residence)")
 
     # ── Table header ────────────────────────────────────────────────────
     lines.append("")
     lines.append(
-        f"  {'ID':>5} {'Тип':<11} {'Status':<17} "
+        f"  {'ID':>5} {'Type':<11} {'Status':<17} "
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} {'PlacePen':>9} "
         f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} {'SocCalSig':>9} "
         f"{'Capab.':>10} {'Inertia':>13} {'DynThr1':>13} "
         f"{'D_perc':>10} {'Attrib':>8} {'Help':>8} {'SocCal':>8} {'DynInert':>13} {'MigrPress':>10} "
-        f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
+        f"{'TPB(act/del)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
     lines.append("  " + "─" * 210)
 
@@ -1389,11 +1389,11 @@ def agent_parameters_table(
         inertia_a = float(_get(ra, "inertia", 0))
         inertia_b = float(_get(rb, "inertia", 0))
 
-        # v3: Барьер 1 — dynamic threshold
+        # v3: Barrier 1 — dynamic threshold
         dyn_thr1_a = _compute_dynamic_threshold_stage1(ra)
         dyn_thr1_b = _compute_dynamic_threshold_stage1(rb)
 
-        # v3: Барьер 2 — D_perceived модель
+        # v3: Barrier 2 — D_perceived model
         pc_a = float(_get(ra, "perceived_control", 0.5))
         pc_b = float(_get(rb, "perceived_control", 0.5))
         wt_a = float(_get(ra, "weak_ties_utility", 0.0))
@@ -1421,7 +1421,7 @@ def agent_parameters_table(
         dyn_inertia_a = _compute_dynamic_inertia(ra)
         dyn_inertia_b = _compute_dynamic_inertia(rb)
 
-        # ── Барьер 2: TPB ────────────────────────────────────────────────
+        # ── Barrier 2: TPB ────────────────────────────────────────────────
         tpb_active_a = bool(_get(ra, "tpb_active", False))
         tpb_active_b = bool(_get(rb, "tpb_active", False))
         tpb_delay_a  = int(_get(ra, "intention_delay", 0))
@@ -1436,7 +1436,7 @@ def agent_parameters_table(
         int_state_a = str(_get(ra, "intention_state", "none"))
         int_state_b = str(_get(rb, "intention_state", "none"))
 
-        # Форматирование
+        # Formatting
         id_str      = f"{agent_id:>5}"
         status_str  = f"{status_a}→{status_b}"
         status_str  = f"{status_str:<17}"
@@ -1450,7 +1450,7 @@ def agent_parameters_table(
         place_pen_b = float(_get(rb, "place_deficit_penalty", 0.0))
         pp_str      = _fmt_arrow(place_pen_a, place_pen_b, ".2f", 9)
 
-        # v2: динамические переменные
+        # v2: dynamic variables
         ep_a  = float(_get(ra, "econ_penalty", 0.0))
         ep_b  = float(_get(rb, "econ_penalty", 0.0))
         ib_a  = float(_get(ra, "infra_bonus", 0.0))
@@ -1497,7 +1497,7 @@ def agent_parameters_table(
             f"{tpb_str} {thr_str} {sign_str} {int_state_s}"
         )
 
-    # ── Сводная статистика по выборке ────────────────────────────────────
+    # ── Sample summary statistics ────────────────────────────────────
     lines.append("  " + "─" * 210)
 
     def _col_mean(df_sub, col):
@@ -1505,16 +1505,16 @@ def agent_parameters_table(
             return 0.0
         return float(df_sub[col].mean())
 
-    lines.append("  СВОДКА ПО ВЫБОРКЕ (средние):")
+    lines.append("  SAMPLE SUMMARY (means):")
     lines.append(
         f"  {'':>5} {'':11} {'':17} "
         f"{'Aspirations':>13} {'D_econ':>10} {'wage_pr':>8} {'D_place':>10} {'place_r':>8} "
         f"{'EPen':>8} {'IBonus':>8} {'InMobPen':>9} {'JlBonus':>8} "
         f"{'Capab.':>10} {'Inertia':>13} {'DynInert':>13} {'MigrPress':>10} "
-        f"{'TPB(акт/з)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
+        f"{'TPB(act/del)':>13} {'Thr_mig':>8} {'SignRed':>13} {'IntState':<18}"
     )
 
-    # Барьер 1 — средние
+    # Barrier 1 — means
     m_asp_a = _col_mean(sampled_df_a, "aspirations")
     m_asp_b = _col_mean(sampled_df_b, "aspirations")
     m_in_a  = _col_mean(sampled_df_a, "inertia")
@@ -1528,7 +1528,7 @@ def agent_parameters_table(
     m_del_a = _col_mean(sampled_df_a, "intention_delay")
     m_del_b = _col_mean(sampled_df_b, "intention_delay")
 
-    # D-компоненты: средние по выборке
+    # D-components: sample means
     d_vals_a = [_compute_d_components(sampled_df_a.iloc[i], G) for i in range(len(sampled_df_a))]
     d_vals_b = [_compute_d_components(sampled_df_b.iloc[i], G) for i in range(len(sampled_df_b))]
     m_de_a  = np.mean([d["D_econ"] for d in d_vals_a])
@@ -1550,7 +1550,7 @@ def agent_parameters_table(
     m_dyn_a = np.mean(dyn_a_vals) if dyn_a_vals else 0.0
     m_dyn_b = np.mean(dyn_b_vals) if dyn_b_vals else 0.0
 
-    # v2: средние динамических переменных
+    # v2: dynamic variable means
     m_ep_a  = _col_mean(sampled_df_a, "econ_penalty")
     m_ep_b  = _col_mean(sampled_df_b, "econ_penalty")
     m_ib_a  = _col_mean(sampled_df_a, "infra_bonus")
@@ -1564,7 +1564,7 @@ def agent_parameters_table(
     m_migr_a = _col_mean(sampled_df_a, "migration_pressure")
     m_migr_b = _col_mean(sampled_df_b, "migration_pressure")
 
-    # Форматирование сводной строки
+    # Format summary row
     m_asp_str = _fmt_arrow(m_asp_a, m_asp_b, ".3f", 13)
     m_de_str  = _fmt_arrow(m_de_a, m_de_b, ".3f", 10)
     m_wp_str  = _fmt_arrow(m_wp_a, m_wp_b, ".3f", 8)
@@ -1585,12 +1585,12 @@ def agent_parameters_table(
     m_th_str = _fmt_arrow(m_th_a, m_th_b, ".3f", 8)
     m_sr_str = _fmt_arrow(m_sr_a, m_sr_b, ".3f", 13)
 
-    # Statusы
+    # Statuses
     st_a_counts = sampled_df_a["status"].value_counts().to_dict() if "status" in sampled_df_a.columns else {}
     st_b_counts = sampled_df_b["status"].value_counts().to_dict() if "status" in sampled_df_b.columns else {}
     st_a_top = max(st_a_counts, key=st_a_counts.get) if st_a_counts else "?"
     st_b_top = max(st_b_counts, key=st_b_counts.get) if st_b_counts else "?"
-    m_st_str = f"{'СРЕДН':>5} {'—':11} {st_a_top+'→'+st_b_top:<17}"
+    m_st_str = f"{'MEAN':>5} {'—':11} {st_a_top+'→'+st_b_top:<17}"
 
     # Intention states
     is_a_counts = sampled_df_a["intention_state"].value_counts().to_dict() if "intention_state" in sampled_df_a.columns else {}
@@ -1607,9 +1607,9 @@ def agent_parameters_table(
         f"{m_tpb_s} {m_th_str} {m_sr_str} {m_is_str}"
     )
 
-    # ── Анализ изменений ─────────────────────────────────────────────────
+    # ── Dynamics analysis ─────────────────────────────────────────────────
     lines.append("")
-    lines.append("  АНАЛИЗ ДИНАМИКИ:")
+    lines.append("  DYNAMICS ANALYSIS:")
 
     n_asp_up = int(
         (sampled_df_b["aspirations"].values > sampled_df_a["aspirations"].values).sum()
@@ -1627,35 +1627,35 @@ def agent_parameters_table(
     st_b_arr = sampled_df_b["status"].values if "status" in sampled_df_b.columns else np.full(n_sample, "?")
     n_status_changed = int((st_a_arr != st_b_arr).sum())
 
-    # Динамика D-компонент
+    # D-component dynamics
     d_inst_a = np.array([d["D_instant"] for d in d_vals_a])
     d_inst_b = np.array([d["D_instant"] for d in d_vals_b])
     n_d_up = int((d_inst_b > d_inst_a).sum())
 
-    lines.append(f"  Agents с ростом aspirations:              {n_asp_up}/{n_sample}")
-    lines.append(f"  Agents с ростом D_instant:                {n_d_up}/{n_sample}")
-    lines.append(f"  Новых TPB-активаций:                        {n_tpb_new}/{n_sample}")
-    lines.append(f"  Изменивших intention_state:                 {n_state_changed}/{n_sample}")
-    lines.append(f"  Изменивших статус occupiedсти:                {n_status_changed}/{n_sample}")
+    lines.append(f"  Agents with increased aspirations:       {n_asp_up}/{n_sample}")
+    lines.append(f"  Agents with increased D_instant:         {n_d_up}/{n_sample}")
+    lines.append(f"  New TPB activations:                     {n_tpb_new}/{n_sample}")
+    lines.append(f"  Changed intention_state:                 {n_state_changed}/{n_sample}")
+    lines.append(f"  Changed employment status:               {n_status_changed}/{n_sample}")
 
-    # Средние D-компонент
-    lines.append(f"  Mean D_econ (тик {tick_b}):                     {m_de_b:.4f}")
-    lines.append(f"  Mean wage_pressure (тик {tick_b}):              {m_wp_b:.4f}")
-    lines.append(f"  Mean D_place (тик {tick_b}):                    {m_dp_b:.4f}")
-    lines.append(f"  Mean place_reality (тик {tick_b}):              {m_pr_b:.4f}")
+    # Mean D-components
+    lines.append(f"  Mean D_econ (tick {tick_b}):                     {m_de_b:.4f}")
+    lines.append(f"  Mean wage_pressure (tick {tick_b}):              {m_wp_b:.4f}")
+    lines.append(f"  Mean D_place (tick {tick_b}):                    {m_dp_b:.4f}")
+    lines.append(f"  Mean place_reality (tick {tick_b}):              {m_pr_b:.4f}")
 
-    # v2: динамические переменные
-    lines.append(f"  Mean econ_penalty (тик {tick_b}):              {m_ep_b:.4f}")
-    lines.append(f"  Mean infra_bonus (тик {tick_b}):               {m_ib_b:.4f}")
-    lines.append(f"  Mean inertia_mobility_penalty (тик {tick_b}):  {m_imp_b:.4f}")
-    lines.append(f"  Mean jobloss_econ_gap_bonus (тик {tick_b}):    {m_jlb_b:.4f}")
+    # v2: dynamic variables
+    lines.append(f"  Mean econ_penalty (tick {tick_b}):              {m_ep_b:.4f}")
+    lines.append(f"  Mean infra_bonus (tick {tick_b}):               {m_ib_b:.4f}")
+    lines.append(f"  Mean inertia_mobility_penalty (tick {tick_b}):  {m_imp_b:.4f}")
+    lines.append(f"  Mean jobloss_econ_gap_bonus (tick {tick_b}):    {m_jlb_b:.4f}")
 
     lines.append("═" * 160)
     return "\n".join(lines)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6. MASTER DISTRICT TABLE — мастер-таблица по 79 районам (окресам)
+# 6. MASTER DISTRICT TABLE — master table for 79 districts (okresy)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def master_district_table(
@@ -1665,33 +1665,33 @@ def master_district_table(
     snapshots: Optional[dict] = None,
 ) -> str:
     """
-    Мастер-таблица по 79 районам Словакии (okresy, не края).
+    Master table for 79 districts of Slovakia (okresy, not regions/kraje).
 
-    Строки: 79 districts (из DISTRICT_TO_REGION_CODE в agents.py).
-    Столбцы: для каждого тика — количество agents в районе и стоимость жилья.
-    Финальные столбцы:
-      - Δ econ  — въехавшие в район по экономическому мотиву за всю симуляцию
-      - Δ place — въехавшие в район по мотиву moта за всю симуляцию
+    Rows: 79 districts (from DISTRICT_TO_REGION_CODE in agents.py).
+    Columns: for each tick — agent count per district and housing price.
+    Final columns:
+      - Δ econ  — inflow by economic motivation over entire simulation
+      - Δ place — inflow by place motivation over entire simulation
 
-    Использует:
-      - tick_stats[i]["district_counts"] для поколичества agents по тикам
-      - G.nodes[district]["housing_price_m2"] для стоимости жилья
-      - all_action_log для подсчёта мотивированных переездов
-      - snapshots[0] для данных тика 0 (если есть)
+    Uses:
+      - tick_stats[i][\"district_counts\"] for agent counts by tick
+      - G.nodes[district][\"housing_price_m2\"] for housing price
+      - all_action_log for counting motivated moves
+      - snapshots[0] for tick 0 data (if available)
     """
-    # Все районы из графа (79 okresov)
+    # All districts from graph (79 districts)
     all_districts = sorted(G.nodes)
 
-    # Подготавливаем списки тиков
+    # Prepare tick lists
     n_ticks = len(tick_stats)
     tick_nums = list(range(1, n_ticks + 1))
 
-    # ── Агенты на тике 0 (из snapshots) ──────────────────────────────────
+    # ── Agents at tick 0 (from snapshots) ──────────────────────────────────
     t0_counts = {}
     if snapshots and 0 in snapshots:
         t0_counts = snapshots[0].groupby("district")["id"].count().to_dict()
 
-    # ── Агенты на каждом тике (из tick_stats) ────────────────────────────
+    # ── Agents at each tick (from tick_stats) ────────────────────────────
     tick_counts = {}  # {district: [count_t1, count_t2, ...]}
     for district in all_districts:
         tick_counts[district] = []
@@ -1700,46 +1700,46 @@ def master_district_table(
         for district in all_districts:
             tick_counts[district].append(dc.get(district, 0))
 
-    # ── Стоимость жилья: эффективная цена из графа ──
-    # G.nodes[district]["effective_housing_price_m2"] уже предвычислена
-    # в update_graph() каждый тик с учётом housing_remaining и sensitivity.
+    # ── Housing price: effective price from graph ──
+    # G.nodes[district]["effective_housing_price_m2"] is precomputed
+    # in update_graph() each tick accounting for housing_remaining and sensitivity.
 
-    # Эффективная цена на каждом тике (читаем из графа, который обновляется каждый тик)
-    # Но в отчёте у нас нет графа «на каждый тик» — используем housing_remaining из tick_stats
-    # и формулу как в graph.py для воспроизведения.
-    _AGENT_FOOTPRINT = 1.1  # AGENT_HOUSING_FOOTPRINT из graph.py
-    _REMAINING_FLOOR = 1.5  # HOUSING_REMAINING_FLOOR из graph.py
+    # Effective price at each tick (read from graph, which is updated each tick)
+    # But we do not have a per-tick graph in the report — use housing_remaining from tick_stats
+    # and the formula from graph.py to reproduce it.
+    _AGENT_FOOTPRINT = 1.1  # AGENT_HOUSING_FOOTPRINT from graph.py
+    _REMAINING_FLOOR = 1.5  # HOUSING_REMAINING_FLOOR from graph.py
 
-    # Базовая цена и чувствительность из графа
+    # Base price and sensitivity from graph
     base_prices = {}
     sensitivities = {}
     for district in all_districts:
         base_prices[district] = G.nodes[district].get("housing_price_m2", 1800.0)
         sensitivities[district] = G.nodes[district].get("housing_market_sensitivity", 1.0)
 
-    # Эффективная цена на каждом тике (используем housing_remaining из tick_stats)
+    # Effective price at each tick (using housing_remaining from tick_stats)
     housing_by_tick = {}  # {district: [price_t0, price_t1, ...]}
     for district in all_districts:
         housing_by_tick[district] = []
 
-    # Tick 0: no data housing_remaining → используем базовую цену
+    # Tick 0: no housing_remaining data → use base price
     if snapshots and 0 in snapshots:
         for district in all_districts:
             housing_by_tick[district].append(base_prices[district])
 
-    # Tickи 1..N: из tick_stats district_housing_remaining
+    # Ticks 1..N: from tick_stats district_housing_remaining
     for s in tick_stats:
         hr = s.get("district_housing_remaining", {})
         for district in all_districts:
             remaining = hr.get(district, _REMAINING_FLOOR)
             bp = base_prices[district]
             sens = sensitivities[district]
-            # Используем ту же формулу с полом, что и в graph.py update_graph
+            # Use the same formula with floor as in graph.py update_graph
             delta = bp * (_AGENT_FOOTPRINT / max(remaining, _REMAINING_FLOOR)) * sens
             effective = bp + delta
             housing_by_tick[district].append(effective)
 
-    # ── Подсчёт переездов по мотивам из all_action_log ──────────────────
+    # ── Count moves by motivation from all_action_log ──────────────────
     econ_inflow = {d: 0 for d in all_districts}
     place_inflow = {d: 0 for d in all_districts}
     if all_action_log:
@@ -1754,20 +1754,20 @@ def master_district_table(
                     elif domain == "place":
                         place_inflow[new_res] += 1
 
-    # ── Формирование таблицы ─────────────────────────────────────────────
+    # ── Build table ─────────────────────────────────────────────
     lines = []
-    lines.append(_section("МАСТЕР-ТАБЛИЦА ПО 79 РАЙОНАМ (OKRESY)"))
+    lines.append(_section("MASTER TABLE FOR 79 DISTRICTS (OKRESY)"))
 
-    # Пояснение
+    # Explanation
     has_t0 = (snapshots and 0 in snapshots)
     lines.append(f"  Total districts: {len(all_districts)} | Ticks: {n_ticks}")
-    lines.append(f"  Таблица 1: количество agents в районе на каждом тике")
-    lines.append(f"  Таблица 2: эффективная стоимость жилья (€/м²) с учётом остатка квартир")
-    lines.append(f"  Δ econ / Δ place: суммарный въезд в район по мотиву за всю симуляцию")
+    lines.append(f"  Table 1: agent count per district at each tick")
+    lines.append(f"  Table 2: effective housing price (€/m²) accounting for remaining units")
+    lines.append(f"  Δ econ / Δ place: total inflow by motivation over entire simulation")
     lines.append("")
 
-    # ── ПОДТАБЛИЦА 1: Количество agents ─────────────────────────────────
-    lines.append(_section("АГЕНТОВ В РАЙОНЕ ПО ТИКАМ"))
+    # ── SUBTABLE 1: Agent count ─────────────────────────────────
+    lines.append(_section("AGENTS PER DISTRICT BY TICK"))
     header1 = f"  {'District':<30}"
     if has_t0:
         header1 += f" {'T0':>6}"
@@ -1790,7 +1790,7 @@ def master_district_table(
         row += f" {econ_inflow[district]:>8,} {place_inflow[district]:>8,}"
         lines.append(row)
 
-    # TOTAL для agents
+    # TOTAL for agents
     lines.append("  " + _hline(line_w1, "─"))
     total_row1 = f"  {'TOTAL':<30}"
     if has_t0:
@@ -1803,11 +1803,11 @@ def master_district_table(
     total_row1 += f" {total_econ:>8,} {total_place:>8,}"
     lines.append(total_row1)
 
-    # ── ПОДТАБЛИЦА 2: Эффективная стоимость жилья ────────────────────────
+    # ── Subtable 2: Effective housing price ────────────────────────
     lines.append("")
-    lines.append(_section("ЭФФЕКТИВНАЯ СТОИМОСТЬ ЖИЛЬЯ ПО ТИКАМ (€/м²)"))
-    lines.append(f"  Формула: базовая_цена × (1 + 1.1 / остаток_квартир × чувствительность)")
-    lines.append(f"  Чем меньше остаток квартир → тем выше эффективная цена (конкуренция).")
+    lines.append(_section("EFFECTIVE HOUSING PRICE BY TICK (€/m²)"))
+    lines.append(f"  Formula: base_price × (1 + 1.1 / remaining_units × sensitivity)")
+    lines.append(f"  Fewer remaining units → higher effective price (competition).")
     lines.append("")
 
     header2 = f"  {'District':<30}"
@@ -1827,27 +1827,27 @@ def master_district_table(
             row += f" {hp:>8,.0f}€"
         lines.append(row)
 
-    # TOTAL для жилья (среднее)
+    # TOTAL for housing (average)
     lines.append("  " + _hline(line_w2, "─"))
-    total_row2 = f"  {'СРЕДНЕЕ':<30}"
+    total_row2 = f"  {'AVERAGE':<30}"
     for tick_idx in range(len(tick_nums) + (1 if has_t0 else 0)):
         avg = sum(housing_by_tick[d][tick_idx] for d in all_districts) / max(len(all_districts), 1)
         total_row2 += f" {avg:>8,.0f}€"
     lines.append(total_row2)
 
-    # ── Statistics по переездам ──────────────────────────────────────────
+    # ── Move statistics ──────────────────────────────────────────
     lines.append("")
-    lines.append(f"  Total въездов по экономическому мотиву: {total_econ:,}")
-    lines.append(f"  Total въездов по мотиву moта:         {total_place:,}")
+    lines.append(f"  Total economic-motivated inflow: {total_econ:,}")
+    lines.append(f"  Total place-motivated inflow:    {total_place:,}")
 
-    # Топ-10 districts по притоку
+    # Top districts by inflow
     if total_econ > 0:
         top_econ = sorted(econ_inflow.items(), key=lambda x: -x[1])[:5]
-        lines.append(f"  Топ-5 districts по econ-притоку: "
+        lines.append(f"  Top-5 districts by econ-inflow: "
                      + ", ".join(f"{d.replace('District of ', '')}({c})" for d, c in top_econ if c > 0))
     if total_place > 0:
         top_place = sorted(place_inflow.items(), key=lambda x: -x[1])[:5]
-        lines.append(f"  Топ-5 districts по place-притоку: "
+        lines.append(f"  Top-5 districts by place-inflow: "
                      + ", ".join(f"{d.replace('District of ', '')}({c})" for d, c in top_place if c > 0))
 
     lines.append("=" * 78)
@@ -1855,18 +1855,18 @@ def master_district_table(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. SUMMARY REPORT — обёртка для полного отчёта
+# 7. SUMMARY REPORT — wrapper for full report
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Секции отчёта (флаги для Colab чекбоксов) ──────────────────────────────
+# ── Report sections (flags for Colab checkboxes) ──────────────────────────────
 DEFAULT_SECTIONS = {
-    "agent_params":     True,   # Матрица параметров agents (tick0→tick6)
-    "demographic":      True,   # Демографический портрет финала
-    "migration_trends": True,   # Сводка динамики + годовые тренды
-    "region_balance":   True,   # Межregional balance population
-    "master_table":     True,   # Мастер-таблица 79 districts + жильё
-    "top_routes":       True,   # Топ-10 переездов и commute
-    "heatmap":          True,   # Тепловая карта
+    "agent_params":     True,   # Agent parameters matrix (tick0→tick6)
+    "demographic":      True,   # Demographic portrait of final state
+    "migration_trends": True,   # Dynamics summary + yearly trends
+    "region_balance":   True,   # Interregional population balance
+    "master_table":     True,   # Master table 79 districts + housing
+    "top_routes":       True,   # Top-10 moves and commutes
+    "heatmap":          True,   # Heatmap
     "random_industry":  True,   # Random regions and industries
     "behavior_audit":   False,  # Behavioral audit (detail only)
 }
@@ -1881,10 +1881,10 @@ def summary_report(
     sections: Optional[dict] = None,
 ) -> str:
     """
-    Итоговый отчёт с посекционным контролем через `sections`.
+    Final report with per-section control via `sections`.
 
-    sections — словарь {имя_секции: bool}, где ключи из DEFAULT_SECTIONS.
-    Если None — используются DEFAULT_SECTIONS.
+    sections — dict {section_name: bool}, with keys from DEFAULT_SECTIONS.
+    If None — DEFAULT_SECTIONS are used.
     """
     if sections is None:
         sections = DEFAULT_SECTIONS
@@ -1894,27 +1894,27 @@ def summary_report(
     if sections.get("agent_params", True) and snapshots and 0 in snapshots and 6 in snapshots:
         parts.append(agent_parameters_table(snapshots, G=G, n_show=20, tick_a=0, tick_b=6))
 
-    # 1. Демографический портрет финального состояния
+    # 1. Demographic portrait of final state
     if sections.get("demographic", True):
         parts.append(demographic_portrait(
             df_final,
-            label="ФИНАЛ",
+            label="FINAL",
             tick_num=None,
             exclude_students=True,
             detail=detail,
         ))
 
-    # 2. Сводка динамики
+    # 2. Dynamics summary
     if sections.get("migration_trends", True):
         parts.append(migration_summary(tick_stats))
 
-    # 3. Межregional balance
+    # 3. Interregional balance
     if sections.get("region_balance", True) and snapshots and len(snapshots) >= 2:
         parts.append(compare_snapshots(snapshots, tick_stats, all_action_log, detail=detail))
     elif detail and all_action_log and sections.get("behavior_audit", False):
         parts.append(agent_behavior_audit(all_action_log, sample_size=30))
 
-    # 4. МАСТЕР-ТАБЛИЦА ПО 79 РАЙОНАМ
+    # 4. Master table for 79 districts
     if sections.get("master_table", True) and G is not None and tick_stats:
         parts.append(master_district_table(tick_stats, G, all_action_log, snapshots=snapshots))
 
@@ -1922,7 +1922,7 @@ def summary_report(
     if sections.get("random_industry", True) and G is not None:
         parts.append(_random_region_industry_jobs(G, df=df_final, n_regions=3, n_industries=3))
 
-    # 6. ТОП-10 ПЕРЕЕЗДОВ И COMMUTE
+    # 6. Top-10 moves and commutes
     if sections.get("top_routes", True) and all_action_log is not None:
         top_moves = _top_move_routes(all_action_log, top_n=10)
         if top_moves:
@@ -1932,7 +1932,7 @@ def summary_report(
             if top_comm:
                 parts.append(top_comm)
 
-    # 7. ТЕПЛОВАЯ КАРТА
+    # 7. Heatmap
     if sections.get("heatmap", True) and G is not None and tick_stats:
         heatmap_block = _district_heatmap(tick_stats, G, snapshots=snapshots)
         if heatmap_block:

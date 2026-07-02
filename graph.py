@@ -42,8 +42,8 @@ HOUSING_ALPHA = 0.03
 WAGE_ALPHA    = 0.02
 
 # ── Dynamic housing parameters ─────────────────────────────────────────────
-AGENT_HOUSING_FOOTPRINT = 1.1   # один агент занимает ~1.1 условных квартир
-HOUSING_REMAINING_FLOOR = 1.5   # пол для remaining (порог остановки роста цены)
+AGENT_HOUSING_FOOTPRINT = 1.1   # one agent occupies ~1.1 notional units
+HOUSING_REMAINING_FLOOR = 1.5   # floor for remaining (price growth stop threshold)
 
 # ── v5: Market capacity from companies ────────────────────────────────────────────
 SIZE_EMPLOYEES = {"small": 25, "medium": 130, "large": 400}
@@ -57,9 +57,9 @@ def recompute_industry_jobs(G: nx.DiGraph, district: str, industry_shares: dict)
     By industry: capacity_ind = capacity × industry_share
     vacant = max(0, capacity_ind − occupied)
 
-    WARNING: business data is stored in real values (на ~5.4M жителей),
-    поэтому ёмкость scaled через G.graph["agent_scale"].
-    Если scale не задан (нет in graph), используется 1.0 (без масштабирования).
+    WARNING: business data is stored in real values (for ~5.4M population),
+    so capacity is scaled via G.graph["agent_scale"].
+    If scale is not set (not in graph), 1.0 is used (no scaling).
 
     Called after change_company_count() and during initialization.
     """
@@ -97,7 +97,7 @@ def recompute_industry_jobs(G: nx.DiGraph, district: str, industry_shares: dict)
 def change_company_count(G: nx.DiGraph, district: str, size: str, delta: int,
                          industry_shares: dict) -> int:
     """
-    v5: +1 или −1 компанию размера size. Пересчитывает ёмкость.
+    v5: +1 or −1 company of given size. Recalculates capacity.
 
     Returns approximate number of affected jobs.
     """
