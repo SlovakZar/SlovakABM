@@ -1,34 +1,34 @@
 """
-graph.py v3 — граф Словакии на основе реальных commuting потоков.
+graph.py v3 — Slovakia graph based on real commuting flows.
 
-Источники:
-  environment.json                — атрибуты узлов (SODB 2021 / NBS / ŠÚ SR)
-  commuting_filtered_with_travel.csv — матрица потоков + время в пути (OSRM)
+Sources:
+  environment.json                — node attributes (SODB 2021 / NBS / ŠÚ SR)
+  commuting_filtered_with_travel.csv — flow matrix + travel time (OSRM)
 
-Структура графа:
-  Узлы: 79 районов Словакии
-  Рёбра: направленные (origin → dest) по реальным commuting потокам
+Graph structure:
+  Nodes: 79 districts of Slovakia
+  Edges: directed (origin → dest) based on real commuting flows
 
-Атрибуты узлов:
-  avg_wage, avg_wage_base       — средняя зарплата (€/мес)
-  housing_price_m2, ..._base    — цена жилья (€/м²)
-  unemployment_rate             — уровень безработицы [0,1]
-  jobs_capacity                 — суммарная занятость по district (сумма WC)
-  real_population               — численность населения
-  owner_share                   — доля собственников жилья [0,1]
-  region                        — код региона (BA, TT, TN, NR, ZA, BB, PO, KE)
-  infrastructure_score          — уровень инфраструктуры [0,1]
-  agent_count                   — текущее число агентов (обновляется каждый тик)
+Node attributes:
+  avg_wage, avg_wage_base       — average wage (€/month)
+  housing_price_m2, ..._base    — housing price (€/m²)
+  unemployment_rate             — unemployment rate [0,1]
+  jobs_capacity                 — total employment by district (sum of WC)
+  real_population               — population count
+  owner_share                   — homeowner share [0,1]
+  region                        — region code (BA, TT, TN, NR, ZA, BB, PO, KE)
+  infrastructure_score          — infrastructure level [0,1]
+  agent_count                   — current agent count (updated each tick)
 
-Атрибуты рёбер:
-  travel_time_min  — время в пути (мин)
-  flow_work        — поток занятых
-  total_flow       — суммарный поток
-  flow_weight      — нормированный вес ребра [0,1]
+Edge attributes:
+  travel_time_min  — travel time (min)
+  flow_work        — employed flow
+  total_flow       — total flow
+  flow_weight      — normalized edge weight [0,1]
 
-Реакция среды (update_graph):
-  housing_price реагирует на плотность агентов vs ожидаемую долю
-  avg_wage реагирует на соотношение агентов и jobs_capacity
+Environment response (update_graph):
+  housing_price responds to agent density vs expected share
+  avg_wage responds to agent-to-jobs_capacity ratio
 """
 
 import json
@@ -37,31 +37,31 @@ import pandas as pd
 import networkx as nx
 from pathlib import Path
 
-# ── Параметры реакции среды ───────────────────────────────────────────────────
+# ── Environment response parameters ───────────────────────────────────────────────────
 HOUSING_ALPHA = 0.03
 WAGE_ALPHA    = 0.02
 
-# ── Параметры динамического жилья ─────────────────────────────────────────────
+# ── Dynamic housing parameters ─────────────────────────────────────────────
 AGENT_HOUSING_FOOTPRINT = 1.1   # один агент занимает ~1.1 условных квартир
 HOUSING_REMAINING_FLOOR = 1.5   # пол для remaining (порог остановки роста цены)
 
-# ── v5: Ёмкость рынка от компаний ────────────────────────────────────────────
+# ── v5: Market capacity from companies ────────────────────────────────────────────
 SIZE_EMPLOYEES = {"small": 25, "medium": 130, "large": 400}
 
 
 def recompute_industry_jobs(G: nx.DiGraph, district: str, industry_shares: dict) -> None:
     """
-    v5: Пересчитывает industry_jobs[district] на основе текущего числа компаний.
+    v5: Recalculates industry_jobs[district] based on current company count.
 
     capacity = Σ(size × employees_per_size)
-    По отраслям: capacity_ind = capacity × industry_share
+    By industry: capacity_ind = capacity × industry_share
     vacant = max(0, capacity_ind − occupied)
 
-    ВНИМАНИЕ: business-данные хранятся в реальных величинах (на ~5.4M жителей),
-    поэтому ёмкость масштабируется через G.graph["agent_scale"].
-    Если scale не задан (нет в графе), используется 1.0 (без масштабирования).
+    WARNING: business data is stored in real values (на ~5.4M жителей),
+    поэтому ёмкость scaled через G.graph["agent_scale"].
+    Если scale не задан (нет in graph), используется 1.0 (без масштабирования).
 
-    Вызывается после change_company_count() и при инициализации.
+    Called after change_company_count() and during initialization.
     """
     biz = G.nodes[district].get("business", {})
     if not biz:
@@ -99,7 +99,7 @@ def change_company_count(G: nx.DiGraph, district: str, size: str, delta: int,
     """
     v5: +1 или −1 компанию размера size. Пересчитывает ёмкость.
 
-    Возвращает примерное число затронутых рабочих мест.
+    Returns approximate number of affected jobs.
     """
     if district not in G.nodes:
         return 0
@@ -115,13 +115,13 @@ def change_company_count(G: nx.DiGraph, district: str, size: str, delta: int,
     recompute_industry_jobs(G, district, industry_shares)
     return n_jobs
 
-# ── Spillover инфраструктуры ─────────────────────────────────────────────────
+# ── Infrastructure spillover ─────────────────────────────────────────────────
 SPILLOVER_WEIGHT = 0.25         # вес бонуса от соседей (0 = выключен)
-SPILLOVER_TIME_MAX = 90.0       # макс. время в пути (мин), после которого spillover = 0
+SPILLOVER_TIME_MAX = 90.0       # макс. travel time (min), после которого spillover = 0
 
-# ── Чувствительность рынка жилья по регионам ─────────────────────────────────
-# BA (Братислава) = 1.30 — повышенная конкуренция за жильё
-# Все остальные   = 1.00 — стандартная чувствительность
+# ── Housing market sensitivity by region ─────────────────────────────────
+# BA (Bratislava) = 1.30 — increased housing competition
+# All others   = 1.00 — standard sensitivity
 REGION_HOUSING_SENSITIVITY = {
     "BA": 1.30,
     "KE": 1.00,
@@ -133,7 +133,7 @@ REGION_HOUSING_SENSITIVITY = {
     "PO": 1.00,
 }
 
-# Региональные центры для long-range рёбер в awareness_set
+# Regional centers for long-range edges in awareness_set
 REGIONAL_CENTERS = {
     "BA": "District of Bratislava I",
     "TT": "District of Trnava",
@@ -145,12 +145,12 @@ REGIONAL_CENTERS = {
     "KE": "District of Košice I",
 }
 
-# ── Вспомогательные функции для расчёта infrastructure_score ─────────────────
+# ── Helper functions for calculating infrastructure_score ─────────────────
 
 def _compute_infrastructure_raw(infra_data: dict) -> float:
     """
-    «Сырой» линейный подсчёт — БЕЗ diminishing returns.
-    Используется для spillover: сосед с 5 больницами даёт больший бонус,
+    "Raw" linear count — WITHOUT diminishing returns.
+    Used for spillover: neighbor with 5 hospitals gives a larger bonus,
     чем сосед с 2 больницами.
     """
     if not infra_data:
@@ -165,14 +165,14 @@ def _compute_infrastructure_raw(infra_data: dict) -> float:
 
 def _compute_infrastructure_score(infra_data: dict) -> float:
     """
-    Вычисляет score района [0, 1] с убывающей отдачей для больниц и поликлиник.
-    Первые 2 учреждения — полный вес, каждое следующее — sqrt(k).
-    Для spillover используется _compute_infrastructure_raw (без diminishing).
+    Calculates district score [0, 1] with diminishing returns для больниц и поликлиник.
+    First 2 facilities — full weight, each next — sqrt(k).
+    For spillover _compute_infrastructure_raw is used (без diminishing).
     """
     if not infra_data:
-        return 0.5  # значение по умолчанию
+        return 0.5  # default value
 
-    # diminishing returns: count → effective_count (первые 2 — линейно, дальше — sqrt)
+    # diminishing returns: count → effective_count (first 2 — linear, beyond — sqrt)
     def _dim(count: int) -> float:
         if count <= 2:
             return float(count)
@@ -187,14 +187,14 @@ def _compute_infrastructure_score(infra_data: dict) -> float:
            infra_data.get("museums", 0)   * 0.1 +
            infra_data.get("galleries", 0) * 0.1)
 
-    # Нормализация: максимальное raw по данным ~7.4 (Bratislava I) → делим на 5,
-    # чтобы получить score ~0.8-1.0 для лидеров.
+    # Normalization: max raw in data ~7.4 (Bratislava I) → divide by 5,
+    # to get score ~0.8-1.0 for leaders.
     score = min(1.0, raw / 5.0)
     return round(score, 3)
 
 
 def _get_min_travel_between(G: nx.DiGraph, a: str, b: str) -> float:
-    """Минимальное travel_time между районами a и b в любом направлении."""
+    """Minimum travel_time between districts a and b in any direction."""
     t = 999.0
     if G.has_edge(a, b):
         t = min(t, G.edges[a, b].get("travel_time_min", 999.0))
@@ -205,18 +205,18 @@ def _get_min_travel_between(G: nx.DiGraph, a: str, b: str) -> float:
 
 def get_effective_infrastructure(G: nx.DiGraph, district: str) -> float:
     """
-    Инфраструктурный скор района с учётом spillover от соседей.
+    District infrastructure score with spillover from neighbors.
 
-    Соседи — все районы, с которыми есть commuting-связь (входящая или исходящая).
-    Бонус = SPILLOVER_WEIGHT × (raw_соседа − raw_своя) × time_factor,
-    только если сосед «сильнее» по сырой инфраструктуре.
+    Neighbors — все районы, с которыми есть commuting-связь (входящая или исходящая).
+    Bonus = SPILLOVER_WEIGHT × (neighbor_raw − own_raw) × time_factor,
+    only if neighbor is "stronger" in raw infrastructure.
     """
     loc = G.nodes[district]
     infra_data = loc.get("infrastructure", {})
     own_raw = _compute_infrastructure_raw(infra_data)
     own_score = loc.get("infrastructure_score", 0.5)
 
-    # Собираем соседей по commuting-рёбрам (входящие + исходящие)
+    # Collect neighbors from commuting edges (входящие + исходящие)
     neighbors: set[str] = set()
     for src, _ in G.in_edges(district):
         neighbors.add(src)
@@ -232,13 +232,13 @@ def get_effective_infrastructure(G: nx.DiGraph, district: str) -> float:
         nb_data = G.nodes[nb].get("infrastructure", {})
         nb_raw = _compute_infrastructure_raw(nb_data)
 
-        # Бонус только если сосед объективно «сильнее» по сырой инфраструктуре
+        # Bonus only if neighbor is objectively "stronger" по сырой инфраструктуре
         if nb_raw <= own_raw:
             continue
 
         raw_diff = nb_raw - own_raw
 
-        # Фактор времени: чем быстрее доехать, тем сильнее spillover
+        # Actualор времени: чем быстрее доехать, тем сильнее spillover
         travel = _get_min_travel_between(G, district, nb)
         if travel >= SPILLOVER_TIME_MAX:
             continue
@@ -254,10 +254,10 @@ def build_graph(
     commuting_path: str = "data/commuting_filtered_with_travel.csv",
 ) -> nx.DiGraph:
     """
-    Строит направленный граф Словакии из commuting-матрицы.
-    Атрибуты узлов загружаются из environment.json (создан build_environment.py).
+    Builds directed Slovakia graph from commuting matrix.
+    Node attributes загружаются из environment.json (создан build_environment.py).
     """
-    # ── Загрузка environment.json ─────────────────────────────────────────────
+    # ── Loading environment.json ─────────────────────────────────────────────
     env_path_obj = Path(env_path)
     if not env_path_obj.exists():
         env_path_obj = Path(__file__).parent / env_path
@@ -265,32 +265,32 @@ def build_graph(
         env = json.load(f)
     locations = env.get("locations", {})
 
-    # ── Загрузка commuting матрицы ────────────────────────────────────────────
+    # ── Loading commuting matrix ────────────────────────────────────────────
     comm_path_obj = Path(commuting_path)
     if not comm_path_obj.exists():
         comm_path_obj = Path(__file__).parent / commuting_path
     df_comm = pd.read_csv(comm_path_obj)
 
-    # Только рёбра district → district
+    # Only district → district edges
     mask = (
         df_comm["origin_district"].str.startswith("District of") &
         df_comm["destination_district"].str.startswith("District of")
     )
     df_comm = df_comm[mask].copy()
 
-    # Self-loops → атрибут внутреннего потока
+    # Self-loops → internal flow attribute
     self_loops = df_comm[df_comm["origin_district"] == df_comm["destination_district"]]
     edges_df   = df_comm[df_comm["origin_district"] != df_comm["destination_district"]]
     internal_flow = dict(zip(self_loops["origin_district"], self_loops["total_flow"]))
 
     max_flow = edges_df["total_flow"].max() if len(edges_df) > 0 else 1.0
 
-    # ── Сбор всех районов ─────────────────────────────────────────────────────
+    # ── Collect all districts ─────────────────────────────────────────────────────
     all_districts = (set(edges_df["origin_district"]) |
                      set(edges_df["destination_district"]) |
                      set(locations.keys()))
 
-    # ── Строим граф ───────────────────────────────────────────────────────────
+    # ── Build graph ───────────────────────────────────────────────────────────
     G = nx.DiGraph()
 
     for district in sorted(all_districts):
@@ -307,22 +307,22 @@ def build_graph(
         total_dwell   = housing_data.get("total_dwellings") or 0
         vacant_dwell  = housing_data.get("vacant_dwellings") or 0
 
-        # Чувствительность рынка жилья: из данных локации или fallback по региону
+        # Housing market sensitivity: from location data or region fallback
         housing_mkt_sens = housing_data.get("housing_market_sensitivity")
         if housing_mkt_sens is None:
             housing_mkt_sens = REGION_HOUSING_SENSITIVITY.get(region, 1.00)
 
-        # Вычисляем infrastructure_score на основе блока "infrastructure"
+        # Compute infrastructure_score based on "infrastructure" block
         infra_data = loc.get("infrastructure", {})
         infrastructure_score = _compute_infrastructure_score(infra_data)
 
         # jobs_capacity — сумма занятых по всем отраслям из environment
         salary_by_ind = loc.get("salary_by_industry", {})
         business_data = loc.get("business", {})
-        # Если нет детальных данных — используем population * занятость ~45%
+        # Если нет детальных данных — используем population * occupiedсть ~45%
         jobs_capacity = max(1, int(population * (1 - unemployment_rate) * 0.45))
 
-        # ── Отраслевая ёмкость: распределяем jobs_capacity по отраслям ────
+        # ── Industry capacity: distribute jobs_capacity across industries ────
         # Вес отрасли = её зарплата / сумма зарплат → более высокооплачиваемые
         # отрасли имеют пропорционально большую долю рынка труда.
         total_salary = sum(salary_by_ind.values()) if salary_by_ind else 1.0
@@ -334,7 +334,7 @@ def build_graph(
         else:
             industry_capacity = {"Other": jobs_capacity}
 
-        # ── Инициализация industry_pressure = 1.0 для каждой отрасли ──
+        # ── Initialize industry_pressure = 1.0 for each industry ──
         initial_industry_pressure = {ind: 1.0 for ind in industry_capacity.keys()}
 
         G.add_node(
@@ -345,27 +345,27 @@ def build_graph(
             owner_share=float(owner_share),
             jobs_capacity=jobs_capacity,
             internal_flow=float(internal_flow.get(district, 0)),
-            # Базовые (неизменяемые)
+            # Base (immutable)
             avg_wage_base=float(avg_wage),
             housing_price_base=float(housing_m2),
             infrastructure_score=infrastructure_score,
-            salary_by_industry=salary_by_ind,             # отраслевые зарплаты
-            industry_capacity=industry_capacity,          # отраслевая ёмкость (базовая)
-            business=business_data,                       # бизнес-статистика
-            # Жильё (из environment.json)
-            total_dwellings=int(total_dwell),             # общее число жилищ
-            vacant_dwellings=int(vacant_dwell),           # свободное жильё
-            housing_market_sensitivity=float(housing_mkt_sens),  # чувствительность рынка
-            # Динамические (обновляются каждый тик)
+            salary_by_industry=salary_by_ind,             # отраслевые wage
+            industry_capacity=industry_capacity,          # industry capacity (базовая)
+            business=business_data,                       # business statistics
+            # Housing (from environment.json)
+            total_dwellings=int(total_dwell),             # total dwellings
+            vacant_dwellings=int(vacant_dwell),           # vacantе жильё
+            housing_market_sensitivity=float(housing_mkt_sens),  # market sensitivity
+            # Dynamic (updated each tick)
             avg_wage=float(avg_wage),
             housing_price_m2=float(housing_m2),
-            effective_housing_price_m2=float(housing_m2),  # эффективная цена (с учётом remaining)
-            housing_remaining=float(max(1.0, vacant_dwell)),  # остаток жилья (иниц. в init_housing_remaining)
+            effective_housing_price_m2=float(housing_m2),  # effective price (accounting for remaining)
+            housing_remaining=float(max(1.0, vacant_dwell)),  # housing remaining (иниц. в init_housing_remaining)
             agent_count=0,
             industry_pressure=initial_industry_pressure,  # v4: начальное давление = 1.0 (накопительная система)
         )
 
-    # ── Рёбра ────────────────────────────────────────────────────────────────
+    # ── Edges ────────────────────────────────────────────────────────────────
     for _, row in edges_df.iterrows():
         src, dst = row["origin_district"], row["destination_district"]
         if src not in G.nodes or dst not in G.nodes:
@@ -379,7 +379,7 @@ def build_graph(
             flow_weight=round(float(row["total_flow"]) / max_flow, 4),
         )
 
-    print(f"  Граф: {G.number_of_nodes()} узлов | {G.number_of_edges()} рёбер")
+    print(f"  Graph: {G.number_of_nodes()} nodes | {G.number_of_edges()} edges")
     _print_top_edges(G)
     return G
 
@@ -387,11 +387,11 @@ def build_graph(
 def _print_top_edges(G: nx.DiGraph, n: int = 5):
     edges = sorted(G.edges(data=True),
                    key=lambda e: e[2].get("total_flow", 0), reverse=True)
-    print(f"  Топ-{n} рёбер по потоку:")
+    print(f"  Топ-{n} edges по потоку:")
     for src, dst, attr in edges[:n]:
         s = src.replace("District of ", "")
         d = dst.replace("District of ", "")
-        print(f"    {s} → {d}: {attr['total_flow']:,.0f} чел | {attr['travel_time_min']:.0f} мин")
+        print(f"    {s} → {d}: {attr['total_flow']:,.0f} people | {attr['travel_time_min']:.0f} min")
 
 
 def get_awareness_set(
@@ -404,17 +404,17 @@ def get_awareness_set(
     mode: str = "work",  # "work" | "residence" | "satellite"
 ) -> list:
     """
-    Формирует awareness_set — районы которые агент реально рассматривает.
+    Forms awareness_set — districts the agent actually considers.
 
-      1. Соседи по commuting-графу в пределах time_limit
-         time_limit растёт с perceived_control и info_quality.
-      2. Если network_location=True — региональные центры других краёв
-      3. Кандидаты сортируются по total_flow и обрезаются до max_candidates.
+      1. Neighbors по commuting-графу в пределах time_limit
+         time_limit grows with perceived_control and info_quality.
+      2. If network_location=True — regional centers of other regions
+      3. Candidates sorted by total_flow and truncated to max_candidates.
 
     mode:
-      "work" — out-edges из residence (куда ездят работать)
-      "residence" — out-edges из residence (куда можно переехать)
-      "satellite" — in-edges в dst_work (откуда ездят работать — спутники)
+      "work" — out-edges from residence (where they commute to work)
+      "residence" — out-edges from residence (where they can move to)
+      "satellite" — in-edges to dst_work (where people commute from — satellites)
     """
     # time_limit: perceived_control задаёт базовый радиус, info_quality расширяет
     time_limit = 30.0 + 150.0 * perceived_control * (0.7 + 0.6 * info_quality)
@@ -427,7 +427,7 @@ def get_awareness_set(
             if attr.get("travel_time_min", 999) <= time_limit:
                 candidates.add(src)
     else:
-        # Исходящие потоки: куда ездят из этого района
+        # Outgoing flows: where people commute from this district
         for _, dst, attr in G.out_edges(district, data=True):
             if attr.get("travel_time_min", 999) <= time_limit:
                 candidates.add(dst)
@@ -457,10 +457,10 @@ def get_awareness_set(
 
 def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
     """
-    Обновляет динамические атрибуты узлов каждый тик.
+    Updates dynamic node attributes each tick.
 
-    Жильё: растёт при притоке агентов, падает при оттоке.
-    Зарплата: реагирует на соотношение рабочей силы и jobs_capacity.
+    Housing: растёт при притоке agents, падает при оттоке.
+    Wage: responds to labor force to jobs_capacity ratio.
     """
     total_real_pop = sum(G.nodes[d]["real_population"] for d in G.nodes)
 
@@ -472,7 +472,7 @@ def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
         actual_share   = current_agents / max(total_agents, 1)
         density_ratio  = actual_share / max(expected_share, 0.001)
 
-        # Жильё
+        # Housing
         housing_pressure = density_ratio - 1.0
         new_housing = attr["housing_price_m2"] * (1 + HOUSING_ALPHA * housing_pressure)
         new_housing = float(np.clip(
@@ -481,7 +481,7 @@ def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
             attr["housing_price_base"] * 2.5,
         ))
 
-        # Зарплата
+        # Wage
         labour_ratio = current_agents / max(attr["jobs_capacity"], 1)
         neutral      = attr["real_population"] / max(attr["jobs_capacity"] * 100, 1)
         wage_pressure = float(np.clip((neutral - labour_ratio) / max(neutral, 0.001), -0.5, 0.5))
@@ -496,7 +496,7 @@ def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
         G.nodes[district]["avg_wage"]          = round(new_wage, 0)
         G.nodes[district]["agent_count"]        = current_agents
 
-        # ── Эффективная цена жилья (с учётом housing_remaining) ──────────
+        # ── Effective housing price (accounting for housing_remaining) ──────────
         remaining = attr.get("housing_remaining", HOUSING_REMAINING_FLOOR)
         sensitivity = attr.get("housing_market_sensitivity", 1.0)
         delta = new_housing * (AGENT_HOUSING_FOOTPRINT / max(remaining, HOUSING_REMAINING_FLOOR)) * sensitivity
@@ -505,7 +505,7 @@ def update_graph(G: nx.DiGraph, agent_district_counts: dict, total_agents: int):
 
 def init_housing_remaining(G: nx.DiGraph, n_agents: int) -> None:
     """
-    Инициализирует housing_remaining в узлах графа.
+    Initializes housing_remaining in graph nodes.
 
     Для каждого района:
       scaled_vacant = vacant_dwellings × (n_agents / total_population)
@@ -528,15 +528,15 @@ def init_housing_remaining(G: nx.DiGraph, n_agents: int) -> None:
         remaining = max(HOUSING_REMAINING_FLOOR, vacant * scale)
         G.nodes[district]["housing_remaining"] = float(remaining)
 
-        # Сразу считаем эффективную цену
+        # Immediately compute effective price
         base_price = attr.get("housing_price_m2", 1800.0)
         sensitivity = attr.get("housing_market_sensitivity", 1.0)
         delta = base_price * (AGENT_HOUSING_FOOTPRINT / remaining) * sensitivity
         G.nodes[district]["effective_housing_price_m2"] = round(base_price + delta, 0)
 
-    # Диагностика
+    # Diagnostics
     total_scaled = sum(G.nodes[d]["housing_remaining"] for d in G.nodes)
-    print(f"  HOUSING_REMAINING (граф): {G.number_of_nodes()} узлов")
+    print(f"  HOUSING_REMAINING (граф): {G.number_of_nodes()} nodes")
     print(f"    total_scaled_vacant={total_scaled:,.1f}  "
           f"scale={scale:.6f}  n_agents={n_agents:,}")
     ba1 = "District of Bratislava I"
@@ -548,10 +548,10 @@ def init_housing_remaining(G: nx.DiGraph, n_agents: int) -> None:
 
 def get_effective_housing_price(G: nx.DiGraph, district: str) -> float:
     """
-    Возвращает эффективную цену жилья (€/м²) для района из графа.
+    Returns effective housing price (€/m²) for district from graph.
 
-    Значение уже предвычислено в update_graph() каждый тик,
-    здесь просто читаем из атрибутов узла.
+    Value is already precomputed in update_graph() each tick,
+    here we just read from node attributes.
     """
     if district in G.nodes:
         return float(G.nodes[district].get("effective_housing_price_m2", 1800.0))
@@ -560,22 +560,22 @@ def get_effective_housing_price(G: nx.DiGraph, district: str) -> float:
 
 def update_industry_pressure(G: nx.DiGraph, df=None):
     """
-    v4: Инициализирует industry_pressure только если ещё не инициализировано.
+    v4: Initializes industry_pressure only if not yet initialized.
     
-    Теперь это система накопительного давления (не пересчет каждый тик):
+    Now this is an accumulative pressure system (не пересчет каждый тик):
       - Начальное: pressure[industry] = 1.0
-      - При занятии места: pressure += 1 / max(vacant, 1)
-      - При освобождении места: pressure -= 1 / max(old_vacant, 1)
+      - When a position is filled: pressure += 1 / max(vacant, 1)
+      - When a position is freed: pressure -= 1 / max(old_vacant, 1)
     
-    Эта функция вызывается только при инициализации графа и не пересчитывает
-    давление каждый тик. Обновления давления происходят через update_industry_pressure_delta()
+    This function is called only during graph initialization и не пересчитывает
+    давление каждый тик. Pressure updates happen through update_industry_pressure_delta()
     при событиях COMMUTE, JOB_CHANGE, AGENT_MOVED.
     """
     # Проверяем, инициализировано ли давление
     for district in G.nodes:
         pressure = G.nodes[district].get("industry_pressure", {})
         if not pressure:
-            # Инициализируем по первому разу
+            # Initialize for the first time
             capacity = G.nodes[district].get("industry_capacity", {})
             initial_pressure = {ind: 1.0 for ind in capacity.keys()}
             G.nodes[district]["industry_pressure"] = initial_pressure
@@ -583,10 +583,10 @@ def update_industry_pressure(G: nx.DiGraph, df=None):
 
 def initialize_industry_pressure_from_agents(G: nx.DiGraph, df: pd.DataFrame) -> None:
     """
-    v5: Инициализирует industry_pressure как ratio: agents / capacity.
+    v5: Initializes industry_pressure as ratio: agents / capacity.
 
-    Вызывается один раз после создания агентов и sync_industry_jobs_to_graph.
-    pressure > 1.0 → рынок переполнен.
+    Called once after agent creation and sync_industry_jobs_to_graph.
+    pressure > 1.0 → market is oversaturated.
     """
     employed = df[df["is_employed"]]
     wp_ind_counts = (employed
@@ -609,7 +609,7 @@ def initialize_industry_pressure_from_agents(G: nx.DiGraph, df: pd.DataFrame) ->
 def update_industry_pressure_delta(G: nx.DiGraph, district: str, industry: str, 
                                     delta: float) -> None:
     """
-    v5: Обновляет industry_pressure по ratio-системе.
+    v5: Updates industry_pressure by ratio system.
 
     При заполнении: delta = +1 / max(capacity, 1)
     При освобождении: delta = -1 / max(capacity, 1)
@@ -637,12 +637,12 @@ def update_industry_pressure_delta(G: nx.DiGraph, district: str, industry: str,
 def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacity: dict,
                                  n_agents: int = 0):
     """
-    v3/v5: Синхронизирует INDUSTRY_JOBS_CAPACITY и JOBS_CAPACITY в узлы графа.
+    v3/v5: Syncs INDUSTRY_JOBS_CAPACITY and JOBS_CAPACITY into graph nodes.
 
-    Также устанавливает G.graph["agent_scale"] = n_agents / real_population
+    Also sets G.graph["agent_scale"] = n_agents / real_population
     для масштабирования business-ёмкости (recompute_industry_jobs).
 
-    Вызывается из run.py после create_agents().
+    Called from run.py after create_agents().
     """
     for district in G.nodes:
         if district in industry_jobs:
@@ -653,7 +653,7 @@ def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacit
         if district in jobs_capacity:
             G.nodes[district]["jobs_capacity"] = jobs_capacity[district]
 
-    # Устанавливаем scale-фактор для бизнес-данных
+    # Set scale factor for business data
     if n_agents > 0:
         total_real_pop = sum(
             G.nodes[d].get("real_population", 0) for d in G.nodes
@@ -664,18 +664,18 @@ def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacit
 def print_graph_summary(G: nx.DiGraph):
     from collections import Counter
     print("=" * 72)
-    print("ГРАФ СЛОВАКИИ — COMMUTING")
+    print("SLOVAKIA GRAPH — COMMUTING")
     print("=" * 72)
-    print(f"Узлов: {G.number_of_nodes()}  |  Рёбер: {G.number_of_edges()}")
+    print(f"Nodes: {G.number_of_nodes()}  |  Edges: {G.number_of_edges()}")
     regions = Counter(G.nodes[d].get("region", "XX") for d in G.nodes)
-    print("Районов по регионам:", dict(sorted(regions.items())))
+    print("Districtов по регионам:", dict(sorted(regions.items())))
 
-    # Дополнительно: средний infrastructure_score
+    # Additionally: средний infrastructure_score
     infra_scores = [G.nodes[d].get("infrastructure_score", 0.5) for d in G.nodes]
-    print(f"Средний infrastructure_score: {np.mean(infra_scores):.3f} (min={np.min(infra_scores):.3f}, max={np.max(infra_scores):.3f})")
+    print(f"Average infrastructure_score: {np.mean(infra_scores):.3f} (min={np.min(infra_scores):.3f}, max={np.max(infra_scores):.3f})")
 
     in_deg = sorted(G.in_degree(), key=lambda x: x[1], reverse=True)
-    print("\nТоп-10 районов по входящим потокам (in-degree):")
+    print("\nTop-10 districts by incoming flows (in-degree):")
     for node, deg in in_deg[:10]:
         name = node.replace("District of ", "")
         wage = G.nodes[node].get("avg_wage", 0)
