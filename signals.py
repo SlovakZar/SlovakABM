@@ -1,13 +1,13 @@
 """
-signals.py — Сигнальная система событий для ABM Миграция Словакии.
+signals.py — Event signal system for ABM Migration Slovakia.
 
-Архитектура:
-  Event       — атомарное событие (агентное или средовое)
-  EventBus    — шина с двумя очередями (pending + scheduled) и Dispatcher
-  Rule        — правило распространения: кому, что менять, с какой силой
-  Dispatcher  — таблица правил event_type → list[Rule]
+Architecture:
+  Event       — atomic event (agent or environmental)
+  EventBus    — bus with two queues (pending + scheduled) and Dispatcher
+  Rule        — propagation rule: whom, what to change, with what strength
+  Dispatcher  — rule table event_type → list[Rule]
 
-Импортирует только pandas и numpy. Не зависит от engine, agents, graph.
+Imports only pandas and numpy. Does not depend on engine, agents, graph.
 """
 
 from __future__ import annotations
@@ -21,12 +21,12 @@ import pandas as pd
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. Типы событий
+# 1. Event types
 # ══════════════════════════════════════════════════════════════════════════════
 
 class EventType(str, enum.Enum):
-    """Типы событий в системе (v2 — сигнальная система)."""
-    # Агентные
+    """Event types in the system (v2 — signal system)."""
+    # Agent
     AGENT_MOVED          = "AGENT_MOVED"
     AGENT_COMMUTE_STARTED = "AGENT_COMMUTE_STARTED"
     JOB_CHANGED          = "JOB_CHANGED"
@@ -34,43 +34,43 @@ class EventType(str, enum.Enum):
     GRADUATED            = "GRADUATED"
     ADAPTED              = "ADAPTED"
 
-    # Агентные v2
-    LOST_JOB             = "LOST_JOB"           # потеря работы (агентное, не сценарное)
+    # Agent v2
+    LOST_JOB             = "LOST_JOB"           # job loss (agent, not scenario)
 
-    # Средовые (сценарные)
+    # Environmental (scenario)
     FACTORY_CLOSED       = "FACTORY_CLOSED"     # deprecated → CLOSED_EMPLOYER
     EMPLOYER_OPENED      = "EMPLOYER_OPENED"    # deprecated → NEW_EMPLOYER
     HOUSING_SHOCK        = "HOUSING_SHOCK"
     INFRASTRUCTURE_CHANGE = "INFRASTRUCTURE_CHANGE"
 
-    # Средовые v2
-    NEW_EMPLOYER         = "NEW_EMPLOYER"       # новый работодатель (size: small/medium/big)
-    CLOSED_EMPLOYER      = "CLOSED_EMPLOYER"    # закрытие работодателя (size: small/medium/big)
-    NEW_INFRA            = "NEW_INFRA"          # новая инфраструктура
-    CLOSED_INFRA         = "CLOSED_INFRA"       # закрытие инфраструктуры
+    # Environmental v2
+    NEW_EMPLOYER         = "NEW_EMPLOYER"       # new employer (size: small/medium/big)
+    CLOSED_EMPLOYER      = "CLOSED_EMPLOYER"    # employer closure (size: small/medium/big)
+    NEW_INFRA            = "NEW_INFRA"          # new infrastructure
+    CLOSED_INFRA         = "CLOSED_INFRA"       # infrastructure closure
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. Класс Event
+# 2. Event class
 # ══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class Event:
-    """Атомарное событие в системе.
+    """Atomic event in the system.
 
     Поля:
       event_type       — тип события (EventType)
-      tick_emitted     — на каком тике произошло
-      source_agent_id  — ID агента-источника (None для средовых)
-      source_district  — район-источник события
-      target_district  — целевой район (если применимо)
-      industry         — отрасль (если применимо)
-      settlement_type  — тип поселения: metro/city/town/rural
+      tick_emitted     — at which tick it occurred
+      source_agent_id  — source agent ID (None для средовых)
+      source_district  — source district of event
+      target_district  — target district (если применимо)
+      industry         — industry (если применимо)
+      settlement_type  — settlement type: metro/city/town/rural
       motivation       — economic / place
-      magnitude        — сила события [0, 1]
-      size             — размер работодателя: small/medium/big (для NEW_EMPLOYER/CLOSED_EMPLOYER)
-      n_agents_affected — число затронутых агентов/рабочих мест (для CLOSED_EMPLOYER/FACTORY_CLOSED)
-      deliver_at_tick  — тик доставки (>= tick_emitted, для буферизации)
+      magnitude        — event magnitude [0, 1]
+      size             — employer size: small/medium/big (для NEW_EMPLOYER/CLOSED_EMPLOYER)
+      n_agents_affected — число затронутых agents/рабочих moт (для CLOSED_EMPLOYER/FACTORY_CLOSED)
+      deliver_at_tick  — delivery tick (>= tick_emitted, для буферизации)
     """
     event_type: EventType
     tick_emitted: int
@@ -82,8 +82,8 @@ class Event:
     motivation: Optional[str] = None            # "economic" | "place"
     magnitude: float = 0.5
     size: Optional[str] = None                  # "small" | "medium" | "big"
-    n_agents_affected: int = 0                  # v3: число рабочих мест/агентов
-    deliver_at_tick: Optional[int] = None       # None = мгновенно (tick_emitted)
+    n_agents_affected: int = 0                  # v3: число рабочих moт/agents
+    deliver_at_tick: Optional[int] = None       # None = instantly (tick_emitted)
 
     def __post_init__(self):
         if self.deliver_at_tick is None:
@@ -91,41 +91,41 @@ class Event:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 3. Signal — результат обработки события
+# 3. Signal — result of event processing
 # ══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class Signal:
-    """Сигнал к применению на DataFrame — результат диспетчеризации события.
+    """Signal to apply to DataFrame — result of event dispatching.
 
     Поля:
-      target_mask      — булев массив или callable(df)→mask: кому применять
-      field            — имя колонки в df для изменения
-      delta            — величина изменения (для add/multiply)
+      target_mask      — boolean array or callable(df)→mask: whom to apply to
+      field            — column name in df for modification
+      delta            — magnitude of change (для add/multiply)
       mode             — "add" (прибавить) | "set" (установить) | "multiply"
-      value            — значение для mode="set" (может быть строкой)
-      clip_min         — минимальное значение после применения
-      clip_max         — максимальное значение после применения
-      scale_by_field   — имя колонки для масштабирования delta (опционально)
-      event_type       — тип события-источника (для sb_pending tracking, v2)
+      value            — value for mode="set" (может быть строкой)
+      clip_min         — minimum value after application
+      clip_max         — maximum value after application
+      scale_by_field   — column name for scaling delta (опционально)
+      event_type       — source event type (для sb_pending tracking, v2)
 
-    v3 — граф-операции (сигналы среде, не только агентам):
+    v3 — graph operations (signals to environment, not just agents):
       graph_op         — "add_vacant" | "sub_occupied" | None
-      graph_district   — район для граф-операции
-      graph_industry   — отрасль для граф-операции
-      graph_delta      — величина изменения в графе (int)
+      graph_district   — district for graph operation
+      graph_industry   — industry для граф-операции
+      graph_delta      — magnitude of change in graph (int)
     """
     target_mask: Union[np.ndarray, Callable[[pd.DataFrame], np.ndarray]]
     field: str
     delta: float = 0.0
     mode: str = "add"           # "add" | "set" | "multiply"
-    value: object = None        # значение для mode="set" (строка, число)
+    value: object = None        # value for mode="set" (строка, число)
     clip_min: float = 0.0
     clip_max: float = 1.0
     scale_by_field: Optional[str] = None
     event_type: Optional["EventType"] = None  # v2: для отслеживания decay
 
-    # v3: граф-операции
+    # v3: graph operations
     graph_op: Optional[str] = None           # "add_vacant" | "sub_occupied"
     graph_district: Optional[str] = None
     graph_industry: Optional[str] = None
@@ -133,13 +133,13 @@ class Signal:
 
     def apply(self, df: pd.DataFrame,
               G: "nx.DiGraph | None" = None) -> pd.DataFrame:
-        """Применяет сигнал к DataFrame (и опционально к графу G).
+        """Applies signal to DataFrame (and optionally to graph G).
 
-        v3: если graph_op задан — модифицирует industry_jobs в узлах графа.
+        v3: if graph_op is set — modifies industry_jobs in graph nodes.
+        v4: WITHOUT df.copy() — in-place modification. flush() передаёт df
+            по цепочке, копирование на каждом сигнале избыточно.
         """
-        df = df.copy()
-
-        # ── Агентная часть (df) ──────────────────────────────────────────
+        # ── Agent part (df) ──────────────────────────────────────────
         if self.mode:
             if callable(self.target_mask):
                 mask = self.target_mask(df)
@@ -147,7 +147,13 @@ class Signal:
                 mask = self.target_mask
 
             if mask.any():
-                col = df[self.field].values.copy()
+                col = df[self.field].values
+                # v5: pandas .values may be read-only (numpy >= 1.24)
+                # or StringArray (pandas extension). Check via isinstance.
+                need_writeback = False
+                if isinstance(col, np.ndarray) and not col.flags.writeable:
+                    col = col.copy()
+                    need_writeback = True
 
                 if self.mode == "set":
                     col[mask] = self.value if self.value is not None else self.delta
@@ -164,16 +170,17 @@ class Signal:
 
                     col[mask] = np.clip(col[mask], self.clip_min, self.clip_max)
 
-                df[self.field] = col
+                if need_writeback:
+                    df[self.field] = col
 
-        # ── v3: Граф-операция ────────────────────────────────────────────
+        # ── v3: Graph operation ────────────────────────────────────────────
         if self.graph_op and G is not None and self.graph_district:
             self._apply_graph(G)
 
         return df
 
     def _apply_graph(self, G: "nx.DiGraph") -> None:
-        """v3: Применяет граф-операцию к industry_jobs узла."""
+        """v3: Applies graph operation to node industry_jobs."""
         district = self.graph_district
         industry = self.graph_industry
 
@@ -195,45 +202,45 @@ class Signal:
                     0, ind_jobs[industry].get("occupied", 0) - int(self.graph_delta)
                 )
 
-        # Пересчитываем общую jobs_capacity узла
+        # Recalculate total jobs_capacity of node
         total = sum(v["occupied"] + v["vacant"] for v in ind_jobs.values())
         G.nodes[district]["jobs_capacity"] = max(1, total)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. Rule — правило распространения события
+# 4. Rule — event propagation rule
 # ══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class Rule:
-    """Правило диспетчеризации: как событие превращается в сигналы.
+    """Dispatching rule: how an event becomes signals.
 
     Поля:
-      event_type       — к какому типу события применяется
-      target_scope     — кому распространять
-      field            — что менять в df
-      base_delta       — базовая сила изменения
+      event_type       — which event type it applies to
+      target_scope     — whom to propagate to
+      field            — what to change in df
+      base_delta       — base change strength
       mode             — "add" | "set" | "multiply"
-      value            — значение для mode="set" (строка, число)
-      distance_decay   — затухание по расстоянию (0 = без затухания)
-      filter_status    — фильтр по статусу: None / "unemployed" / "employed"
-      filter_industry  — фильтр по отрасли: None или конкретная отрасль
-      delay_ticks      — задержка в тиках (0 = мгновенно)
-      motivation       — фильтр по мотивации: None / "economic" / "place"
-      scale_by_field   — имя колонки для per-agent масштабирования delta
-      clip_min         — мин. значение после применения (по умолчанию 0.0)
-      clip_max         — макс. значение после применения (по умолчанию 1.0)
+      value            — value for mode="set" (строка, число)
+      distance_decay   — distance decay (0 = без затухания)
+      filter_status    — status filter: None / "unemployed" / "employed"
+      filter_industry  — industry filter: None или конкретная industry
+      delay_ticks      — delay in ticks (0 = instantly)
+      motivation       — motivation filter: None / "economic" / "place"
+      scale_by_field   — column name for per-agent delta scaling
+      clip_min         — min. value after application (по умолчанию 0.0)
+      clip_max         — max. value after application (по умолчанию 1.0)
 
-    v3 — граф-правила:
+    v3 — graph rules:
       graph_op         — "add_vacant" | "sub_occupied" | None
-      graph_delta      — величина изменения в графе (int)
+      graph_delta      — magnitude of change in graph (int)
     """
     event_type: EventType
     target_scope: str                           # см. выше
     field: str                                  # имя колонки в df
     base_delta: float = 0.05
     mode: str = "add"                           # "add" | "set" | "multiply"
-    value: object = None                        # значение для mode="set"
+    value: object = None                        # value for mode="set"
     distance_decay: float = 0.0
     filter_status: Optional[str] = None
     filter_industry: Optional[str] = None
@@ -243,42 +250,42 @@ class Rule:
     clip_min: float = 0.0
     clip_max: float = 1.0
 
-    # v3: граф-правила
+    # v3: graph rules
     graph_op: Optional[str] = None              # "add_vacant" | "sub_occupied"
-    graph_delta: float = 0.0                    # величина в графе
+    graph_delta: float = 0.0                    # величина in graph
 
-    # v3: дополнительные фильтры
-    filter_wage_pressure: bool = False          # фильтровать агентов с wage_pressure > 1
+    # v3: additional filters
+    filter_wage_pressure: bool = False          # фильтровать agents с wage_pressure > 1
     filter_education: Optional[str] = None      # "low" | "medium" | "high"
-    filter_same_industry: bool = False          # фильтровать агентов той же отрасли, что и event.industry
+    filter_same_industry: bool = False          # фильтровать agents той же отрасли, что и event.industry
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 5. Dispatcher — таблица правил
+# 5. Dispatcher — rule table
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Кэш маппинга district → settlement_type ────────────────────────────────
-# Заполняется извне (engine.py передаёт SETTLEMENT_MAP из agents.py)
+# ── Cache for district → settlement_type mapping ────────────────────────────────
+# Filled externally (engine.py passes SETTLEMENT_MAP from agents.py)
 _SETTLEMENT_MAP: dict[str, str] = {}
 
-# ── Кэш маппинга district → region ─────────────────────────────────────────
-# Заполняется из G.nodes при первом обращении
+# ── Cache for district → region mapping ─────────────────────────────────────────
+# Filled from G.nodes on first access
 _REGION_CACHE: dict[str, str] = {}
 
 
 def set_settlement_map(sm: dict[str, str]) -> None:
-    """Устанавливает маппинг district → settlement_type."""
+    """Sets district → settlement_type mapping."""
     global _SETTLEMENT_MAP
     _SETTLEMENT_MAP = dict(sm)
 
 
 def _get_settlement(district: str) -> str:
-    """Возвращает settlement_type для района (town по умолчанию)."""
+    """Returns settlement_type for district (town by default)."""
     return _SETTLEMENT_MAP.get(district, "town")
 
 
 def _get_region(district: str, G: "nx.DiGraph | None" = None) -> str:
-    """Возвращает код региона для района."""
+    """Returns region code for district."""
     global _REGION_CACHE
     if district in _REGION_CACHE:
         return _REGION_CACHE[district]
@@ -289,19 +296,19 @@ def _get_region(district: str, G: "nx.DiGraph | None" = None) -> str:
     return "XX"
 
 
-# ── Публичные константы scope ──────────────────────────────────────────────
+# ── Public scope constants ──────────────────────────────────────────────
 
 SCOPE_SELF                   = "self"
 SCOPE_RESIDENCE_NEIGHBORS    = "residence_neighbors"     # живут в source_district
 SCOPE_TARGET_NEIGHBORS       = "target_neighbors"        # живут в target_district
 SCOPE_WORKPLACE_COLLEAGUES   = "same_workplace_district" # работают в source_district
-SCOPE_SAME_INDUSTRY_DISTRICT = "same_industry_district"  # та же отрасль + source_district
+SCOPE_SAME_INDUSTRY_DISTRICT = "same_industry_district"  # та же industry + source_district
 SCOPE_SAME_SETTLEMENT_TYPE   = "same_settlement_type"    # тот же settlement + source_district
 SCOPE_WHOLE_REGION           = "whole_region"            # весь регион source_district
 
 
 def _industry_wage_in_district_signal(G, district: str, industry: str) -> float:
-    """Отраслевая зарплата в узле графа; fallback → avg_wage → 1614."""
+    """Industry wage in graph node; fallback → avg_wage → 1614."""
     attr = G.nodes.get(district, {})
     sal = attr.get("salary_by_industry", {})
     if sal:
@@ -311,10 +318,10 @@ def _industry_wage_in_district_signal(G, district: str, industry: str) -> float:
 
 def _wage_pressure_mask(df: pd.DataFrame, G, event: "Event",
                         base_mask: np.ndarray) -> np.ndarray:
-    """v3: Фильтрует маску — оставляет только агентов с wage_pressure > 1.
+    """v3: Filters mask — keeps only agents with wage_pressure > 1.
 
     wage_pressure = отраслевая_зарплата_в_районе / зарплата_агента.
-    Если у агента зарплата 0 — wage_pressure = 1.0 (не фильтруется).
+    If agent wage is 0 — wage_pressure = 1.0 (not filtered).
     """
     import numpy as np
     indices = np.where(base_mask)[0]
@@ -325,38 +332,38 @@ def _wage_pressure_mask(df: pd.DataFrame, G, event: "Event",
     industry = event.industry
     ind_wage = _industry_wage_in_district_signal(G, district, industry)
 
-    # Векторизовано: вместо цикла по индексам
+    # Vectorized: instead of loop over indices
     result = base_mask.copy()
     wages = df["wage"].values[indices].astype(float)
     if ind_wage > 0:
-        wp = np.where(wages > 0, ind_wage / wages, 1.0)
-        # Оставляем только агентов с wage_pressure > 1
+        wp = np.divide(ind_wage, wages, out=np.ones_like(wages, dtype=float), where=wages > 0)
+        # Keep only agents with wage_pressure > 1
         keep = wp > 1.0
         result[indices[~keep]] = False
     return result
 
 
 class Dispatcher:
-    """Хранит таблицу правил event_type → list[Rule] и диспетчеризует события."""
+    """Stores rule table event_type → list[Rule] and dispatches events."""
 
     def __init__(self):
         self._rules: dict[EventType, list[Rule]] = {}
 
     def add_rule(self, rule: Rule) -> None:
-        """Добавляет правило в таблицу."""
+        """Adds rule to table."""
         self._rules.setdefault(rule.event_type, []).append(rule)
 
     def add_rules(self, rules: list[Rule]) -> None:
-        """Добавляет несколько правил."""
+        """Adds multiple rules."""
         for r in rules:
             self.add_rule(r)
 
     def dispatch(self, event: Event, df: pd.DataFrame,
                  G: "nx.DiGraph | None" = None) -> tuple[list[Signal], list[tuple[Signal, int]]]:
-        """Превращает событие в сигналы: немедленные и отложенные.
+        """Converts event into signals: immediate and delayed.
 
-        v3: Для правил с graph_op — создаёт граф-сигнал (district/industry из Event).
-        Для правил с field — создаёт агентный сигнал (как раньше).
+        v3: For rules with graph_op — creates graph signal (district/industry из Event).
+        For rules with field — creates agent signal (как раньше).
 
         Returns:
           (signals_now, delayed) — где delayed = list[(Signal, deliver_at_tick)]
@@ -370,9 +377,9 @@ class Dispatcher:
             if rule.motivation is not None and rule.motivation != event.motivation:
                 continue
 
-            # v3: Чисто граф-правило (нет field/delta для df)
+            # v3: Pure graph rule (no field/delta for df)
             if rule.graph_op:
-                # Граф-сигнал: не нужна маска агентов, district/industry из Event
+                # Граф-сигнал: не нужна маска agents, district/industry из Event
                 if event.source_district is None:
                     continue
 
@@ -384,9 +391,9 @@ class Dispatcher:
                     g_delta = float(_size_to_jobs(event.size))
 
                 sig = Signal(
-                    target_mask=np.zeros(len(df), dtype=bool),  # пустая маска
-                    field="",                                     # нет поля df
-                    mode="",                                      # нет режима df
+                    target_mask=np.zeros(len(df), dtype=bool),  # empty mask
+                    field="",                                     # no df field
+                    mode="",                                      # no df mode
                     graph_op=rule.graph_op,
                     graph_district=event.source_district,
                     graph_industry=event.industry,
@@ -401,7 +408,7 @@ class Dispatcher:
                     signals_now.append(sig)
                 continue
 
-            # ── Агентное правило (стандартный путь) ───────────────────────
+            # ── Agent rule (standard path) ───────────────────────
             mask = self._build_mask(rule, event, df, G)
             if not mask.any():
                 continue
@@ -428,11 +435,11 @@ class Dispatcher:
 
     def _build_mask(self, rule: Rule, event: Event,
                     df: pd.DataFrame, G: "nx.DiGraph | None" = None) -> np.ndarray:
-        """Строит булеву маску для правила на основе target_scope и фильтров."""
+        """Builds boolean mask for rule based on target_scope and filters."""
         n = len(df)
         scope = rule.target_scope
 
-        # ── Базовый гео-скоуп ────────────────────────────────────────────
+        # ── Base geo-scope ────────────────────────────────────────────
         if scope == SCOPE_SELF:
             base = np.zeros(n, dtype=bool)
             if event.source_agent_id is not None:
@@ -459,7 +466,7 @@ class Dispatcher:
         elif scope == SCOPE_SAME_SETTLEMENT_TYPE:
             if event.settlement_type is None:
                 return np.zeros(n, dtype=bool)
-            # Векторизовано: pandas .map вместо цикла по агентам
+            # Векторизовано: pandas .map вmoто цикла по агентам
             base = (df["district"].map(_SETTLEMENT_MAP).fillna("town").values == event.settlement_type)
         elif scope == SCOPE_WHOLE_REGION:
             if event.source_district is None:
@@ -475,30 +482,30 @@ class Dispatcher:
         else:
             return np.zeros(n, dtype=bool)
 
-        # ── Фильтр по статусу ────────────────────────────────────────────
+        # ── Status filter ────────────────────────────────────────────
         if rule.filter_status == "unemployed":
             base = base & (df["status"].values == "unemployed")
         elif rule.filter_status == "employed":
             base = base & (df["status"].values != "unemployed")
 
-        # ── Фильтр по отрасли ────────────────────────────────────────────
+        # ── Industry filter ────────────────────────────────────────────
         if rule.filter_industry is not None:
             base = base & (df["industry"].values == rule.filter_industry)
 
-        # ── v3: Фильтр wage_pressure > 1 ─────────────────────────────────
+        # ── v3: wage_pressure > 1 filter ─────────────────────────────────
         if rule.filter_wage_pressure and G is not None and event.industry:
             # Нужен импорт _industry_wage_in_district из engine — ленивый
             base = base & _wage_pressure_mask(df, G, event, base)
 
-        # ── Фильтр по образованию ───────────────────────────────────────
+        # ── Education filter ───────────────────────────────────────
         if rule.filter_education is not None:
             base = base & (df["education"].values == rule.filter_education)
 
-        # ── Фильтр по той же отрасли, что и событие ─────────────────────
+        # ── Same-industry as event filter ─────────────────────
         if rule.filter_same_industry and event.industry:
             base = base & (df["industry"].values == event.industry)
 
-        # ── Исключаем самого агента-источника (кроме scope=self) ─────────
+        # ── Exclude source agent (кроме scope=self) ─────────
         if scope != SCOPE_SELF and event.source_agent_id is not None:
             base = base & (df["id"].values != event.source_agent_id)
 
@@ -510,20 +517,20 @@ class Dispatcher:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class EventBus:
-    """Центральная шина событий.
+    """Central event bus.
 
-    Две очереди событий:
-      pending   — события, поступившие в этом тике, ещё не обработаны
-      scheduled — события с задержкой, ждут своего тика
+    Two event queues:
+      pending   — events received this tick, not yet processed
+      scheduled — delayed events, waiting for their tick
 
-    Очередь отложенных сигналов:
-      _delayed_signals — {tick: [Signal]} — сигналы, ждущие доставки
+    Delayed signal queue:
+      _delayed_signals — {tick: [Signal]} — signals awaiting delivery
 
     Методы:
-      emit(event)                — добавить событие в pending
+      emit(event)                — add event to pending
       process(current_tick, df, G) — обработать pending + scheduled,
                                      вернуть список Signal
-      flush(df, signals)         — применить сигналы к DataFrame
+      flush(df, signals)         — apply signals to DataFrame
     """
 
     def __init__(self, dispatcher: Dispatcher | None = None):
@@ -539,37 +546,37 @@ class EventBus:
         }
 
     def emit(self, event: Event) -> None:
-        """Добавляет событие в очередь pending."""
+        """Adds event to pending queue."""
         self.pending.append(event)
         self._stats["emitted"] += 1
 
     def process(self, current_tick: int, df: pd.DataFrame,
                 G: "nx.DiGraph | None" = None) -> list[Signal]:
-        """Обрабатывает все pending-события + scheduled, готовые к этому тику.
+        """Processes all pending events + scheduled ready for this tick.
 
-        Возвращает список Signal для немедленного применения.
-        Отложенные сигналы (delay_ticks > 0) сохраняются в _delayed_signals.
+        Returns list of Signal for immediate application.
+        Delayed signals (delay_ticks > 0) are stored in _delayed_signals.
         """
         all_signals: list[Signal] = []
 
-        # 0. Извлекаем отложенные сигналы для этого тика
+        # 0. Extract delayed signals for this tick
         if current_tick in self._delayed_signals:
             all_signals.extend(self._delayed_signals.pop(current_tick))
 
-        # 1. Перенос scheduled → pending для событий, чьё время пришло
+        # 1. Move scheduled → pending for events whose time has come
         due = [e for e in self.scheduled if e.deliver_at_tick <= current_tick]
         still_waiting = [e for e in self.scheduled if e.deliver_at_tick > current_tick]
         self.scheduled = still_waiting
         self.pending.extend(due)
 
-        # 2. Диспетчеризация pending
+        # 2. Pending dispatching
         for event in self.pending:
             signals_now, delayed_signals = self.dispatcher.dispatch(event, df, G)
             all_signals.extend(signals_now)
             self._stats["processed"] += 1
             self._stats["signals_generated"] += len(signals_now)
 
-            # Сохраняем отложенные сигналы для будущих тиков
+            # Store delayed signals for future ticks
             for sig, deliver_at in delayed_signals:
                 self._delayed_signals.setdefault(deliver_at, []).append(sig)
                 self._stats["scheduled_count"] += 1
@@ -579,18 +586,18 @@ class EventBus:
 
     def flush(self, df: pd.DataFrame, signals: list[Signal],
               G: "nx.DiGraph | None" = None) -> pd.DataFrame:
-        """Применяет сигналы к DataFrame (и опционально к графу G). v3: +G."""
+        """Applies signals to DataFrame (and optionally to graph G). v3: +G."""
         for sig in signals:
             df = sig.apply(df, G)
 
-            # v2: отслеживание decay для social_boost
+            # v2: decay tracking for social_boost
             if sig.event_type is not None and sig.field == "social_boost" and sig.mode == "add":
                 self._update_sb_pending(df, sig)
 
         return df
 
     def _update_sb_pending(self, df: pd.DataFrame, sig: Signal) -> None:
-        """Обновляет sb_pending для отслеживания linear-decay social_boost."""
+        """Updates sb_pending for linear-decay social_boost tracking. (ВЕКТОРИЗОВАНО)"""
         import numpy as np
 
         if callable(sig.target_mask):
@@ -603,63 +610,67 @@ class EventBus:
 
         et = sig.event_type
         if et == EventType.AGENT_MOVED:
-            # MOVE: +0.06, decay -0.01/тик × 6
             suffix = "M6"
         elif et == EventType.AGENT_COMMUTE_STARTED:
-            # COMMUTE: +0.02, сброс через 3 тика
             suffix = "C3"
         else:
             return
 
-        # Обновляем sb_pending для затронутых агентов
+        # Vectorized: work only with affected agents (mask), не со всеми n
         current = df["sb_pending"].values.copy()
-        for i in range(len(df)):
-            if mask[i]:
-                existing = str(current[i])
-                if existing and existing != "nan" and existing != "":
-                    current[i] = existing + "," + suffix
-                else:
-                    current[i] = suffix
+        affected = current[mask]
+        # Mask for empty/NaN values among affected
+        empty_mask = np.array([
+            v is None or str(v) in ("", "nan", "None")
+            for v in affected
+        ], dtype=bool)
+        new_vals = affected.copy()
+        new_vals[empty_mask] = suffix
+        if (~empty_mask).any():
+            new_vals[~empty_mask] = np.array(
+                [str(v) + "," + suffix for v in affected[~empty_mask]]
+            )
+        current[mask] = new_vals
         df["sb_pending"] = current
 
     def schedule(self, event: Event, deliver_at_tick: int) -> None:
-        """Помещает событие в scheduled-очередь с задержкой."""
+        """Puts event into scheduled queue with delay."""
         event.deliver_at_tick = deliver_at_tick
         self.scheduled.append(event)
         self._stats["scheduled_count"] += 1
 
     @property
     def stats(self) -> dict:
-        """Статистика шины."""
+        """Bus statistics."""
         return dict(self._stats)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. Фабрика правил по умолчанию
+# 7. Default rule factory
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Константы — соответствуют текущим значениям из engine.py
-EVENT_SOCIAL_BOOST    = 0.08   # базовая добавка social_boost от события
-UNEMPLOYED_SIGNAL     = 0.35   # добавка к signal_reduction при потере работы
-NEIGHBOR_SIGNAL_COEF  = 0.04   # коэфф. сигнала от переехавшего соседа
+# Constants — соответствуют текущим значениям из engine.py
+EVENT_SOCIAL_BOOST    = 0.08   # base social_boost addition from event
+UNEMPLOYED_SIGNAL     = 0.35   # addition to signal_reduction on job loss
+NEIGHBOR_SIGNAL_COEF  = 0.04   # signal coefficient from moved neighbor
 
-# v3: размеры компаний → рабочие места
-_SIZE_TO_JOBS = {"small": 50, "medium": 250, "big": 1000}
+# v5: company sizes → jobs (synchronized with graph.py)
+_SIZE_TO_JOBS = {"small": 25, "medium": 130, "big": 400}
 
 
 def _size_to_jobs(size: str) -> int:
-    """Переводит размер компании в примерное число рабочих мест."""
+    """Converts company size to approximate number of jobs."""
     return _SIZE_TO_JOBS.get(size, 50)
 
 
 def create_default_dispatcher() -> Dispatcher:
-    """Создаёт Dispatcher v2 с обновлёнными правилами сигнальной системы.
+    """Creates Dispatcher v2 with updated signal system rules.
 
-    Новое в v2:
-      - social_boost: раздельные decay для MOVE (+0.06, −0.01×6) и COMMUTE (+0.02, сброс через 3)
-      - inertia_mobility_penalty: накопление от MOVE соседей (−0.06, −0.01×6)
-      - LOST_JOB: немедленное снижение inertia (−0.25) + рост econ_gap (+0.25) + ramp
-      - NEW_EMPLOYER/CLOSED_EMPLOYER: econ_penalty с условием wage_pressure>1
+    New in v2:
+      - social_boost: separate decays for MOVE (+0.06, −0.01×6) и COMMUTE (+0.02, reset через 3)
+      - inertia_mobility_penalty: accumulation from neighbor MOVEs (−0.06, −0.01×6)
+      - LOST_JOB: immediate inertia decrease (−0.25) + econ_gap increase (+0.25) + ramp
+      - NEW_EMPLOYER/CLOSED_EMPLOYER: econ_penalty with wage_pressure>1 condition
       - NEW_INFRA/CLOSED_INFRA: infra_bonus ±0.05
     """
     d = Dispatcher()
@@ -667,32 +678,24 @@ def create_default_dispatcher() -> Dispatcher:
     # ═══════════════════════════════════════════════════════════════════════
     # AGENT_MOVED — v2: social_boost +0.06 (было 0.08), новый decay
     # ═══════════════════════════════════════════════════════════════════════
-    # Соседи по старому району: social_boost +0.06 (MOVE decay: −0.01×6)
+    # Old district neighbors: social_boost +0.02 (MOVE decay: −0.005×6)
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_RESIDENCE_NEIGHBORS,
         field="social_boost",
-        base_delta=0.06,
+        base_delta=0.02,
     ))
-    # Соседи по старому району: inertia_mobility_penalty −0.06 (decay: −0.01×6)
-    # Отрицательный знак: переезд соседа понижает инерцию, делая миграцию более вероятной
+    # Old district neighbors: inertia_mobility_penalty −0.01 (decay: −0.005×6)
+    # Negative sign: neighbor move lowers inertia, making migration more likely
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_RESIDENCE_NEIGHBORS,
         field="inertia_mobility_penalty",
-        base_delta=-0.06,
+        base_delta=-0.01,
         clip_min=-1.0,
         clip_max=1.0,
     ))
-    # Соседи по новому району: позитивный сигнал → social_boost +0.06
-    d.add_rule(Rule(
-        event_type=EventType.AGENT_MOVED,
-        target_scope=SCOPE_TARGET_NEIGHBORS,
-        field="social_boost",
-        base_delta=0.06,
-    ))
-
-    # ── AGENT_MOVED (place): place_deficit_penalty соседям того же settlement ─
+    # ── AGENT_MOVED (place): place_deficit_penalty to neighbors of same settlement ─
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_SAME_SETTLEMENT_TYPE,
@@ -704,7 +707,7 @@ def create_default_dispatcher() -> Dispatcher:
         clip_max=5.0,
     ))
 
-    # ── AGENT_MOVED: signal_reduction соседям старого района ──────────────
+    # ── AGENT_MOVED: signal_reduction to old-district neighbors ──────────────
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_RESIDENCE_NEIGHBORS,
@@ -722,7 +725,7 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
-    # ── AGENT_MOVED (economic) → econ_penalty низкообразованным соседям той же отрасли ─
+    # ── AGENT_MOVED (economic) → econ_penalty to low-education neighbors of same industry ─
     d.add_rule(Rule(
         event_type=EventType.AGENT_MOVED,
         target_scope=SCOPE_RESIDENCE_NEIGHBORS,
@@ -736,7 +739,7 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # AGENT_COMMUTE_STARTED — v2: social_boost +0.02, сброс через 3 тика
+    # AGENT_COMMUTE_STARTED — v2: social_boost +0.02, reset через 3 тика
     # ═══════════════════════════════════════════════════════════════════════
     d.add_rule(Rule(
         event_type=EventType.AGENT_COMMUTE_STARTED,
@@ -758,13 +761,7 @@ def create_default_dispatcher() -> Dispatcher:
     # ═══════════════════════════════════════════════════════════════════════
     # JOB_CHANGED
     # ═══════════════════════════════════════════════════════════════════════
-    d.add_rule(Rule(
-        event_type=EventType.JOB_CHANGED,
-        target_scope=SCOPE_WORKPLACE_COLLEAGUES,
-        field="social_boost",
-        base_delta=EVENT_SOCIAL_BOOST * 0.8,       # 0.064
-    ))
-    # ── v3: JOB_CHANGED → soc_calibration_signal коллегам ─────────────────
+    # ── v3: JOB_CHANGED → soc_calibration_signal to colleagues ─────────────────
     d.add_rule(Rule(
         event_type=EventType.JOB_CHANGED,
         target_scope=SCOPE_WORKPLACE_COLLEAGUES,
@@ -774,7 +771,7 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
-    # ── JOB_CHANGED → econ_penalty низкообразованным коллегам той же отрасли ─
+    # ── JOB_CHANGED → econ_penalty низкообразованным to colleagues той же отрасли ─
     d.add_rule(Rule(
         event_type=EventType.JOB_CHANGED,
         target_scope=SCOPE_WORKPLACE_COLLEAGUES,
@@ -787,9 +784,9 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # LOST_JOB — v2: новый агентный сигнал потери работы
+    # LOST_JOB — v2: new agent job-loss signal
     # ═══════════════════════════════════════════════════════════════════════
-    # Сам агент: inertia −0.25 (немедленно)
+    # Agent self: inertia −0.25 (immediately)
     d.add_rule(Rule(
         event_type=EventType.LOST_JOB,
         target_scope=SCOPE_SELF,
@@ -798,7 +795,7 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.05,
         clip_max=0.95,
     ))
-    # Сам агент: econ_gap +0.25 (немедленно, + ramp в tick)
+    # Agent self: econ_gap +0.25 (immediately, + ramp in tick)
     d.add_rule(Rule(
         event_type=EventType.LOST_JOB,
         target_scope=SCOPE_SELF,
@@ -807,14 +804,14 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
-    # Сам агент: signal_reduction +0.35 (шок от потери работы)
+    # Agent self: signal_reduction +0.35 (job loss shock)
     d.add_rule(Rule(
         event_type=EventType.LOST_JOB,
         target_scope=SCOPE_SELF,
         field="signal_reduction",
         base_delta=UNEMPLOYED_SIGNAL,            # 0.35
     ))
-    # Сам агент: intention_state → seeking_work
+    # Agent self: intention_state → seeking_work
     d.add_rule(Rule(
         event_type=EventType.LOST_JOB,
         target_scope=SCOPE_SELF,
@@ -822,7 +819,7 @@ def create_default_dispatcher() -> Dispatcher:
         mode="set",
         value="seeking_work",
     ))
-    # Коллеги по workplace_district: inertia +0.02 (decay: −0.01×2)
+    # Colleagues by workplace_district: inertia +0.02 (decay: −0.01×2)
     d.add_rule(Rule(
         event_type=EventType.LOST_JOB,
         target_scope=SCOPE_WORKPLACE_COLLEAGUES,
@@ -833,7 +830,7 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # JOB_LOST (deprecated, оставлен для обратной совместимости)
+    # JOB_LOST (deprecated, kept for backward compatibility)
     # ═══════════════════════════════════════════════════════════════════════
     d.add_rule(Rule(
         event_type=EventType.JOB_LOST,
@@ -857,24 +854,17 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # NEW_EMPLOYER — v3: граф-сигнал (vacant_jobs) + агент-сигналы (social_boost, econ_penalty)
+    # NEW_EMPLOYER — v5: граф меняется через _execute_new_employer(),
+    # здесь только агент-сигналы (social_boost, econ_penalty)
     # ═══════════════════════════════════════════════════════════════════════
-    # Граф: добавляем вакансии в отрасли района
-    d.add_rule(Rule(
-        event_type=EventType.NEW_EMPLOYER,
-        target_scope=SCOPE_SELF,           # игнорируется для graph_op
-        field="",                           # нет поля df
-        graph_op="add_vacant",
-        graph_delta=50,                     # переопределяется из Event.size
-    ))
-    # Агенты всего региона: social_boost
+    # Агенты total региона: social_boost
     d.add_rule(Rule(
         event_type=EventType.NEW_EMPLOYER,
         target_scope=SCOPE_WHOLE_REGION,
         field="social_boost",
         base_delta=0.05,
     ))
-    # v3: NEW_EMPLOYER → soc_calibration_signal всему региону
+    # v3: NEW_EMPLOYER → soc_calibration_signal to whole region
     d.add_rule(Rule(
         event_type=EventType.NEW_EMPLOYER,
         target_scope=SCOPE_WHOLE_REGION,
@@ -884,7 +874,7 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
-    # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty
+    # Same-industry same-district agents with wage_pressure>1: econ_penalty
     d.add_rule(Rule(
         event_type=EventType.NEW_EMPLOYER,
         target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
@@ -896,17 +886,10 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # CLOSED_EMPLOYER — v3: граф-сигнал (occupied_jobs) + агент-сигналы
+    # CLOSED_EMPLOYER — v5: граф меняется через _execute_closed_employer(),
+    # здесь только агент-сигналы (aspirations, soc_calibration)
     # ═══════════════════════════════════════════════════════════════════════
-    # Граф: уменьшаем занятые места в отрасли района
-    d.add_rule(Rule(
-        event_type=EventType.CLOSED_EMPLOYER,
-        target_scope=SCOPE_SELF,
-        field="",
-        graph_op="sub_occupied",
-        graph_delta=50,                     # переопределяется из Event.size / n_agents_affected
-    ))
-    # Агенты всего региона (занятые): aspirations ↑
+    # Агенты total региона (занятые): aspirations ↑
     d.add_rule(Rule(
         event_type=EventType.CLOSED_EMPLOYER,
         target_scope=SCOPE_WHOLE_REGION,
@@ -914,7 +897,7 @@ def create_default_dispatcher() -> Dispatcher:
         base_delta=0.08,
         filter_status="employed",
     ))
-    # v3: CLOSED_EMPLOYER → soc_calibration_signal снижается в регионе ─────
+    # v3: CLOSED_EMPLOYER → soc_calibration_signal decreases in region ─────
     d.add_rule(Rule(
         event_type=EventType.CLOSED_EMPLOYER,
         target_scope=SCOPE_WHOLE_REGION,
@@ -924,14 +907,13 @@ def create_default_dispatcher() -> Dispatcher:
         clip_min=0.0,
         clip_max=1.0,
     ))
-    # Агенты той же отрасли в том же районе с wage_pressure>1: econ_penalty сброс
+    # Агенты той же отрасли в том же районе: econ_penalty reset
     d.add_rule(Rule(
         event_type=EventType.CLOSED_EMPLOYER,
         target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
         field="econ_penalty",
         mode="set",
         value=0.0,
-        filter_wage_pressure=True,
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -970,38 +952,9 @@ def create_default_dispatcher() -> Dispatcher:
     ))
 
     # ═══════════════════════════════════════════════════════════════════════
-    # Старые правила для обратной совместимости (FACTORY_CLOSED, HOUSING_SHOCK,
+    # Old rules for backward compatibility (HOUSING_SHOCK,
     # EMPLOYER_OPENED)
     # ═══════════════════════════════════════════════════════════════════════
-
-    # ── FACTORY_CLOSED ─────────────────────────────────────────────────────
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_WHOLE_REGION,
-        field="aspirations",
-        base_delta=0.12,
-        filter_status="employed",
-    ))
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_WHOLE_REGION,
-        field="inertia",
-        base_delta=-0.08,
-        filter_status="employed",
-    ))
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
-        field="aspirations",
-        base_delta=0.20,
-        filter_status="employed",
-    ))
-    d.add_rule(Rule(
-        event_type=EventType.FACTORY_CLOSED,
-        target_scope=SCOPE_SAME_INDUSTRY_DISTRICT,
-        field="signal_reduction",
-        base_delta=0.25,
-    ))
 
     # ── HOUSING_SHOCK ─────────────────────────────────────────────────────
     d.add_rule(Rule(

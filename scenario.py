@@ -1,18 +1,18 @@
 """
-scenario.py — Сценарные события по расписанию.
+scenario.py — Scheduled scenario events.
 
-Классы:
-  ScenarioEvent — одно событие с привязкой к тику
-  Scenario      — загрузка и выдача событий по тикам
+Classes:
+  ScenarioEvent — one event tied to a tick
+  Scenario      — loading and dispatching events by ticks
 
-Формат JSON:
+JSON format:
   [
-    {"tick": 6, "type": "FACTORY_CLOSED",
+    {"tick": 6, "type": "CLOSED_EMPLOYER",
      "district": "District of Žilina",
-     "industry": "Manufacturing", "magnitude": 0.8, "n_agents": 400},
-    {"tick": 18, "type": "EMPLOYER_OPENED",
+     "industry": "Manufacturing", "size": "medium"},
+    {"tick": 18, "type": "NEW_EMPLOYER",
      "district": "District of Bratislava I",
-     "industry": "ICT", "magnitude": 0.6, "n_agents": 200}
+     "industry": "ICT", "size": "big"}
   ]
 """
 
@@ -23,22 +23,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# Forward reference — импортируется при необходимости
+# Forward reference — imported when needed
 # from signals import EventType, Event
 
 
 @dataclass
 class ScenarioEvent:
-    """Событие сценария, привязанное к конкретному тику.
+    """Scenario event tied to a specific tick.
 
     Поля:
-      tick              — тик, на котором происходит событие
-      event_type        — строка типа события (ключ EventType)
-      district          — район, где происходит
-      industry          — отрасль (опционально)
-      magnitude         — сила [0, 1]
-      n_agents_affected — сколько агентов затронуть (для FACTORY_CLOSED и т.п.)
-      size              — размер работодателя: small/medium/big (для NEW_EMPLOYER/CLOSED_EMPLOYER)
+      tick              — tick at which the event occurs
+      event_type        — event type string (ключ EventType)
+      district          — district where it occurs
+      industry          — industry (опционально)
+      magnitude         — magnitude [0, 1]
+      n_agents_affected — сколько agents затронуть (для FACTORY_CLOSED и т.п.)
+      size              — employer size: small/medium/big (для NEW_EMPLOYER/CLOSED_EMPLOYER)
     """
     tick: int
     event_type: str
@@ -49,7 +49,7 @@ class ScenarioEvent:
     size: Optional[str] = None  # v2: small/medium/big
 
     def to_event(self, tick_num: int):
-        """Конвертирует в signals.Event (ленивый импорт)."""
+        """Converts to signals.Event (lazy import)."""
         from signals import Event, EventType
 
         et = EventType(self.event_type)
@@ -65,32 +65,32 @@ class ScenarioEvent:
 
 
 class Scenario:
-    """Хранит список сценарных событий и выдаёт их по тикам."""
+    """Stores scenario events and dispatches them by ticks."""
 
     def __init__(self, events: list[ScenarioEvent] | None = None):
         self._events: list[ScenarioEvent] = list(events) if events else []
-        # Индекс: tick → list[ScenarioEvent]
+        # Index: tick → list[ScenarioEvent]
         self._by_tick: dict[int, list[ScenarioEvent]] = {}
         for e in self._events:
             self._by_tick.setdefault(e.tick, []).append(e)
 
     def add(self, event: ScenarioEvent) -> None:
-        """Добавляет одно событие."""
+        """Adds one event."""
         self._events.append(event)
         self._by_tick.setdefault(event.tick, []).append(event)
 
     def get_events(self, tick: int) -> list[ScenarioEvent]:
-        """Возвращает все события для данного тика."""
+        """Returns all events for the given tick."""
         return self._by_tick.get(tick, [])
 
     @staticmethod
     def from_json(path: str) -> "Scenario":
-        """Загружает сценарий из JSON-файла."""
+        """Loads scenario from JSON file."""
         p = Path(path)
         if not p.exists():
             p = Path(__file__).parent / path
         if not p.exists():
-            # Файл не найден — возвращаем пустой сценарий
+            # File not found — return empty scenario
             return Scenario()
 
         with open(p, encoding="utf-8") as f:
@@ -111,7 +111,7 @@ class Scenario:
 
     @staticmethod
     def from_list(events: list[dict]) -> "Scenario":
-        """Создаёт сценарий из списка словарей (для встраивания в код)."""
+        """Creates scenario from list of dictionaries (for embedding in code)."""
         scenario = Scenario()
         for item in events:
             scenario.add(ScenarioEvent(

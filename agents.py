@@ -1,55 +1,55 @@
 """
-agents.py v9 — Квотная инициализация агентов
+agents.py v9 — Quota-based agent initialization
 
-ИЗМЕНЕНИЯ v9:
-  1. КВОТНАЯ ИНИЦИАЛИЗАЦИЯ: вместо семплирования n агентов с последующей
-     классификацией (где все не-employed становились безработными),
-     теперь явно создаются квоты: занятые (employed_share), безработные
-     (unemployed_share) и студенты (enrollment rates). Неактивное население
-     15–65 агентами НЕ становится.
-  2. ВОЗРАСТНОЙ ДИАПАЗОН расширен с 18–65 до 15–65.
-  3. УБРАН inactivity_r — неактивные больше не попадают в статус "unemployed".
+CHANGES v9:
+  1. QUOTA INITIALIZATION: instead of sampling n agents with subsequent
+     classification (where all non-employed became unemployed),
+     quotas are now explicitly created: employed (employed_share), unemployed
+     (unemployed_share), and students (enrollment rates). Inactive population
+     15–65 do NOT become agents.
+  2. AGE RANGE expanded from 18–65 to 15–65.
+  3. REMOVED inactivity_r — inactive no longer get "unemployed" status.
 
-ИЗМЕНЕНИЯ v8:
-  1. FIX Bernoulli regional: network_location/network_job_search теперь
-     получают региональную коррекцию (раньше проверка Bernoulli была до неё).
-  4. HURDLE для shock_sensitivity: Bernoulli(был ли шок) × интенсивность,
-     вместо normal+clip который давал массу искусственных нулей.
-  6. КОРРЕЛЯЦИИ: perceived_control→econ_perceived_control,
+CHANGES v8:
+  1. FIX Bernoulli regional: network_location/network_job_search now
+     receive regional correction (previously Bernoulli check was before it).
+  4. HURDLE for shock_sensitivity: Bernoulli(had shock?) × intensity,
+     instead of normal+clip which gave masses of artificial zeros.
+  6. CORRELATIONS: perceived_control→econ_perceived_control,
      digital_comm→info_quality, digital_comm→digital_trust,
      future_orientation→internal_mig_threshold.
-  7. SETTLEMENT в группах: sample_param принимает settlement (metro/city/town/rural),
-     влияет на commuter_threshold/internal_mig_threshold/external_mig_threshold/
+  7. SETTLEMENT in groups: sample_param accepts settlement (metro/city/town/rural),
+     affects commuter_threshold/internal_mig_threshold/external_mig_threshold/
      job_flexibility/future_orientation.
 
-Ключевые изменения относительно v3.1:
+Key changes relative to v3.1:
 
-1. РАЗДЕЛЕНИЕ ЛОКАЦИИ:
-   Каждый агент имеет два поля:
-     residence_district  — где живёт (жильё, социальные связи, inertia)
-     workplace_district  — где работает (зарплата, отрасль)
+1. LOCATION SPLIT:
+   Each agent has two fields:
+     residence_district  — where they live (housing, social ties, inertia)
+     workplace_district  — where they work (wage, industry)
    status: "stay" | "commute" | "unemployed" | "student"
 
-2. ИНИЦИАЛИЗАЦИЯ ИЗ COMMUTING-МАТРИЦЫ:
-   Шаг 1 — workplace_district из реальных flow_work пропорций.
+2. INITIALIZATION FROM COMMUTING MATRIX:
+   Step 1 — workplace_district из реальных flow_work proportions.
    Если origin == destination → status "stay".
    Если origin != destination → status "commute".
-   Безработные → workplace_district = residence_district, status "unemployed".
-   Студенты (15–26) → workplace_district = место учёбы (flow_school), status "student".
+   Unemployed → workplace_district = residence_district, status "unemployed".
+   Students (15–26) → workplace_district = moто учёбы (flow_school), status "student".
 
-3. ОТРАСЛЬ И ЗАРПЛАТА — из workplace_district:
+3. INDUSTRY AND WAGE — from workplace_district:
    industry и wage берутся из распределений района РАБОТЫ, не проживания.
-   Это критично: структура Братиславы (ICT, professional) ≠ Сеница.
+   This is critical: Bratislava structure (ICT, professional) ≠ Сеница.
 
-4. jobs_capacity ИЗ COMMUTING-МАТРИЦЫ:
-   Суммируем входящие flow_work по каждому district как destination.
-   Это workplace-based занятость, а не residence-based.
-   Экспортируется в словарь JOBS_CAPACITY для использования в graph.py и engine.py.
+4. jobs_capacity FROM COMMUTING MATRIX:
+   Sum incoming flow_work по каждому district как destination.
+   This is workplace-based employment, not residence-based.
+   Exported to dictionary JOBS_CAPACITY для использования в graph.py и engine.py.
 
-5. FFT-СОВМЕСТИМАЯ СТРУКТУРА:
-   intention_state расширен: "none" | "seeking_work" | "seeking_residence" | "commute_pending"
-   dst_work — целевой район работы (заполняется в seeking_work фазе engine.py)
-   Убран forming_ticks / forming_duration — заменяется FFT-деревом в engine.py.
+5. FFT-COMPATIBLE STRUCTURE:
+   intention_state extended: "none" | "seeking_work" | "seeking_residence" | "commute_pending"
+   dst_work — target district работы (заполняется в seeking_work фазе engine.py)
+   Removed forming_ticks / forming_duration — заменяется FFT-деревом в engine.py.
 """
 
 import json
@@ -58,7 +58,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-# ── Константы ─────────────────────────────────────────────────────────────────
+# ── Constants ─────────────────────────────────────────────────────────────────
 
 BERNOULLI_PARAMS = {'network_job_search', 'network_location'}
 
@@ -67,10 +67,10 @@ RC_A1, RC_MU1, RC_ALPHA1 = 0.09, 22.0, 0.10
 RC_A2, RC_MU2, RC_ALPHA2 = 0.01, 65.0, 0.07
 RC_C = 0.005
 
-# Возрастные бины SODB в диапазоне 15–65
+# SODB age bins in 15–65 range
 # (midpoint, width, fraction_of_bin_to_use)
-# v9: расширен с 18–65 до 15–65 — бин 15-19 теперь полностью (5/5),
-#      бин 65-69 — только возраст 65 (1/5).
+# v9: expanded from 18–65 to 15–65 — bin 15-19 now fully (5/5),
+#      bin 65-69 — only age 65 (1/5).
 AGE_BIN_META = {
     "15 - 19 years": (17.0, 5, 1.0),
     "20 - 24 years": (22.0, 5, 1.0),
@@ -138,11 +138,11 @@ DISTRICT_TO_REGION_CODE = {
     "District of Michalovce": "KE",
 }
 
-# ── Тип поселения (v8) ──────────────────────────────────────────────────────
-# metro: Братислава I–V, Кошице I–IV
-# city:  региональные центры (Trnava, Nitra, Žilina, Banská Bystrica, Prešov, Trenčín)
-# town:  районные центры с населением >30k
-# rural: всё остальное
+# ── Settlement type (v8) ──────────────────────────────────────────────────────
+# metro: Bratislava I–V, Košice I–IV
+# city: regional centers (Trnava, Nitra, Žilina, Banská Bystrica, Prešov, Trenčín)
+# town: district centers with population >30k
+# rural: everything else
 SETTLEMENT_MAP: dict[str, str] = {}
 for d in DISTRICT_TO_REGION_CODE:
     name = d.replace("District of ", "")
@@ -162,25 +162,25 @@ for d in DISTRICT_TO_REGION_CODE:
     else:
         SETTLEMENT_MAP[d] = "rural"
 
-# ── Кэш загруженных данных ────────────────────────────────────────────────────
+# ── Loaded data cache ────────────────────────────────────────────────────
 
 _INIT_DISTS = None
 _SURVEY = None
 _COMMUTING = None
 
-# Глобальный словарь jobs_capacity: {district: int}
-# Заполняется при первом вызове _get_commuting(), используется graph.py
+# Global dictionary jobs_capacity: {district: int}
+# Filled on first call _get_commuting(), used by graph.py
 JOBS_CAPACITY: dict = {}
 
-# v3: Новая структура — отраслевая ёмкость с разделением на occupied/vacant
+# v3: New structure — industry capacity with occupied/vacant split
 # {district: {industry: {"occupied": int, "vacant": int}}}
-# occupied — занятые рабочие места (агенты с workplace=district, industry=X)
-# vacant   — открытые вакансии (изначально от unemployed_share, затем от NEW_EMPLOYER/CLOSED_EMPLOYER)
-# job_capacity по отрасли = occupied + vacant
+# occupied — filled jobs (agents with workplace=district, industry=X)
+# vacant   — open vacancies (initially from unemployed_share, then from NEW_EMPLOYER/CLOSED_EMPLOYER)
+# job_capacity by industry = occupied + vacant
 INDUSTRY_JOBS_CAPACITY: dict[str, dict[str, dict[str, int]]] = {}
 
 
-def _get_init_dists(path="agent_init_distributions.json"):
+def _get_init_dists(path="data/agent_init_distributions.json"):
     global _INIT_DISTS
     if _INIT_DISTS is None:
         p = Path(path)
@@ -191,7 +191,7 @@ def _get_init_dists(path="agent_init_distributions.json"):
     return _INIT_DISTS
 
 
-def _get_survey(path="agent_params_from_survey.json"):
+def _get_survey(path="data/agent_params_from_survey.json"):
     global _SURVEY
     if _SURVEY is None:
         p = Path(path)
@@ -202,11 +202,11 @@ def _get_survey(path="agent_params_from_survey.json"):
     return _SURVEY
 
 
-def _get_commuting(path="commuting_filtered_with_travel.csv"):
+def _get_commuting(path="data/commuting_filtered_with_travel.csv"):
     """
-    Загружает commuting-матрицу и строит два словаря:
-      outflow_probs[origin] = {destination: probability}  — вероятности по flow_work
-      jobs_capacity[district] = int  — суммарный входящий flow_work (workplace-based)
+    Loads commuting matrix and builds two dictionaries:
+      outflow_probs[origin] = {destination: probability}  — probabilities by flow_work
+      jobs_capacity[district] = int  — total incoming flow_work (workplace-based)
 
     Self-loops (origin == destination) включаются — это агенты "stay".
     """
@@ -220,14 +220,14 @@ def _get_commuting(path="commuting_filtered_with_travel.csv"):
 
     df = pd.read_csv(p)
 
-    # Фильтруем только district→district строки
+    # Filter only district→district rows
     mask = (
         df["origin_district"].str.startswith("District of") &
         df["destination_district"].str.startswith("District of")
     )
     df = df[mask].copy()
 
-    # Строим outflow_probs: для каждого origin — распределение по destinations
+    # Build outflow_probs: for each origin — distribution across destinations
     outflow_probs = {}
     for origin, grp in df.groupby("origin_district"):
         total = grp["flow_work"].sum()
@@ -239,12 +239,12 @@ def _get_commuting(path="commuting_filtered_with_travel.csv"):
             if row["flow_work"] > 0
         }
 
-    # Строим jobs_capacity: суммируем входящий flow_work по каждому destination
+    # Build jobs_capacity: sum incoming flow_work for each destination
     jc = df.groupby("destination_district")["flow_work"].sum().to_dict()
     JOBS_CAPACITY.update({d: int(v) for d, v in jc.items()})
 
     _COMMUTING = outflow_probs
-    print(f"  Commuting-матрица: {len(outflow_probs)} районов-источников")
+    print(f"  Commuting-матрица: {len(outflow_probs)} source districts")
     print(f"  jobs_capacity: min={min(JOBS_CAPACITY.values()):,} "
           f"max={max(JOBS_CAPACITY.values()):,} "
           f"(Bratislava I: {JOBS_CAPACITY.get('District of Bratislava I', 0):,})")
@@ -253,8 +253,8 @@ def _get_commuting(path="commuting_filtered_with_travel.csv"):
 
 def _scale_jobs_capacity(n_agents: int):
     """
-    Сжимает JOBS_CAPACITY с реальной популяции (~2.5 млн занятых)
-    до масштаба симуляции (~70 000 агентов).
+    Scales JOBS_CAPACITY from real population (~2.5 млн занятых)
+    до масштаба симуляции (~70 000 agents).
 
     scale = n_agents / сумма всех capacity.
     Минимум 1 — защита от деления на 0 в engine.
@@ -270,21 +270,24 @@ def _scale_jobs_capacity(n_agents: int):
     }
 
 
-def _init_industry_jobs(init_dists: dict, n_agents: int):
+def _init_industry_jobs(init_dists: dict, n_agents: int, G: "nx.DiGraph | None" = None):
     """
-    v3: Инициализирует INDUSTRY_JOBS_CAPACITY с разделением на occupied/vacant.
+    v5: Initializes INDUSTRY_JOBS_CAPACITY with occupied/vacant split.
 
-    Для каждого района:
-      occupied_by_industry = scaled_population × employed_share × industry_share
-      vacant_by_industry   = occupied / (1 − unemployed_share) − occupied
+    If graph G with business data is passed:
+      capacity = Σ(small×25 + medium×130 + large×400)
+      vacant = max(0, capacity × industry_share − occupied)
 
-    Итого job_capacity по отрасли = occupied + vacant.
+    Otherwise (fallback):
+      vacant = occupied / (1 − unemployed_share) − occupied
 
-    Также обновляет глобальный JOBS_CAPACITY (сумма по всем отраслям).
+    Also updates global JOBS_CAPACITY.
     """
     global INDUSTRY_JOBS_CAPACITY, JOBS_CAPACITY
 
-    # Суммарная популяция 18–65 по всем районам (из init_dists)
+    # v5: company size constants (synchronized with graph.py)
+    SIZE_EMP = {"small": 25, "medium": 130, "large": 400}
+
     total_pop = sum(
         d["population"] for d in init_dists.values()
     )
@@ -308,25 +311,42 @@ def _init_industry_jobs(init_dists: dict, n_agents: int):
         if not industry_shares:
             industry_shares = {"Other": 1.0}
 
-        # Нормализуем доли отраслей
         total_share = sum(industry_shares.values())
         if total_share == 0:
             total_share = 1.0
+
+        # ── v5: Capacity from companies, if graph available ──────────────────────
+        # NOTE: capacity is scaled to n_agents (scale = n_agents / total_pop),
+        # since business data reflects real population (~5.4M),
+        # not the model population (usually 70k). Without scale, vacancies
+        # become disproportionately large (see issue #...).
+        total_capacity_from_business = 0
+        if G is not None and district in G.nodes:
+            biz = G.nodes[district].get("business", {})
+            if biz:
+                total_capacity_from_business = (
+                    biz.get("small_companies", 0) * SIZE_EMP["small"] +
+                    biz.get("medium_companies", 0) * SIZE_EMP["medium"] +
+                    biz.get("large_companies", 0) * SIZE_EMP["large"]
+                )
+                total_capacity_from_business = max(1, int(total_capacity_from_business * scale))
 
         district_jobs: dict[str, dict[str, int]] = {}
         district_total_capacity = 0
 
         for industry, share in industry_shares.items():
             norm_share = share / total_share
-
-            # Занятые места в отрасли
             occupied = max(1, int(scaled_pop * employed_share * norm_share))
 
-            # Вакантные места = occupied / (1 − u) − occupied
-            # При unemployed_share → 1 избегаем деления на 0
-            safe_unemp = max(unemployed_share, 0.005)
-            total_positions = occupied / max(1.0 - safe_unemp, 0.01)
-            vacant = max(0, int(round(total_positions - occupied)))
+            if total_capacity_from_business > 0:
+                # v5: capacity from companies
+                capacity_ind = max(1, int(total_capacity_from_business * norm_share))
+                vacant = max(0, capacity_ind - occupied)
+            else:
+                # fallback: old formula
+                safe_unemp = max(unemployed_share, 0.005)
+                total_positions = occupied / max(1.0 - safe_unemp, 0.01)
+                vacant = max(0, int(round(total_positions - occupied)))
 
             district_jobs[industry] = {"occupied": occupied, "vacant": vacant}
             district_total_capacity += occupied + vacant
@@ -334,10 +354,13 @@ def _init_industry_jobs(init_dists: dict, n_agents: int):
         new_industry_jobs[district] = district_jobs
         new_jobs_capacity[district] = max(1, district_total_capacity)
 
-    INDUSTRY_JOBS_CAPACITY = new_industry_jobs
-    JOBS_CAPACITY = new_jobs_capacity
+    # v5: mutate existing dictionaries (do not rebind, to avoid breaking imports)
+    INDUSTRY_JOBS_CAPACITY.clear()
+    INDUSTRY_JOBS_CAPACITY.update(new_industry_jobs)
+    JOBS_CAPACITY.clear()
+    JOBS_CAPACITY.update(new_jobs_capacity)
 
-    # Диагностика
+    # Diagnostics
     total_occ = sum(
         v["occupied"]
         for d in INDUSTRY_JOBS_CAPACITY.values()
@@ -348,11 +371,11 @@ def _init_industry_jobs(init_dists: dict, n_agents: int):
         for d in INDUSTRY_JOBS_CAPACITY.values()
         for v in d.values()
     )
-    print(f"  INDUSTRY_JOBS_CAPACITY: {len(INDUSTRY_JOBS_CAPACITY)} районов")
+    print(f"  INDUSTRY_JOBS_CAPACITY: {len(INDUSTRY_JOBS_CAPACITY)} districts")
     print(f"    occupied={total_occ:,}  vacant={total_vac:,}  "
           f"total_capacity={total_occ+total_vac:,}")
     print(f"    vacant/occupied ratio={total_vac/max(total_occ,1):.3f}")
-    # Пример для проверки
+    # Example for verification
     sample_d = "District of Bratislava I"
     if sample_d in new_industry_jobs:
         sample = new_industry_jobs[sample_d]
@@ -362,15 +385,15 @@ def _init_industry_jobs(init_dists: dict, n_agents: int):
                   f"total={v['occupied']+v['vacant']:,}")
 
 
-# ── Школьные/студенческие потоки ──────────────────────────────────────────────
+# ── School/student flows ──────────────────────────────────────────────
 
 _SCHOOL_OUTFLOW = None
 _ENROLLMENT_RATES: dict = {}   # {district: {age_bin: rate}}
 
 
-def _compute_school_outflow(path="commuting_filtered_with_travel.csv"):
+def _compute_school_outflow(path="data/commuting_filtered_with_travel.csv"):
     """
-    Строит два словаря на основе flow_school:
+    Builds two dictionaries на основе flow_school:
       school_outflow[origin] = {destination: probability}
       enrollment_rates[district] = {age_bin: rate}
 
@@ -432,11 +455,11 @@ def _compute_school_outflow(path="commuting_filtered_with_travel.csv"):
         )
         pop_15_24 = max(pop_15_19 + pop_20_24, 1)
 
-        # Базовая доля студентов из данных flow_school
+        # Base student share from data flow_school
         total_students = total_students_by_district.get(district, 0)
         base_rate = np.clip(total_students / pop_15_24, 0.02, 0.95)
 
-        # Возрастной профиль
+        # Age profile
         _ENROLLMENT_RATES[district] = {
             "15-19": float(np.clip(base_rate * 1.20, 0.05, 0.98)),
             "20-24": float(np.clip(base_rate * 0.80, 0.02, 0.90)),
@@ -447,8 +470,8 @@ def _compute_school_outflow(path="commuting_filtered_with_travel.csv"):
     n_with = sum(1 for v in _ENROLLMENT_RATES.values() if v["15-19"] > 0.05)
     avg_15_19 = np.mean([v["15-19"] for v in _ENROLLMENT_RATES.values()])
     avg_20_24 = np.mean([v["20-24"] for v in _ENROLLMENT_RATES.values()])
-    print(f"  Школьные потоки: {len(school_outflow)} районов-источников")
-    print(f"  Enrollment rates: {n_with} районов, "
+    print(f"  School flows: {len(school_outflow)} source districts")
+    print(f"  Enrollment rates: {n_with} districts, "
           f"ср. 15-19={avg_15_19:.2f}, 20-24={avg_20_24:.2f}")
     return school_outflow, _ENROLLMENT_RATES
 
@@ -458,7 +481,7 @@ def _sample_schoolplace(
     school_outflow: dict,
     rng: np.random.Generator,
 ) -> str:
-    """Выбирает место учёбы из flow_school пропорций (аналог _sample_workplace)."""
+    """Selects study location из flow_school proportions (analog of _sample_workplace)."""
     probs = school_outflow.get(residence)
     if not probs:
         return residence
@@ -467,10 +490,10 @@ def _sample_schoolplace(
     return destinations[rng.choice(len(destinations), p=weights / weights.sum())]
 
 
-# ── Вспомогательные функции ───────────────────────────────────────────────────
+# ── Helper functions ───────────────────────────────────────────────────
 
 def rogers_castro_mobility(age: float) -> float:
-    """Rogers & Castro 1981: базовая вероятность мобильности по возрасту."""
+    """Rogers & Castro 1981: base mobility probability by age."""
     if age < 5:
         return 0.0
     labour = (RC_A1 * math.exp(-RC_ALPHA1 * (age - RC_MU1)) if age >= RC_MU1
@@ -482,7 +505,7 @@ def rogers_castro_mobility(age: float) -> float:
 def sample_param(name: str, age: float, education: str,
                  region: str = None, settlement: str = None,
                  rng: np.random.Generator = None) -> float:
-    """Сэмплирует параметр агента из SASD-распределений (по группе возраст×образование×[поселение])."""
+    """Samples agent parameter from SASD distributions (by age×education×[settlement] group)."""
     if rng is None:
         rng = np.random.default_rng()
     survey = _get_survey()
@@ -496,7 +519,7 @@ def sample_param(name: str, age: float, education: str,
 
     by_group = p.get("by_group", {})
 
-    # Ищем группу: сначала age+edu+settlement, потом age+edu, потом global
+    # Search group: first age+edu+settlement, then age+edu, then global
     g = None
     if settlement:
         g = by_group.get(str((ag, eg, settlement)))
@@ -506,7 +529,7 @@ def sample_param(name: str, age: float, education: str,
     sd = float(g["std"])  if g else float(p.get("global_std", 0.1))
     n  = int(g["n"])      if g else 100
 
-    # Если группа не найдена — заполняем из регионального среднего
+    # If group not found — fill from regional mean
     if not g and region:
         regional = survey.get("_regional", {}).get(name, {})
         r = regional.get(region)
@@ -514,7 +537,7 @@ def sample_param(name: str, age: float, education: str,
             mu = float(r["mean"])
             sd = float(r["std"])
 
-    # Взвешивание с региональным профилем
+    # Weighting with regional profile
     regional = survey.get("_regional", {}).get(name, {})
     if region and regional:
         r = regional.get(region)
@@ -524,10 +547,10 @@ def sample_param(name: str, age: float, education: str,
             mu  = (w_g * mu + w_r * r["mean"]) / (w_g + w_r)
             sd  = max(sd, r["std"]) * 0.8
 
-    # ═══ ИСПРАВЛЕНИЕ v8: Bernoulli ПОСЛЕ regional ═══
-    # Раньше Bernoulli-проверка была до regional-коррекции,
-    # из-за чего network_location и network_job_search игнорировали
-    # региональные профили (BA=0.18 vs NR=0.43 для network_location).
+    # ═══ FIX v8: Bernoulli AFTER regional ═══
+    # Previously Bernoulli check was before regional correction,
+    # causing network_location and network_job_search to ignore
+    # regional profiles (BA=0.18 vs NR=0.43 for network_location).
     if name in BERNOULLI_PARAMS:
         return float(rng.random() < float(np.clip(mu, 0, 1)))
     return float(np.clip(rng.normal(mu, max(sd, 0.01)), 0.0, 1.0))
@@ -548,8 +571,8 @@ def _sample_workplace(
     rng: np.random.Generator,
 ) -> str:
     """
-    Выбирает workplace_district из commuting-матрицы.
-    Если для района нет данных — возвращает сам район (stay).
+    Selects workplace_district from commuting matrix.
+    If no data for district — returns the district itself (stay).
     """
     probs = outflow_probs.get(residence)
     if not probs:
@@ -559,14 +582,15 @@ def _sample_workplace(
     return destinations[rng.choice(len(destinations), p=weights / weights.sum())]
 
 
-# ── Главная функция создания агентов ─────────────────────────────────────────
+# ── Main agent creation function ─────────────────────────────────────────
 
 def create_agents(
     dist_path: str = "agent_init_distributions.json",
-    survey_path: str = "agent_params_from_survey.json",
-    commuting_path: str = "commuting_filtered_with_travel.csv",
+    survey_path: str = "data/agent_params_from_survey.json",
+    commuting_path: str = "data/commuting_filtered_with_travel.csv",
     n_agents: int = 70000,
     seed: int = 42,
+    G: "nx.DiGraph | None" = None,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
 
@@ -577,10 +601,10 @@ def create_agents(
 
     districts = list(init_dists.keys())
 
-    # ── v9: целевые квоты по категориям (занятые / безработные / студенты) ─
-    # Вместо семплирования n случайных людей с последующей классификацией,
-    # явно выделяем три НЕПЕРЕСЕКАЮЩИХСЯ категории. Неактивное население 15–65
-    # (не работающее, не безработное, не учащееся) агентами НЕ становится.
+    # ── v9: target quotas by category (employed / unemployed / students) ─
+    # Instead of sampling n random people with subsequent classification,
+    # explicitly allocate three NON-OVERLAPPING categories. Inactive population 15–65
+    # (not working, not unemployed, not studying) do NOT become agents.
     pop_1564 = {}
     pop_1526 = {}
     expected_students = {}
@@ -597,11 +621,11 @@ def create_agents(
                 continue
             eff = meta["count"] * AGE_BIN_META[bin_label][2]
 
-            # 15–64: все бины КРОМЕ 65-69
+            # 15–64: all bins EXCEPT 65-69
             if bin_label != "65 - 69 years":
                 total_1564 += eff
 
-            # 15–26: бины для студентов
+            # 15–26: bins for students
             if bin_label in ("15 - 19 years", "20 - 24 years", "25 - 29 years"):
                 total_1526 += eff
                 age_key = {"15 - 19 years": "15-19", "20 - 24 years": "20-24",
@@ -613,7 +637,7 @@ def create_agents(
         pop_1526[d] = max(1.0, total_1526)
         expected_students[d] = max(0.0, exp_stu)
 
-    # Целевые количества по категориям (в масштабе реальной популяции)
+    # Target counts by category (at real population scale)
     targets = {}
     total_active_real = 0.0
     for d in districts:
@@ -628,23 +652,23 @@ def create_agents(
         targets[d] = {"employed": n_emp, "unemployed": n_unemp, "student": n_stu}
         total_active_real += n_emp + n_unemp + n_stu
 
-    # Масштабируем до n_agents
+    # Scale to n_agents
     scale = n_agents / max(total_active_real, 1.0)
     for d in districts:
         for cat in ("employed", "unemployed", "student"):
             targets[d][cat] = max(1, round(targets[d][cat] * scale))
 
-    # Корректировка округления
+    # Rounding adjustment
     current_total = sum(targets[d][cat] for d in districts
                         for cat in ("employed", "unemployed", "student"))
     diff = n_agents - current_total
-    # Распределяем разницу по крупнейшим категориям
+    # Distribute difference across largest categories
     dlist = list(districts)
     while diff != 0:
         for d in dlist:
             if diff == 0:
                 break
-            # Приоритет: employed (самая большая категория)
+            # Priority: employed (largest category)
             if diff > 0:
                 targets[d]["employed"] += 1
                 diff -= 1
@@ -662,7 +686,7 @@ def create_agents(
         region_code = DISTRICT_TO_REGION_CODE.get(residence, "XX")
 
         age_sex = dd.get("age_sex", {})
-        # Ключи для 15–64 (занятые/безработные) — исключаем 65-69
+        # Keys for 15–64 (employed/unemployed) — exclude 65-69
         work_keys = [k for k in age_sex
                      if k.split("|")[0] in AGE_BIN_META
                      and k.split("|")[0] != "65 - 69 years"]
@@ -673,7 +697,7 @@ def create_agents(
         else:
             work_weights = np.ones(len(work_keys)) / len(work_keys)
 
-        # Ключи для студентов (15–29)
+        # Keys for students (15–29)
         stu_keys = [k for k in age_sex
                     if k.split("|")[0] in ("15 - 19 years", "20 - 24 years", "25 - 29 years")]
         stu_weights = np.array([age_sex[k]["count"] * AGE_BIN_META[k.split("|")[0]][2]
@@ -688,7 +712,7 @@ def create_agents(
         housing_m2     = dd.get("housing_price_m2", 1500.0)
         nat_dist_d     = dd.get("nationality", {"Slovak": 1.0})
 
-        # ── Вспомогательная: создание записи агента ──────────────────────────
+        # ── Helper: create agent record ──────────────────────────────
         def make_agent(age, sex, status, is_employed, workplace, industry, wage,
                        graduation_cohort=-1, education_override=None):
             nonlocal agent_id
@@ -701,7 +725,7 @@ def create_agents(
             )
             nationality = _weighted_choice(nat_dist_d, rng)
 
-            # ── SASD параметры ───────────────────────────────────────────────
+            # ── SASD parameters ───────────────────────────────────────────────
             settlement = SETTLEMENT_MAP.get(residence, "town")
             def sp(name): return sample_param(name, age, education, region_code,
                                               settlement, rng)
@@ -860,7 +884,7 @@ def create_agents(
             agent_id += 1
 
         # ══════════════════════════════════════════════════════════════════════
-        # 1. СТУДЕНТЫ
+        # 1. STUDENTS
         # ══════════════════════════════════════════════════════════════════════
         for _ in range(tg["student"]):
             idx = rng.choice(len(stu_keys), p=stu_weights)
@@ -884,7 +908,7 @@ def create_agents(
                        graduation_cohort)
 
         # ══════════════════════════════════════════════════════════════════════
-        # 2. ЗАНЯТЫЕ
+        # 2. EMPLOYED
         # ══════════════════════════════════════════════════════════════════════
         for _ in range(tg["employed"]):
             idx = rng.choice(len(work_keys), p=work_weights)
@@ -903,7 +927,7 @@ def create_agents(
 
             industry = _weighted_choice(industry_dist, rng) if industry_dist else "Other"
             base_wage = salary_by_ind.get(industry, avg_wage_wp)
-            # Семплируем education заранее для корректного edu_mult
+            # Sample education in advance for correct edu_mult
             edu_pre = _weighted_choice(edu_dist, rng) if edu_dist else "medium"
             edu_mult = {"low": 0.82, "medium": 1.0, "high": 1.35}.get(edu_pre, 1.0)
             wage = float(max(0, rng.normal(base_wage * edu_mult, base_wage * 0.22)))
@@ -912,7 +936,7 @@ def create_agents(
                        education_override=edu_pre)
 
         # ══════════════════════════════════════════════════════════════════════
-        # 3. БЕЗРАБОТНЫЕ
+        # 3. UNEMPLOYED
         # ══════════════════════════════════════════════════════════════════════
         for _ in range(tg["unemployed"]):
             idx = rng.choice(len(work_keys), p=work_weights)
@@ -927,53 +951,53 @@ def create_agents(
             make_agent(age, sex, "unemployed", False, residence, industry, 0.0)
 
     df = pd.DataFrame(records)
-    print(f"\n  Создано агентов: {len(df):,}  |  Районов: {df['residence_district'].nunique()}")
+    print(f"\n  Agents created: {len(df):,}  |  Districtов: {df['residence_district'].nunique()}")
     _print_summary(df)
 
-    # v3: Инициализируем INDUSTRY_JOBS_CAPACITY с occupied/vacant по отраслям
-    # из данных init_dists (population, employed_share, unemployed_share, industry shares).
+    # v3: Initialize INDUSTRY_JOBS_CAPACITY with occupied/vacant by industry
+    # from init_dists data (population, employed_share, unemployed_share, industry shares).
     # Это заменяет старый _scale_jobs_capacity — отраслевая структура точнее,
-    # а commuting-матрица используется только для распределения агентов по workplace.
-    _init_industry_jobs(init_dists, n_agents)
+    # а commuting-матрица используется только для распределения agents по workplace.
+    _init_industry_jobs(init_dists, n_agents, G=G)
 
     return df
 
 
-# ── Диагностика ───────────────────────────────────────────────────────────────
+# ── Diagnostics ───────────────────────────────────────────────────────────────
 
 def _print_summary(df: pd.DataFrame):
-    print(f"  Возраст: {df['age'].min():.0f}–{df['age'].max():.0f}  "
+    print(f"  Age: {df['age'].min():.0f}–{df['age'].max():.0f}  "
           f"mean={df['age'].mean():.1f}  median={df['age'].median():.1f}")
-    print(f"  Ср. инерция:      {df['inertia'].mean():.3f}")
-    print(f"  Ср. percontrol:   {df['perceived_control'].mean():.3f}")
+    print(f"  Avg. inertia:      {df['inertia'].mean():.3f}")
+    print(f"  Avg. percontrol:   {df['perceived_control'].mean():.3f}")
 
-    # Статусы занятости
+    # Employment statuses
     status_counts = df["status"].value_counts()
-    print(f"\n  СТАТУСЫ ЗАНЯТОСТИ:")
+    print(f"\n  EMPLOYMENT STATUSES:")
     for s, n in status_counts.items():
         print(f"    {s:<12}: {n:>7,}  ({n / len(df) * 100:.1f}%)")
 
-    # Commute диагностика
+    # Commute diagnostics
     commuters = df[df["status"] == "commute"]
     if len(commuters) > 0:
-        print(f"\n  МАЯТНИКОВЫЕ (commute): {len(commuters):,}")
+        print(f"\n  COMMUTERS (commute): {len(commuters):,}")
         top_flows = (commuters
                      .groupby(["residence_district", "workplace_district"])
                      .size()
                      .sort_values(ascending=False)
                      .head(5))
-        print("  Топ-5 потоков:")
+        print("  Top-5 flows:")
         for (res, wp), cnt in top_flows.items():
             r = res.replace("District of ", "")
             w = wp.replace("District of ", "")
             print(f"    {r} → {w}: {cnt:,}")
 
-    # Student диагностика
+    # Student diagnostics
     students = df[df["status"] == "student"]
     if len(students) > 0:
-        print(f"\n  СТУДЕНТЫ: {len(students):,}  "
-              f"ср.возраст={students['age'].mean():.1f}  "
-              f"когорты: " + ", ".join(
+        print(f"\n  STUDENTS: {len(students):,}  "
+              f"avg.age={students['age'].mean():.1f}  "
+              f"cohorts: " + ", ".join(
                   f"к{int(k)}={int(v)}" for k, v in
                   students['graduation_cohort'].value_counts().sort_index().items()))
         top_school_flows = (students
@@ -981,23 +1005,23 @@ def _print_summary(df: pd.DataFrame):
                             .size()
                             .sort_values(ascending=False)
                             .head(5))
-        print("  Топ-5 студенческих потоков:")
+        print("  Top-5 student flows:")
         for (res, wp), cnt in top_school_flows.items():
             r = res.replace("District of ", "")
             w = wp.replace("District of ", "")
             print(f"    {r} → {w}: {cnt:,}")
 
-    # Зарплата
+    # Wage
     emp = df[df["wage"] > 0]
-    print(f"\n  Занятых: {df['is_employed'].mean():.1%}  "
-          f"ср. зарплата {emp['wage'].mean():,.0f}€  "
+    print(f"\n  Employed: {df['is_employed'].mean():.1%}  "
+          f"avg. wage {emp['wage'].mean():,.0f}€  "
           f"p25={emp['wage'].quantile(.25):,.0f}€  "
           f"p75={emp['wage'].quantile(.75):,.0f}€")
 
     print(f"  owns_property:    {df['owns_property'].mean():.1%}")
     print(f"  network_location: {df['network_location'].mean():.1%}")
 
-    print(f"\n  Топ-5 отраслей (workplace):")
+    print(f"\n  Top-5 industries (workplace):")
     emp_ind = df[df["is_employed"]]["industry"].value_counts().head(5)
     for ind, n in emp_ind.items():
         print(f"    {str(ind)[:50]:<50}: {n:>5,}")

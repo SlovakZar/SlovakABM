@@ -1,0 +1,63 @@
+{
+  "fixed": {
+    "inertia_mobility_penalty_move": 0.01,
+    "social_boost_move":             0.01,
+    "base_appetite_min":             0.20,
+    "max_work_candidates":           3,
+
+    "sat_smoothing": 0.88,
+    "social_boost_commute": 0.02,
+    "social_boost_new_employer": 0.05,
+    "unemployed_signal": 0.35,
+    "neighbor_signal_coef": 0.04,
+    "inertia_loss_jobloss": -0.25,
+    "econ_gap_jobloss": 0.25,
+    "infra_bonus_delta": 0.05,
+    "aspirations_closed_employer": 0.08,
+    "hub_weak_ties_bonus": 0.005,
+    "move_weak_ties_penalty": -0.10,
+    "migration_pressure_p_min": 0.03,
+    "migration_pressure_p_max": 0.80,
+    "migration_pressure_divisor": 0.12,
+    "pc_d_perceived_modifier": 2.0,
+    "migration_cooldown_ticks": 9,
+    "sb_move_total_ticks": 6,
+    "decay_inertia_mobility": 0.01,
+    "decay_econ_penalty": 0.01,
+    "jobloss_ramp_step": 0.05,
+    "max_jobs_pressure": 1.20,
+    "move_stress_factor": 0.80,
+    "place_deficit_penalty_move": 0.03,
+    "housing_budget_ratio": 0.35,
+    "adapt_flex_threshold": 0.65,
+    "adapt_sat_boost": 0.06,
+    "min_desired_raise": 0.05,
+    "unemployed_wage_floor": 0.70,
+    "unemployed_wage_ceil": 0.20,
+    "commuter_gate_ref": 0.50,
+    "job_flex_gate_ref": 0.50,
+    "housing_alpha": 0.03,
+    "wage_alpha": 0.04,
+    "national_avg_wage": 1614.0,
+    "spillover_weight": 0.20,
+    "agent_housing_footprint": 1.0,
+    "housing_remaining_floor": 3.0,
+    "rogers_castro_a1": 0.09,
+    "rogers_castro_mu1": 22.0,
+    "rogers_castro_alpha1": 0.10,
+    "rogers_castro_a2": 0.01,
+    "rogers_castro_mu2": 65.0,
+    "rogers_castro_alpha2": 0.07,
+    "rogers_castro_c": 0.005
+  },
+
+  "grid": {
+    "core": {
+      "signal_decay":             [0.70, 0.85, 0.95],
+      "aspirations_alpha":        [0.04, 0.08, 0.15],
+      "social_boost_decay":       [0.60, 0.80, 0.95],
+      "gap_adapt_lambda":         [0.02, 0.05, 0.12],
+      "decay_social_boost_move":  [0.005, 0.01, 0.02]
+    }
+  }
+}

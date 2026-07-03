@@ -1,0 +1,161 @@
+district,pop_tick0,pop_tick36,delta_abs,delta_pct,n_moved_in,n_moved_out,net_flow,run_id,run_label,p_inertia_mobility_penalty_move,p_social_boost_move,p_base_appetite_min,p_max_work_candidates,seed
+District of Banská Bystrica,120,120,0,0.0,2,0,2,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Banská Štiavnica,13,13,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bardejov,59,58,-1,-1.69,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bratislava I,47,57,10,21.28,10,0,10,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bratislava II,149,149,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bratislava III,92,90,-2,-2.17,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bratislava IV,125,123,-2,-1.6,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bratislava V,134,130,-4,-2.99,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Brezno,47,46,-1,-2.13,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bytča,30,30,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Bánovce nad Bebravou,38,38,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Detva,27,25,-2,-7.41,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Dolný Kubín,37,37,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Dunajská Streda,131,130,-1,-0.76,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Galanta,101,101,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Gelnica,20,20,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Hlohovec,47,45,-2,-4.26,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Humenné,45,43,-2,-4.44,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Ilava,64,64,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Kežmarok,54,54,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Komárno,92,92,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Košice - okolie,0,18,18,1800.0,19,0,19,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Košice I,64,56,-8,-12.5,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Košice II,68,65,-3,-4.41,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Košice III,23,22,-1,-4.35,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Košice IV,48,45,-3,-6.25,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Košice-okolie,90,90,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Krupina,19,19,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Kysucké Nové Mesto,34,32,-2,-5.88,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Levice,91,87,-4,-4.4,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Levoča,24,25,1,4.17,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Liptovský Mikuláš,69,69,0,0.0,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Lučenec,50,52,2,4.0,2,0,2,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Malacky,89,90,1,1.12,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Martin,93,92,-1,-1.08,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Medzilaborce,7,8,1,14.29,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Michalovce,69,70,1,1.45,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Myjava,25,25,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Nitra,170,173,3,1.76,4,0,4,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Nové Mesto nad Váhom,64,65,1,1.56,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Nové Zámky,128,130,2,1.56,3,0,3,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Námestovo,46,46,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Partizánske,39,39,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Pezinok,75,76,1,1.33,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Piešťany,61,60,-1,-1.64,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Poltár,16,16,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Poprad,87,85,-2,-2.3,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Považská Bystrica,63,63,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Prešov,143,145,2,1.4,2,0,2,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Prievidza,121,120,-1,-0.83,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Púchov,49,49,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Revúca,24,24,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Rimavská Sobota,54,54,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Rožňava,42,39,-3,-7.14,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Ružomberok,51,50,-1,-1.96,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Sabinov,39,39,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Senec,108,113,5,4.63,5,0,5,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Senica,63,63,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Skalica,50,48,-2,-4.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Snina,24,24,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Sobrance,15,15,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Spišská Nová Ves,61,61,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Stará Ľubovňa,32,32,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Stropkov,14,13,-1,-7.14,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Svidník,23,24,1,4.35,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Topoľčany,73,73,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Trebišov,64,64,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Trenčín,118,118,0,0.0,1,0,1,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Trnava,143,143,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Turčianske Teplice,16,16,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Tvrdošín,31,31,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Veľký Krtíš,32,32,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Vranov nad Topľou,53,53,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Zlaté Moravce,37,37,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Zvolen,68,67,-1,-1.47,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Čadca,85,86,1,1.18,2,0,2,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Šaľa,53,52,-1,-1.89,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Žarnovica,22,22,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Žiar nad Hronom,42,42,0,0.0,0,0,0,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Žilina,166,168,2,1.2,2,0,2,0,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,0
+District of Banská Bystrica,120,115,-5,-4.17,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Banská Štiavnica,13,13,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bardejov,59,56,-3,-5.08,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bratislava I,47,52,5,10.64,6,0,6,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bratislava II,149,149,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bratislava III,92,89,-3,-3.26,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bratislava IV,125,123,-2,-1.6,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bratislava V,134,133,-1,-0.75,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Brezno,47,50,3,6.38,4,0,4,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bytča,30,30,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Bánovce nad Bebravou,38,35,-3,-7.89,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Detva,27,28,1,3.7,2,0,2,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Dolný Kubín,37,36,-1,-2.7,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Dunajská Streda,131,131,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Galanta,101,101,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Gelnica,20,20,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Hlohovec,47,44,-3,-6.38,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Humenné,45,40,-5,-11.11,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Ilava,64,64,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Kežmarok,54,56,2,3.7,2,0,2,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Komárno,92,90,-2,-2.17,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Košice - okolie,0,15,15,1500.0,15,0,15,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Košice I,64,57,-7,-10.94,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Košice II,68,65,-3,-4.41,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Košice III,23,22,-1,-4.35,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Košice IV,48,45,-3,-6.25,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Košice-okolie,90,90,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Krupina,19,19,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Kysucké Nové Mesto,34,33,-1,-2.94,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Levice,91,91,0,0.0,3,0,3,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Levoča,24,24,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Liptovský Mikuláš,69,68,-1,-1.45,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Lučenec,50,51,1,2.0,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Malacky,89,89,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Martin,93,92,-1,-1.08,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Medzilaborce,7,7,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Michalovce,69,71,2,2.9,3,0,3,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Myjava,25,25,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Nitra,170,175,5,2.94,6,0,6,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Nové Mesto nad Váhom,64,64,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Nové Zámky,128,131,3,2.34,3,0,3,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Námestovo,46,48,2,4.35,5,0,5,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Partizánske,39,42,3,7.69,3,0,3,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Pezinok,75,75,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Piešťany,61,61,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Poltár,16,15,-1,-6.25,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Poprad,87,85,-2,-2.3,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Považská Bystrica,63,63,0,0.0,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Prešov,143,144,1,0.7,2,0,2,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Prievidza,121,121,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Púchov,49,48,-1,-2.04,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Revúca,24,24,0,0.0,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Rimavská Sobota,54,55,1,1.85,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Rožňava,42,42,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Ružomberok,51,51,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Sabinov,39,39,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Senec,108,111,3,2.78,3,0,3,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Senica,63,63,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Skalica,50,50,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Snina,24,24,0,0.0,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Sobrance,15,15,0,0.0,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Spišská Nová Ves,61,62,1,1.64,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Stará Ľubovňa,32,32,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Stropkov,14,14,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Svidník,23,25,2,8.7,2,0,2,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Topoľčany,73,71,-2,-2.74,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Trebišov,64,64,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Trenčín,118,119,1,0.85,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Trnava,143,143,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Turčianske Teplice,16,16,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Tvrdošín,31,30,-1,-3.23,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Veľký Krtíš,32,32,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Vranov nad Topľou,53,55,2,3.77,2,0,2,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Zlaté Moravce,37,37,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Zvolen,68,66,-2,-2.94,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Čadca,85,86,1,1.18,1,0,1,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Šaľa,53,50,-3,-5.66,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Žarnovica,22,22,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Žiar nad Hronom,42,42,0,0.0,0,0,0,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1
+District of Žilina,166,169,3,1.81,3,0,3,1,inmob0.01_sbm0.01_bamin0.2_mwc3,0.01,0.01,0.2,3,1

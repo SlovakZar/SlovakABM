@@ -1,0 +1,438 @@
+{
+  "_description": "LHS-тестируемые параметры SlovakABM v10 — группировка по Барьер 1 / Барьер 2 / Эвристики / Среда",
+  "_version": "2.0",
+  "_usage": "Каждый блок содержит номинал (default) и диапазон [min, max] для LHS-сэмплирования.",
+
+  "BARRIER_1": {
+    "_description": "Барьер 1 — Потенциал миграции (Aspirations × Capabilities) против динамического порога.\n  aspirations = EWMA(D_instant, alpha=α)\n  capabilities = income_index + (edu + weak_ties) / 2\n  dynamic_threshold = (internal_mig_thr + inertia_mob_penalty) × max(0.15, 1 − signal_reduction)\n  tpb_active = aspirations × capabilities > dynamic_threshold",
+
+    "aspirations_alpha": {
+      "default": 0.08,
+      "range": [0.01, 0.30],
+      "type": "float",
+      "description": "Скорость EWMA-накопления aspirations из D_instant. Выше = быстрее реакция."
+    },
+    "signal_decay": {
+      "default": 0.85,
+      "range": [0.60, 0.98],
+      "type": "float",
+      "description": "Затухание signal_reduction и soc_calibration_signal за тик. (1−x) = доля сброса."
+    },
+    "gap_adapt_lambda": {
+      "default": 0.05,
+      "range": [0.01, 0.15],
+      "type": "float",
+      "description": "Скорость адаптации econ_gap и domain_future_place. Выше = быстрее привыкание."
+    },
+    "sat_smoothing": {
+      "default": 0.88,
+      "range": [0.75, 0.95],
+      "type": "float",
+      "description": "Сглаживание satisfaction по 4 доменам (α). Выше = инертнее."
+    },
+
+    "social_boost_move": {
+      "default": 0.06,
+      "range": [0.005, 0.30],
+      "type": "float",
+      "description": "social_boost соседям при AGENT_MOVED."
+    },
+    "social_boost_commute": {
+      "default": 0.02,
+      "range": [0.001, 0.20],
+      "type": "float",
+      "description": "social_boost соседям при AGENT_COMMUTE_STARTED."
+    },
+    "social_boost_new_employer": {
+      "default": 0.05,
+      "range": [0.02, 0.12],
+      "type": "float",
+      "description": "social_boost всему региону при NEW_EMPLOYER."
+    },
+
+    "unemployed_signal": {
+      "default": 0.35,
+      "range": [0.15, 0.70],
+      "type": "float",
+      "description": "signal_reduction при потере работы (LOST_JOB)."
+    },
+    "neighbor_signal_coef": {
+      "default": 0.04,
+      "range": [0.005, 0.20],
+      "type": "float",
+      "description": "Коэфф. signal_reduction от переехавшего соседа."
+    },
+
+    "inertia_mobility_penalty_move": {
+      "default": 0.06,
+      "range": [0.01, 0.40],
+      "type": "float",
+      "description": "inertia_mobility_penalty соседям при AGENT_MOVED."
+    },
+    "inertia_loss_jobloss": {
+      "default": -0.25,
+      "range": [-0.60, -0.10],
+      "type": "float",
+      "description": "Снижение inertia самому агенту при LOST_JOB."
+    },
+    "econ_gap_jobloss": {
+      "default": 0.25,
+      "range": [0.10, 0.55],
+      "type": "float",
+      "description": "Рост econ_gap самому агенту при LOST_JOB."
+    },
+    "place_deficit_penalty_move": {
+      "default": 0.03,
+      "range": [0.005, 0.30],
+      "type": "float",
+      "description": "place_deficit_penalty соседям того же settlement при MOVE (place)."
+    },
+    "infra_bonus_delta": {
+      "default": 0.05,
+      "range": [0.02, 0.12],
+      "type": "float",
+      "description": "|infra_bonus| при NEW_INFRA / CLOSED_INFRA."
+    },
+    "aspirations_closed_employer": {
+      "default": 0.08,
+      "range": [0.03, 0.18],
+      "type": "float",
+      "description": "aspirations employed агентам региона при CLOSED_EMPLOYER."
+    },
+
+    "hub_weak_ties_bonus": {
+      "default": 0.005,
+      "range": [0.001, 0.02],
+      "type": "float",
+      "description": "Прирост weak_ties_utility за тик в хабах."
+    },
+    "move_weak_ties_penalty": {
+      "default": -0.10,
+      "range": [-0.25, -0.03],
+      "type": "float",
+      "description": "Сброс weak_ties при переезде (отрицательное число)."
+    }
+  },
+
+  "BARRIER_2": {
+    "_description": "Барьер 2 — Накопительное давление (migration_pressure) + вероятностный триггер.\n  D_perceived = D_instant × Attribution × SocialCalibration\n  gap = max(0, D_perceived − dynamic_inertia_s2);  migration_pressure += gap\n  P(act) = clip(pressure / max(inertia, DIVISOR), P_MIN, P_MAX)\n  + затухание динамических переменных каждый тик.",
+
+    "migration_pressure_p_min": {
+      "default": 0.03,
+      "range": [0.005, 0.10],
+      "type": "float",
+      "description": "Минимальная вероятность действия при накопленном давлении."
+    },
+    "migration_pressure_p_max": {
+      "default": 0.80,
+      "range": [0.50, 0.95],
+      "type": "float",
+      "description": "Максимальная вероятность действия (не 1.0 — элемент случайности)."
+    },
+    "migration_pressure_divisor": {
+      "default": 0.12,
+      "range": [0.05, 0.30],
+      "type": "float",
+      "description": "Делитель для перевода давления в вероятность. Ниже = чувствительнее."
+    },
+    "pc_d_perceived_modifier": {
+      "default": 2.0,
+      "range": [1.0, 4.0],
+      "type": "float",
+      "description": "Множитель perceived_control в расчёте Attribution для D_perceived."
+    },
+    "migration_cooldown_ticks": {
+      "default": 9,
+      "range": [3, 18],
+      "type": "int",
+      "description": "Тиков задержки после переезда до новой активации Барьера 1."
+    },
+    "sb_move_total_ticks": {
+      "default": 6,
+      "range": [2, 12],
+      "type": "int",
+      "description": "Длительность MOVE-потока social_boost decay (тиков)."
+    },
+    "social_boost_decay": {
+      "default": 0.80,
+      "range": [0.65, 0.95],
+      "type": "float",
+      "description": "Множитель затухания social_boost за тик (SOCIAL_BOOST_DECAY)."
+    },
+
+    "decay_social_boost_move": {
+      "default": 0.01,
+      "range": [0.0005, 0.05],
+      "type": "float",
+      "description": "Затухание social_boost за тик для MOVE-потока."
+    },
+    "decay_inertia_mobility": {
+      "default": 0.01,
+      "range": [0.0005, 0.05],
+      "type": "float",
+      "description": "Затухание inertia_mobility_penalty за тик."
+    },
+    "decay_econ_penalty": {
+      "default": 0.01,
+      "range": [0.0005, 0.05],
+      "type": "float",
+      "description": "Затухание econ_penalty за тик."
+    },
+
+    "jobloss_ramp_step": {
+      "default": 0.05,
+      "range": [0.02, 0.12],
+      "type": "float",
+      "description": "Шаг ramp-up/down econ_gap при LOST_JOB."
+    }
+  },
+
+  "HEURISTIC_SEARCH": {
+    "_description": "Унифицированный эвристический поиск работы/жилья — цикл по кандидатам + цепочка стратегий (commute → move → satellite).",
+
+    "max_jobs_pressure": {
+      "default": 1.20,
+      "range": [1.0, 1.50],
+      "type": "float",
+      "description": "Порог перегрузки рынка труда. Выше = терпимее к перегруженным районам."
+    },
+    "move_stress_factor": {
+      "default": 0.80,
+      "range": [0.60, 0.95],
+      "type": "float",
+      "description": "Множитель satisfaction после переезда. Ниже = сильнее стресс."
+    },
+    "max_work_candidates": {
+      "default": 12,
+      "range": [2, 30],
+      "type": "int",
+      "description": "Максимум районов-кандидатов для скрининга."
+    },
+    "housing_budget_ratio": {
+      "default": 0.35,
+      "range": [0.15, 0.55],
+      "type": "float",
+      "description": "Доля зарплаты на жильё. Выше = больше районов доступны."
+    },
+    "adapt_flex_threshold": {
+      "default": 0.65,
+      "range": [0.40, 0.85],
+      "type": "float",
+      "description": "Минимальная job_flexibility для адаптации на месте."
+    },
+    "adapt_sat_boost": {
+      "default": 0.06,
+      "range": [0.02, 0.15],
+      "type": "float",
+      "description": "Прирост sat_economic при адаптации."
+    },
+    "base_appetite_min": {
+      "default": 0.10,
+      "range": [0.03, 0.20],
+      "type": "float",
+      "description": "Базовый аппетит к росту зарплаты (при PC=0)."
+    },
+    "base_appetite_max": {
+      "default": 0.20,
+      "range": [0.10, 0.35],
+      "type": "float",
+      "description": "Добавка к аппетиту за econ_perceived_control (при PC=1)."
+    },
+    "min_desired_raise": {
+      "default": 0.05,
+      "range": [0.01, 0.2],
+      "type": "float",
+      "description": "Минимальная желаемая надбавка к зарплате."
+    },
+    "unemployed_wage_floor": {
+      "default": 0.70,
+      "range": [0.50, 0.90],
+      "type": "float",
+      "description": "Мин. доля от нац. средней для безработных (при PC=0)."
+    },
+    "unemployed_wage_ceil": {
+      "default": 0.20,
+      "range": [0.05, 0.40],
+      "type": "float",
+      "description": "Добавка к wage_floor за econ_perceived_control (при PC=1)."
+    },
+    "commuter_gate_ref": {
+      "default": 0.50,
+      "range": [0.35, 0.65],
+      "type": "float",
+      "description": "Порог сравнения commuter_threshold в гейтах commute/satellite. Выше = жёстче фильтр."
+    },
+    "job_flex_gate_ref": {
+      "default": 0.50,
+      "range": [0.35, 0.65],
+      "type": "float",
+      "description": "Порог сравнения job_flexibility для бонуса к допустимому времени в пути. Выше = меньше бонус."
+    }
+  },
+
+  "ENVIRONMENT": {
+    "_description": "Параметры среды — инфраструктура, рынок жилья, давление зарплат, граф.",
+
+    "housing_alpha": {
+      "default": 0.03,
+      "range": [0.005, 0.08],
+      "type": "float",
+      "description": "Скорость реакции housing_price на плотность агентов."
+    },
+    "wage_alpha": {
+      "default": 0.02,
+      "range": [0.005, 0.06],
+      "type": "float",
+      "description": "Скорость реакции avg_wage на jobs_pressure."
+    },
+    "national_avg_wage": {
+      "default": 1614.0,
+      "range": [1200.0, 2000.0],
+      "type": "float",
+      "description": "Национальная средняя зарплата (€). База для capabilities income_index."
+    },
+    "spillover_weight": {
+      "default": 0.25,
+      "range": [0.0, 0.50],
+      "type": "float",
+      "description": "Вес spillover инфраструктуры от соседних районов. 0 = без spillover."
+    },
+    "agent_housing_footprint": {
+      "default": 1.1,
+      "range": [0.5, 2.0],
+      "type": "float",
+      "description": "Сколько условных квартир занимает один агент в динамическом трекере жилья."
+    },
+    "housing_remaining_floor": {
+      "default": 1.5,
+      "range": [0.5, 5.0],
+      "type": "float",
+      "description": "Пол для remaining жилья — порог, ниже которого цена растёт."
+    },
+    "_note_housing_sensitivity": "Глобальный множитель чувствительности рынка жилья можно добавить при доработке graph.py update_graph(). Пока не реализован."
+  },
+
+  "AGENT_CREATION": {
+    "_description": "Параметры инициализации агентов (распределения, множители).",
+
+    "rogers_castro_a1": {
+      "default": 0.09,
+      "range": [0.05, 0.15],
+      "type": "float",
+      "description": "Rogers-Castro A1 (амплитуда трудовой мобильности)."
+    },
+    "rogers_castro_mu1": {
+      "default": 22.0,
+      "range": [18.0, 28.0],
+      "type": "float",
+      "description": "Rogers-Castro μ1 (пик трудовой мобильности, лет)."
+    },
+    "rogers_castro_alpha1": {
+      "default": 0.10,
+      "range": [0.05, 0.20],
+      "type": "float",
+      "description": "Rogers-Castro α1 (крутизна трудовой мобильности)."
+    },
+    "rogers_castro_a2": {
+      "default": 0.01,
+      "range": [0.003, 0.03],
+      "type": "float",
+      "description": "Rogers-Castro A2 (амплитуда пенсионной мобильности)."
+    },
+    "rogers_castro_mu2": {
+      "default": 65.0,
+      "range": [58.0, 70.0],
+      "type": "float",
+      "description": "Rogers-Castro μ2 (пик пенсионной мобильности, лет)."
+    },
+    "rogers_castro_alpha2": {
+      "default": 0.07,
+      "range": [0.03, 0.12],
+      "type": "float",
+      "description": "Rogers-Castro α2 (крутизна пенсионной мобильности)."
+    },
+    "rogers_castro_c": {
+      "default": 0.005,
+      "range": [0.001, 0.015],
+      "type": "float",
+      "description": "Rogers-Castro C (базовая константа мобильности)."
+    },
+    "edu_wage_mult_low": {
+      "default": 0.82,
+      "range": [0.70, 0.92],
+      "type": "float",
+      "description": "Множитель зарплаты для low образования."
+    },
+    "edu_wage_mult_medium": {
+      "default": 1.00,
+      "range": [0.90, 1.10],
+      "type": "float",
+      "description": "Множитель зарплаты для medium образования."
+    },
+    "edu_wage_mult_high": {
+      "default": 1.35,
+      "range": [1.15, 1.55],
+      "type": "float",
+      "description": "Множитель зарплаты для high образования."
+    },
+    "p_shock_default": {
+      "default": 0.30,
+      "range": [0.10, 0.60],
+      "type": "float",
+      "description": "Базовая вероятность переживания шока (hurdle-модель)."
+    },
+    "shock_intensity_mean": {
+      "default": 0.20,
+      "range": [0.08, 0.35],
+      "type": "float",
+      "description": "Средняя интенсивность шока (μ normal)."
+    },
+    "shock_intensity_std": {
+      "default": 0.08,
+      "range": [0.03, 0.15],
+      "type": "float",
+      "description": "Стандартное отклонение интенсивности шока."
+    },
+    "thr_place_base": {
+      "default": 0.28,
+      "range": [0.15, 0.45],
+      "type": "float",
+      "description": "Базовый порог place до умножения на type_modifier."
+    },
+    "thr_place_future_weight": {
+      "default": 0.25,
+      "range": [0.10, 0.40],
+      "type": "float",
+      "description": "Вес domain_future_place в пороге place."
+    }
+  },
+
+  "AGENT_CORRELATIONS": {
+    "_description": "Условные корреляции между параметрами агентов (v8).",
+
+    "perceived_control_to_econ_pc": {
+      "default": 0.40,
+      "range": [0.15, 0.60],
+      "type": "float",
+      "description": "Вес perceived_control в econ_perceived_control (смешивание)."
+    },
+    "digital_comm_to_info_quality": {
+      "default": 0.45,
+      "range": [0.20, 0.65],
+      "type": "float",
+      "description": "Вес digital_comm в info_quality."
+    },
+    "digital_comm_to_digital_trust": {
+      "default": 0.25,
+      "range": [0.10, 0.45],
+      "type": "float",
+      "description": "Вес digital_comm в digital_trust."
+    },
+    "future_orientation_to_mig_thr": {
+      "default": 0.20,
+      "range": [0.05, 0.40],
+      "type": "float",
+      "description": "Вес (1 - d_future_value) в internal_mig_thr."
+    }
+  }
+}

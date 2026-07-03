@@ -158,7 +158,7 @@ District of Galanta,Not found out,106.0,105,2428,2533,
 District of Galanta,Without work address,33.0,0,6230,6230,
 District of Gelnica,Abroad,0.0,0,447,447,
 District of Gelnica,District of Gelnica,0.0,3676,3244,6920,0.0
-District of Gelnica,District of Košice - okolie,0.0,12,153,165,22.008076344087254
+District of Gelnica,District of Košice-okolie,0.0,12,153,165,22.008076344087254
 District of Gelnica,District of Košice I,0.0,375,545,920,36.613271427745644
 District of Gelnica,District of Košice II,0.0,50,187,237,40.414276435906075
 District of Gelnica,District of Košice IV,1.0,181,346,527,45.5856551062096
@@ -225,20 +225,20 @@ District of Komárno,District of Nové Zámky,0.0,732,1814,2546,19.3766178828518
 District of Komárno,District of Trnava,0.0,59,91,150,94.07673992796894
 District of Komárno,Not found out,119.0,140,2326,2466,
 District of Komárno,Without work address,35.0,0,6753,6753,
-District of Košice - okolie,Abroad,0.0,2,931,933,
-District of Košice - okolie,District of Bratislava I,0.0,60,102,162,350.4541029262977
-District of Košice - okolie,District of Košice - okolie,0.0,11830,10261,22091,0.0
-District of Košice - okolie,District of Košice I,1.0,3794,7152,10946,22.787589511164047
-District of Košice - okolie,District of Košice II,0.0,1338,6565,7903,19.556559171240263
-District of Košice - okolie,District of Košice III,0.0,444,378,822,28.97857670203252
-District of Košice - okolie,District of Košice IV,0.0,2211,6675,8886,26.718104973140786
-District of Košice - okolie,District of Prešov,0.0,339,475,814,42.80734175729214
-District of Košice - okolie,District of Trebišov,0.0,53,134,187,63.05213116514449
-District of Košice - okolie,Not found out,209.0,444,2128,2572,
-District of Košice - okolie,Without work address,16.0,0,5703,5703,
+District of Košice-okolie,Abroad,0.0,2,931,933,
+District of Košice-okolie,District of Bratislava I,0.0,60,102,162,350.4541029262977
+District of Košice-okolie,District of Košice-okolie,0.0,11830,10261,22091,0.0
+District of Košice-okolie,District of Košice I,1.0,3794,7152,10946,22.787589511164047
+District of Košice-okolie,District of Košice II,0.0,1338,6565,7903,19.556559171240263
+District of Košice-okolie,District of Košice III,0.0,444,378,822,28.97857670203252
+District of Košice-okolie,District of Košice IV,0.0,2211,6675,8886,26.718104973140786
+District of Košice-okolie,District of Prešov,0.0,339,475,814,42.80734175729214
+District of Košice-okolie,District of Trebišov,0.0,53,134,187,63.05213116514449
+District of Košice-okolie,Not found out,209.0,444,2128,2572,
+District of Košice-okolie,Without work address,16.0,0,5703,5703,
 District of Košice I,Abroad,0.0,2,420,422,
 District of Košice I,District of Bratislava I,0.0,44,115,159,372.5775360810672
-District of Košice I,District of Košice - okolie,0.0,48,765,813,22.787589511164047
+District of Košice I,District of Košice-okolie,0.0,48,765,813,22.787589511164047
 District of Košice I,District of Košice I,1.0,5833,9843,15676,0.0
 District of Košice I,District of Košice II,0.0,804,3813,4617,15.90919761174025
 District of Košice I,District of Košice III,0.0,223,384,607,7.966840311918039
@@ -247,7 +247,7 @@ District of Košice I,District of Prešov,0.0,203,371,574,30.911128710304766
 District of Košice I,Not found out,59.0,236,1430,1666,
 District of Košice I,Without work address,5.0,0,2640,2640,
 District of Košice II,Abroad,0.0,1,516,517,
-District of Košice II,District of Košice - okolie,0.0,96,1001,1097,19.556559171240263
+District of Košice II,District of Košice-okolie,0.0,96,1001,1097,19.556559171240263
 District of Košice II,District of Košice I,0.0,2461,7732,10193,15.90919761174025
 District of Košice II,District of Košice II,0.0,5690,7540,13230,0.0
 District of Košice II,District of Košice III,0.0,177,317,494,16.18966503521112
@@ -256,7 +256,7 @@ District of Košice II,District of Prešov,0.0,169,349,518,46.313485050337604
 District of Košice II,Not found out,69.0,644,1378,2022,
 District of Košice II,Without work address,19.0,0,3212,3212,
 District of Košice III,Abroad,0.0,0,171,171,
-District of Košice III,District of Košice - okolie,0.0,35,378,413,28.97857670203252
+District of Košice III,District of Košice-okolie,0.0,35,378,413,28.97857670203252
 District of Košice III,District of Košice I,0.0,944,3022,3966,7.966840311918039
 District of Košice III,District of Košice II,0.0,284,1474,1758,16.18966503521112
 District of Košice III,District of Košice III,0.0,1777,620,2397,0.0
@@ -265,7 +265,7 @@ District of Košice III,District of Prešov,0.0,72,149,221,35.594234937485126
 District of Košice III,Not found out,29.0,95,465,560,
 District of Košice III,Without work address,3.0,0,1123,1123,
 District of Košice IV,Abroad,0.0,0,351,351,
-District of Košice IV,District of Košice - okolie,0.0,41,769,810,26.718104973140786
+District of Košice IV,District of Košice-okolie,0.0,41,769,810,26.718104973140786
 District of Košice IV,District of Košice I,3.0,2062,5402,7464,12.888088727991239
 District of Košice IV,District of Košice II,0.0,877,3354,4231,9.196250978847043
 District of Košice IV,District of Košice III,0.0,223,288,511,8.81140072820433
@@ -530,7 +530,7 @@ District of Prešov,District of Bratislava I,0.0,239,179,418,374.53758160994414
 District of Prešov,District of Bratislava II,1.0,19,226,245,366.80653086622254
 District of Prešov,District of Bratislava III,0.0,69,177,246,368.6526032669591
 District of Prešov,District of Bratislava V,0.0,125,65,190,376.95037992410647
-District of Prešov,District of Košice - okolie,0.0,149,311,460,42.80734175729214
+District of Prešov,District of Košice-okolie,0.0,149,311,460,42.80734175729214
 District of Prešov,District of Košice I,0.0,1138,1817,2955,30.911128710304766
 District of Prešov,District of Košice II,0.0,243,612,855,46.313485050337604
 District of Prešov,District of Košice IV,1.0,162,1049,1211,43.37677168802115
@@ -593,7 +593,7 @@ District of Rimavská Sobota,District of Zvolen,0.0,89,95,184,83.46844845857383
 District of Rimavská Sobota,Not found out,119.0,246,1296,1542,
 District of Rimavská Sobota,Without work address,13.0,0,2953,2953,
 District of Rožňava,Abroad,0.0,0,966,966,
-District of Rožňava,District of Košice - okolie,0.0,24,267,291,45.30219251690762
+District of Rožňava,District of Košice-okolie,0.0,24,267,291,45.30219251690762
 District of Rožňava,District of Košice I,1.0,342,164,506,66.81319889012082
 District of Rožňava,District of Košice II,0.0,80,141,221,64.05139243607454
 District of Rožňava,District of Košice IV,0.0,104,147,251,71.95013705159313
@@ -729,7 +729,7 @@ District of Topoľčany,Not found out,75.0,42,1639,1681,
 District of Topoľčany,Without work address,9.0,0,3732,3732,
 District of Trebišov,Abroad,0.0,8,1793,1801,
 District of Trebišov,District of Bratislava I,1.0,80,98,178,407.71658027033607
-District of Trebišov,District of Košice - okolie,0.0,44,524,568,63.05213116514449
+District of Trebišov,District of Košice-okolie,0.0,44,524,568,63.05213116514449
 District of Trebišov,District of Košice I,0.0,982,1296,2278,48.2728056235417
 District of Trebišov,District of Košice II,0.0,181,717,898,43.516014952660896
 District of Trebišov,District of Košice IV,1.0,329,1217,1546,37.38701477486388
