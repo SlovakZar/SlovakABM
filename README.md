@@ -190,6 +190,6 @@ If you use SlovakABM in your research, please cite:
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL v3)** for open-source and academic use.
 
-> *This software is released under AGPL v3 for open-source and academic use. However, if you wish to use this software for internal business operations, proprietary products, or hosted services without disclosing your modifications, a separate commercial license is required. Contact me at [email] to purchase a commercial license.*
+> *This software is released under AGPL v3 for open-source and academic use. However, if you wish to use this software for internal business operations, proprietary products, or hosted services without disclosing your modifications, a separate commercial license is required. Contact me at arm3870v3@gmail.com about a commercial license.*
 
 See `LICENSE` file for the full AGPL v3 terms.
