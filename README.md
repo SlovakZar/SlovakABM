@@ -73,7 +73,7 @@ In plain language: an agent first needs to feel dissatisfied *enough* (economic 
 
 Click the badge to open the interactive notebook — no installation needed:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SlovakZar/SlovakABM/blob/VECTOR/slovak_abm_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SlovakZar/SlovakABM/blob/main/slovak_abm_colab.ipynb)
 
 The notebook provides a control panel with sliders for:
 - Number of agents (5k–70k)
@@ -87,7 +87,7 @@ If the repository is private, the Colab notebook will prompt you for a GitHub to
 
 ```bash
 # 1. Clone the repository
-git clone -b VECTOR https://github.com/SlovakZar/SlovakABM.git
+git clone https://github.com/SlovakZar/SlovakABM.git
 cd SlovakABM
 
 # 2. Install dependencies
