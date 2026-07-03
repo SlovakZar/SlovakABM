@@ -1,8 +1,8 @@
 # SlovakABM — Agent-Based Migration Model of Slovakia
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SlovakZar/SlovakABM/blob/slovak_abm_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SlovakZar/SlovakABM/blob/main/slovak_abm_colab.ipynb)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL_v3-blue.svg)](LICENSE)
 
 **Why do people move?** Is it the salary? Unaffordable housing? A factory that closed in the neighbouring town?
 
@@ -80,8 +80,6 @@ The notebook provides a control panel with sliders for:
 - Number of ticks (6–120)
 - Report sections (heatmap, demographic portrait, master table, etc.)
 - Custom scenario events (new employer, factory closure, housing shock)
-
-If the repository is private, the Colab notebook will prompt you for a GitHub token. Use a [personal access token](https://github.com/settings/tokens) with `repo` scope.
 
 ### Option 2 — Local installation
 
@@ -190,4 +188,8 @@ If you use SlovakABM in your research, please cite:
 
 ## License
 
-This project is licensed under the MIT License. See `LICENSE` file for details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL v3)** for open-source and academic use.
+
+> *This software is released under AGPL v3 for open-source and academic use. However, if you wish to use this software for internal business operations, proprietary products, or hosted services without disclosing your modifications, a separate commercial license is required. Contact me at [email] to purchase a commercial license.*
+
+See `LICENSE` file for the full AGPL v3 terms.
