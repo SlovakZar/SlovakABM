@@ -1309,7 +1309,9 @@ def _execute_closed_employer(
     """
     from graph import change_company_count, SIZE_EMPLOYEES
 
-    n_target = SIZE_EMPLOYEES.get(size, 25)
+    # v6: Scale target by agent_scale
+    scale = G.graph.get("agent_scale", 1.0)
+    n_target = max(1, int(SIZE_EMPLOYEES.get(size, 25) * scale))
 
     # Mask: employed agents in the target industry and district
     mask = (

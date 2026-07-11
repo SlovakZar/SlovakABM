@@ -637,6 +637,11 @@ def create_agents(
         pop_1526[d] = max(1.0, total_1526)
         expected_students[d] = max(0.0, exp_stu)
 
+    # v6: Store working-age population (15–64) in graph for correct agent_scale
+    total_working_age = sum(pop_1564.values())
+    if G is not None:
+        G.graph["working_age_pop"] = total_working_age
+
     # Target counts by category (at real population scale)
     targets = {}
     total_active_real = 0.0

@@ -111,7 +111,9 @@ def change_company_count(G: nx.DiGraph, district: str, size: str, delta: int,
     old_val = biz.get(key, 0)
     biz[key] = max(0, old_val + delta)
 
-    n_jobs = SIZE_EMPLOYEES.get(size, 25)
+    # v6: Scale returned job count by agent_scale
+    scale = G.graph.get("agent_scale", 1.0)
+    n_jobs = max(1, int(SIZE_EMPLOYEES.get(size, 25) * scale))
     recompute_industry_jobs(G, district, industry_shares)
     return n_jobs
 
@@ -654,11 +656,13 @@ def sync_industry_jobs_to_graph(G: nx.DiGraph, industry_jobs: dict, jobs_capacit
             G.nodes[district]["jobs_capacity"] = jobs_capacity[district]
 
     # Set scale factor for business data
+    # v6: Use working-age population (15–64) if available, fall back to total
     if n_agents > 0:
         total_real_pop = sum(
             G.nodes[d].get("real_population", 0) for d in G.nodes
         )
-        G.graph["agent_scale"] = n_agents / max(total_real_pop, 1)
+        working_age = G.graph.get("working_age_pop", total_real_pop)
+        G.graph["agent_scale"] = n_agents / max(working_age, 1)
 
 
 def print_graph_summary(G: nx.DiGraph):
