@@ -89,7 +89,8 @@ MIGRATION_PRESSURE_DIVISOR  = 0.12   # делитель для перевода 
 # P(act) = clip(pressure / (inertia + DIVISOR), P_MIN, P_MAX)
 
 PC_D_PERCEIVED_MODIFIER    = 2.0    # множитель контроля (PC) в расчёте D_perceived
-GAP_ADAPT_LAMBDA         = 0.05   # скорость адаптации econ_gap и domain_future_place
+GAP_ADAPT_LAMBDA         = 0.15   # скорость адаптации econ_gap и domain_future_place
+ASPIRATIONS_AUTONOMOUS_GROWTH = 0.002  # автономный дрейф aspirations вверх за тик
 HUB_WEAK_TIES_BONUS      = 0.005  # прирост weak_ties_utility за тик в хабах
 MOVE_WEAK_TIES_PENALTY   = -0.10  # reset weak_ties при переезде
 
@@ -496,8 +497,8 @@ def _execute_commute(
     df.at[idx, "tpb_active"]         = False
     df.at[idx, "intention_delay"]    = 0
 
-    # Reset aspirations — agent satisfied the need, EWMA resets
-    df.at[idx, "aspirations"] = 0.0
+    # Reset aspirations — agent satisfied the need, EWMA partially preserved
+    df.at[idx, "aspirations"] = float(np.clip(df.at[idx, "aspirations"] * 0.35, 0.0, 0.3))
     df.at[idx, "place_deficit_penalty"] = 0.0
 
     # v2: reset dynamic signal system variables
@@ -579,8 +580,8 @@ def _execute_move(
     df.at[idx, "tpb_active"]      = False
     df.at[idx, "intention_delay"] = 0
 
-    # Reset aspirations — agent moved, EWMA resets
-    df.at[idx, "aspirations"] = 0.0
+    # Reset aspirations — agent moved, EWMA partially preserved
+    df.at[idx, "aspirations"] = float(np.clip(df.at[idx, "aspirations"] * 0.35, 0.0, 0.3))
     df.at[idx, "place_deficit_penalty"] = 0.0
 
     # v2: reset dynamic signal system variables
@@ -674,8 +675,8 @@ def _execute_adapt(df: pd.DataFrame, idx: int, domain: str = "economic"):
     df.at[idx, "tpb_active"]      = False
     df.at[idx, "intention_delay"] = 0
 
-    # Reset aspirations — agent adapted, EWMA resets
-    df.at[idx, "aspirations"] = 0.0
+    # Reset aspirations — agent adapted, EWMA partially preserved
+    df.at[idx, "aspirations"] = float(np.clip(df.at[idx, "aspirations"] * 0.35, 0.0, 0.3))
     df.at[idx, "place_deficit_penalty"] = 0.0
     df.at[idx, "migration_pressure"] = 0.0
 
@@ -1757,6 +1758,9 @@ def tick(
 
     # v2: LOST_JOB ramp processing (econ_gap + jobloss_econ_gap_bonus)
     _process_jobloss_ramp(df)
+
+    # ── Autonomous aspirations drift (гедонистическая адаптация) ─────
+    df["aspirations"] = np.clip(df["aspirations"] + ASPIRATIONS_AUTONOMOUS_GROWTH, 0.0, 1.0)
 
     # ── place_deficit_penalty: penalty accumulation for place dissatisfaction (ВЕКТОРИЗОВАНО) ─
     res_districts = df["district"].values
