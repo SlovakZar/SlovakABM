@@ -1298,20 +1298,25 @@ def _execute_closed_employer(
     rng: np.random.Generator,
     bus: "Optional[EventBus]" = None,
     tick_num: int = 0,
+    n_to_fire: int = 0,
 ) -> int:
     """
-    v5: Employer closure.
+    v7: Employer closure.
 
-    1. Agent layoffs в district × industry (до SIZE_EMPLOYEES[size] peopleовек)
+    1. Agent layoffs в district × industry
+       — если n_to_fire > 0: n_target = n_to_fire × agent_scale
+       — иначе: SIZE_EMPLOYEES[size] × agent_scale (старое поведение)
     2. −1 компания размера size → пересчёт ёмкости (capacity падает)
     3. LOST_JOB каждому уволенному
     4. Возвращает число уволенных.
     """
     from graph import change_company_count, SIZE_EMPLOYEES
 
-    # v6: Scale target by agent_scale
     scale = G.graph.get("agent_scale", 1.0)
-    n_target = max(1, int(SIZE_EMPLOYEES.get(size, 25) * scale))
+    if n_to_fire > 0:
+        n_target = max(1, int(n_to_fire * scale))
+    else:
+        n_target = max(1, int(SIZE_EMPLOYEES.get(size, 25) * scale))
 
     # Mask: employed agents in the target industry and district
     mask = (
@@ -1609,9 +1614,14 @@ def tick(
                     rng=rng,
                     bus=bus,
                     tick_num=tick_num,
+                    n_to_fire=se.n_agents_affected,
                 )
+                if se.n_agents_affected > 0:
+                    n_fire_str = f"n_agents={se.n_agents_affected}"
+                else:
+                    n_fire_str = f"размер={size_label}"
                 print(f"  [tick {tick_num}] CLOSED_EMPLOYER {se.district}: "
-                      f"industry={se.industry}, размер={size_label}, "
+                      f"industry={se.industry}, {n_fire_str}, "
                       f"−{n_fired} уволено")
 
             # v11: Direct housing change for HOUSING_SHOCK
