@@ -80,7 +80,7 @@ NATIONAL_AVG_WAGE        = 1614.0
 # ── Two-barrier model: constants ──────────────────────────────────────────
 ASPIRATIONS_ALPHA        = 0.15   # скорость EWMA-накопления aspirations из D_instant
 SIGNAL_DECAY             = 0.70   # затухание signal_reduction за тик
-MIGRATION_COOLDOWN_TICKS = 9      # тиков задержки после переезда до новой активации
+MIGRATION_COOLDOWN_TICKS = 5      # тиков задержки после переезда до новой активации
 
 # v4: Accumulative pressure and probabilistic trigger (replaces hard delay)
 MIGRATION_PRESSURE_P_MIN    = 0.03   # minимальный шанс сорваться в тик
@@ -90,7 +90,7 @@ MIGRATION_PRESSURE_DIVISOR  = 0.06   # делитель для перевода 
 
 PC_D_PERCEIVED_MODIFIER    = 2.0    # множитель контроля (PC) в расчёте D_perceived
 GAP_ADAPT_LAMBDA         = 0.15   # скорость адаптации econ_gap и domain_future_place
-ASPIRATIONS_AUTONOMOUS_GROWTH = 0.006  # автономный дрейф aspirations вверх за тик (после FFT)
+ASPIRATIONS_AUTONOMOUS_GROWTH = 0.012  # автономный дрейф aspirations вверх за тик (после FFT)
 HUB_WEAK_TIES_BONUS      = 0.005  # прирост weak_ties_utility за тик в хабах
 MOVE_WEAK_TIES_PENALTY   = -0.10  # reset weak_ties при переезде
 
@@ -371,14 +371,15 @@ def _two_barrier_activation(
         # Active agent indices
         act_idx = np.where(active_mask)[0]
 
-        # Step 2: aspirations EWMA (vectorized)
+        # Step 2: aspirations EWMA (vectorized) — sticky upward (aspirations never decline)
         asp_act = aspirations[act_idx]
         D_inst_act = D_inst_all[act_idx]
-        aspirations[act_idx] = np.where(
+        ewma_val = np.where(
             asp_act < 0.01,
             D_inst_act,
             ASPIRATIONS_ALPHA * D_inst_act + (1.0 - ASPIRATIONS_ALPHA) * asp_act,
         )
+        aspirations[act_idx] = np.maximum(asp_act, ewma_val)
 
         # Step 3: capabilities (vectorized)
         income_index = np.minimum(wages[act_idx] / (2.0 * NATIONAL_AVG_WAGE), 1.0)
