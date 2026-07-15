@@ -90,7 +90,14 @@ MIGRATION_PRESSURE_DIVISOR  = 0.06   # делитель для перевода 
 
 PC_D_PERCEIVED_MODIFIER    = 2.0    # множитель контроля (PC) в расчёте D_perceived
 GAP_ADAPT_LAMBDA         = 0.15   # скорость адаптации econ_gap и domain_future_place
-ASPIRATIONS_AUTONOMOUS_GROWTH = 0.012  # автономный дрейф aspirations вверх за тик (после FFT)
+
+# ── Life-cycle aspiration floor (Rogers-Castro migration schedule) ───
+LC_PEAK_AGE       = 25.0   # возраст пика aspirations
+LC_PEAK_HEIGHT    = 0.45   # максимальный пол aspirations (в пике)
+LC_RISE_STEEPNESS = 0.30   # крутизна подъёма до пика (18→25)
+LC_FALL_STEEPNESS = 0.04   # крутизна спада после пика (25→62)
+LC_FLOOR          = 0.12   # минимальный пол aspirations (для 55+)
+
 HUB_WEAK_TIES_BONUS      = 0.005  # прирост weak_ties_utility за тик в хабах
 MOVE_WEAK_TIES_PENALTY   = -0.10  # reset weak_ties при переезде
 
@@ -105,6 +112,37 @@ HUB_DISTRICTS = {
     "District of Banská Bystrica", "District of Prešov",
     "District of Trenčín",
 }
+
+
+# ── Life-cycle aspiration floor ───────────────────────────────────────
+
+def _lifecycle_aspiration_floor(age: float) -> float:
+    """Rogers-Castro style: гладкий возрастной пол aspirations.
+
+    Пик в LC_PEAK_AGE (~25 лет), плавный подъём и спад.
+    Асимметричная сигмоида: logistic rise + exponential decay.
+    """
+    if age < 18:
+        return 0.05
+    if age > 62:
+        return 0.05
+    rise = 1.0 / (1.0 + math.exp(-LC_RISE_STEEPNESS * (age - LC_PEAK_AGE + 5)))
+    fall = math.exp(-LC_FALL_STEEPNESS * max(0, age - LC_PEAK_AGE))
+    height = LC_PEAK_HEIGHT * rise * fall
+    return max(LC_FLOOR, height)
+
+
+def _post_move_aspiration_multiplier(age: float) -> float:
+    """Доля aspirations, сохраняемая после move/commute/adapt.
+    Молодые сохраняют больше — неудовлетворённость возвращается быстрее."""
+    if age < 25:
+        return 0.50
+    elif age < 35:
+        return 0.40
+    elif age < 50:
+        return 0.30
+    else:
+        return 0.20
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -499,7 +537,9 @@ def _execute_commute(
     df.at[idx, "intention_delay"]    = 0
 
     # Reset aspirations — agent satisfied the need, EWMA partially preserved
-    df.at[idx, "aspirations"] = float(np.clip(df.at[idx, "aspirations"] * 0.35, 0.0, 0.40))
+    df.at[idx, "aspirations"] = float(np.clip(
+        df.at[idx, "aspirations"] * _post_move_aspiration_multiplier(df.at[idx, "age"]), 0.0, 0.50
+    ))
     df.at[idx, "place_deficit_penalty"] = 0.0
 
     # v2: reset dynamic signal system variables
@@ -582,7 +622,9 @@ def _execute_move(
     df.at[idx, "intention_delay"] = 0
 
     # Reset aspirations — agent moved, EWMA partially preserved
-    df.at[idx, "aspirations"] = float(np.clip(df.at[idx, "aspirations"] * 0.35, 0.0, 0.40))
+    df.at[idx, "aspirations"] = float(np.clip(
+        df.at[idx, "aspirations"] * _post_move_aspiration_multiplier(df.at[idx, "age"]), 0.0, 0.50
+    ))
     df.at[idx, "place_deficit_penalty"] = 0.0
 
     # v2: reset dynamic signal system variables
@@ -677,7 +719,9 @@ def _execute_adapt(df: pd.DataFrame, idx: int, domain: str = "economic"):
     df.at[idx, "intention_delay"] = 0
 
     # Reset aspirations — agent adapted, EWMA partially preserved
-    df.at[idx, "aspirations"] = float(np.clip(df.at[idx, "aspirations"] * 0.35, 0.0, 0.40))
+    df.at[idx, "aspirations"] = float(np.clip(
+        df.at[idx, "aspirations"] * _post_move_aspiration_multiplier(df.at[idx, "age"]), 0.0, 0.50
+    ))
     df.at[idx, "place_deficit_penalty"] = 0.0
     df.at[idx, "migration_pressure"] = 0.0
 
@@ -1810,8 +1854,10 @@ def tick(
         if signals:
             df = bus.flush(df, signals, G)
 
-    # ── Autonomous aspirations drift (после FFT — чистый аддитив, не стирается EWMA) ─
-    df["aspirations"] = np.clip(df["aspirations"] + ASPIRATIONS_AUTONOMOUS_GROWTH, 0.0, 1.0)
+    # ── Life-cycle aspiration floor (Rogers-Castro) ─────────────────
+    age_vals = df["age"].values
+    floors = np.array([_lifecycle_aspiration_floor(a) for a in age_vals])
+    df["aspirations"] = np.maximum(df["aspirations"], floors)
 
     # 7. Environment response (residence counts for housing, workplace counts for wages)
     residence_counts = df.groupby("district")["id"].count().to_dict()
